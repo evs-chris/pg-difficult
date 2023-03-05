@@ -33,16 +33,17 @@ interface Client {
 }
 
 interface State {
-  [id: number]: Client;
-  id: number;
   segment: string;
   saved: diff.Entry[];
+  diffId: number;
+  diffs: { [id: number]: Client }
 }
 
 const state: State = {
-  id: 0,
   segment: 'Initial',
   saved: [],
+  diffId: 0,
+  diffs: {},
 };
 
 function source(config: DatabaseConfig): string {
@@ -146,9 +147,8 @@ function error(message: string, ws?: WebSocket, extra?: Record<string, unknown>)
 }
 
 async function start(config: DatabaseConfig) {
-  for (const k in state) {
-    if (isNaN(+k)) continue;
-    const st = state[k];
+  for (const k in state.diffs) {
+    const st = state.diffs[k];
     if (source(st.config) === source(config)) return error(`Already connected to ${source(config)}`);
   }
 
@@ -172,8 +172,8 @@ async function start(config: DatabaseConfig) {
     throw e;
   }
 
-  const id = state.id++;
-  state[id] = { client, config, id };
+  const id = state.diffId++;
+  state.diffs[id] = { client, config, id };
 
   await diff.next(client, state.segment);
   await client.listen('__pg_difficult', () => {
@@ -185,12 +185,12 @@ async function start(config: DatabaseConfig) {
 }
 
 async function stop(id: number, save?: true) {
-  const client = state[id];
+  const client = state.diffs[id];
   if (!client) return error('Cannot stop what is not started.');
-  if (save || save !== false && Object.keys(state).filter(k => !isNaN(+k)).length > 1) state.saved.push.apply(state.saved, await diff.entries(client.client));
+  if (save || save !== false && Object.keys(state.diffs).length > 1) state.saved.push.apply(state.saved, await diff.entries(client.client));
   await diff.stop(client.client);
   await client.client.end();
-  delete state[id];
+  delete state.diffs[id];
   status();
 }
 
@@ -199,9 +199,8 @@ function status() {
     segment: state.segment,
     clients: {} as { [k: number]: { id: number; config: DatabaseConfig; source: string } },
   };
-  for (const k in state) {
-    if (isNaN(+k)) continue;
-    status.clients[k] = { id: +k, config: state[k].config, source: source(state[k].config) };
+  for (const k in state.diffs) {
+    status.clients[k] = { id: +k, config: state.diffs[k].config, source: source(state.diffs[k].config) };
   }
   notify({ action: 'status', status });
 }
@@ -209,9 +208,8 @@ function status() {
 async function next(segment: string) {
   if (!segment) return error('Segment is required.');
   state.segment = segment;
-  for (const k in state) {
-    if (isNaN(+k)) continue;
-    await diff.next(state[k].client, segment);
+  for (const k in state.diffs) {
+    await diff.next(state.diffs[k].client, segment);
   }
 
   status();
@@ -219,18 +217,16 @@ async function next(segment: string) {
 
 async function clear() {
   state.saved = [];
-  for (const k in state) {
-    if (isNaN(+k)) continue;
-    await diff.clear(state[k].client);
+  for (const k in state.diffs) {
+    await diff.clear(state.diffs[k].client);
   }
   notify({ action: 'clear' });
 }
 
 async function check(ws: WebSocket, since?: string) {
   const entries: diff.Entry[] = ([] as diff.Entry[]).concat(state.saved);
-  for (const k in state) {
-    if (isNaN(+k)) continue;
-    const client = state[k];
+  for (const k in state.diffs) {
+    const client = state.diffs[k];
     const src = source(client.config);
     const res = await diff.entries(client.client, since);
     for (const e of res) e.source = src;
@@ -242,7 +238,7 @@ async function check(ws: WebSocket, since?: string) {
 async function schema(ws: WebSocket, client?: number|DatabaseConfig, id?: string) {
   const res: { [id: number]: diff.Table[] } = {};
   if (typeof client === 'number') {
-    const c = state[client];
+    const c = state.diffs[client];
     if (!c) return error(`Cannot retrieve schema for unknown client ${client}.`, ws, { id });
     res[c.id] = await diff.schema(c.client);
   } else if (client) {
@@ -261,9 +257,8 @@ async function schema(ws: WebSocket, client?: number|DatabaseConfig, id?: string
       await c.end();
     }
   } else {
-    for (const k in state) {
-      if (isNaN(+k)) continue;
-      const client = state[k];
+    for (const k in state.diffs) {
+      const client = state.diffs[k];
       res[client.id] = await diff.schema(client.client);
     }
   }
@@ -272,7 +267,7 @@ async function schema(ws: WebSocket, client?: number|DatabaseConfig, id?: string
 
 async function query(client: DatabaseConfig|number, query: string, id: string, ws: WebSocket) {
   if (typeof client === 'number') {
-    const c = state[client];
+    const c = state.diffs[client];
     if (!c) return error(`Could not query unknown client ${client}.`, ws, { id });
 
     try {
@@ -307,9 +302,8 @@ app.addEventListener('listen', ({ secure, hostname, port }) => {
 
 // make sure interrupt stops the diff
 Deno.addSignalListener('SIGINT', async () => {
-  for (const k in state) {
-    if (isNaN(+k)) continue;
-    const client = state[k];
+  for (const k in state.diffs) {
+    const client = state.diffs[k];
     try {
       await diff.stop(client.client);
       await client.client.end();
