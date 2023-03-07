@@ -156,7 +156,7 @@ async function message(this: WebSocket, msg: Message) {
       case 'leak': leak(msg.config); break;
       case 'unleak': unleak(msg.config); break;
       case 'interval':
-        config.pollingInterval = msg.time > 1000 ? msg.time : 10000;
+        config.pollingInterval = msg.time >= 1000 ? msg.time : 10000;
         status();
         break;
     }

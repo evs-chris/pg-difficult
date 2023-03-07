@@ -236,12 +236,16 @@
       </div>
     </tab>
     <tab title="Active Diffs">
-      <div>
-        <label as-field title="The segment name groups sets of changes together.">Segment<input value="{{~/newSegment}}" /></label>
-        <label as-field><button on-click="@.next(~/newSegment)" disabled="{{~/newSegment === ~/status.segment}}" title="Change the segment name and click here to begin recording changes in a new segment.">Change</button></label>
-        <label as-field><button on-click="@.clear()" title="Remove all recorded changes.">Clear Entries</button></label>
-        <label as-field><button on-click="@.entries()" title="View all recorded entries in a single combined set.">Combined Entries</button></label>
-        <label as-field><button on-click="@.addDiff()" title="Start recording changes to an ephemeral connection.">Add Connection</button></label>
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div>
+          <label as-field title="The segment name groups sets of changes together.">Segment<input value="{{~/newSegment}}" /></label>
+          <label as-field><button on-click="@.next(~/newSegment)" disabled="{{~/newSegment === ~/status.segment}}" title="Change the segment name and click here to begin recording changes in a new segment.">Change</button></label>
+        </div>
+        <div>
+          <button on-click="@.clear()" title="Remove all recorded changes.">Clear Entries</button>
+          <button on-click="@.entries()" title="View all recorded entries in a single combined set.">Combined Entries</button>
+          <button on-click="@.addDiff()" title="Start recording changes to an ephemeral connection.">Add Connection</button>
+        </div>
       </div>
       <div style="overflow: auto;">
         {{#each Object.values(~/status.clients || {})}}
@@ -261,6 +265,7 @@
     </tab>
     <tab title="Connection Monitor">
       <div style="display: flex; justify-content: space-between; align-items: center;">
+        <label as-field>Polling Interval<input type=number value="{{~/status.pollingInterval}}" on-change="@.poll()" lazy></label>
         <div style="flex-grow: 1;">
           The connection monitor polls the server for active connections at a set interval. Connections that appear after the initial connection is made are monitored.
         </div>
@@ -268,9 +273,6 @@
           <button on-click="@.leaks()" title="View monitored connections for all databases.">All Connections</button>
           <button on-click="@.addLeak()" title="Start monitoring connections on an ephemeral connection.">Add Connection</button>
         </div>
-      </div>
-      <div>
-        <label as-field>Polling Interval<input type=number value="{{~/status.pollingInterval}}" on-change="@.poll()" lazy></label>
       </div>
       <div style="overflow: auto;">
         {{#each Object.values(~/status.leaks || {})}}
