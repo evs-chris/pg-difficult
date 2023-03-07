@@ -161,7 +161,7 @@
         </container>
         <item title="Control Panel" on-action="@.host.getWindow('control-panel').raise(true)" />
         <section title="Active Diffs" bind-items="~/diffs" bind-hidden="(~/diffs || []).length < 1" />
-        <section title="Monitored Connections" bind-items="~/leaks" bind-hiddne="(~/leaks || []).length < 1" />
+        <section title="Monitored Connections" bind-items="~/leaks" bind-hidden="(~/leaks || []).length < 1" />
         <section title="Queries" bind-items="~/queries" bind-hidden="(~/queries || []).length < 1" />
       </menu>
     </right>
