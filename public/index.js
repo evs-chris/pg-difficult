@@ -28,6 +28,22 @@ setInterval(() => {
   Ractive.sharedSet('now', new Date());
 }, 5000);
 
+Ractive.helpers.moveUp = ctx => {
+  const idx = ctx.get('@index');
+
+  if (idx <= 0) return;
+  const [item] = ctx.splice('../', idx - 1, 1).result;
+  ctx.splice('../', idx, 0, item);
+};
+
+Ractive.helpers.moveDown = ctx => {
+  const idx = ctx.get('@index');
+
+  if (idx >= ctx.get('@last')) return;
+  const [item] = ctx.splice('../', idx + 1, 1).result;
+  ctx.splice('../', idx, 0, item);
+};
+
 Ractive.styleSet({
   raui: {
     primary: {

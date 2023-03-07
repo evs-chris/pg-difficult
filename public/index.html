@@ -207,6 +207,10 @@
             <div class="constr">
               <div>{{constr(.)}}</div>
               <div>
+                <button class=flat disabled="{{@index === 0}}" on-click="moveUp(@context)">Move Up</button>
+                <button class=flat disabled="{{@index === @last}}" on-click="moveDown(@context)">Move Down</button>
+              </div>
+              <div>
                 <button class=flat on-click="@.editConnection(@index)" {{#if @.hasDiff(.) || @.hasLeak(.)}}disabled title="Stop active watchers to modify this connection"{{else}}title="Edit this saved connection."{{/if}}>Edit</button>
                 <button class=flat on-click="@.splice('connections', @index, 1)" {{#if @.hasDiff(.) || @.hasLeak(.)}}disabled title="Stop active watchers to modify this connection"{{else}}title="Remove this saved connection."{{/if}}>Remove</button><br/>
               </div>
