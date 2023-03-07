@@ -83,7 +83,10 @@ export async function start(client: Client) {
   await client.begin(async client => {
     const tables: Table[] = await client.unsafe(tableQuery);
     await client`create table __pgdifficult_entries (id bigserial primary key, "table" varchar not null, segment varchar not null, old json, new json, stamp timestamptz not null);`;
+    await client`grant all on table __pgdifficult_entries to public`;
+    await client`grant all on sequence __pgdifficult_entries_id_seq to public`;
     await client`create table __pgdifficult_state (key varchar primary key, value varchar);`;
+    await client`grant all on table __pgdifficult_state to public`;
     await client`insert into __pgdifficult_state (key, value) values ('segment', 'initial');`;
     await client`create or replace function __pgdifficult_record() returns trigger as $trigger$
   declare
@@ -108,6 +111,7 @@ export async function start(client: Client) {
     return rec;
   end;
   $trigger$ language plpgsql;`;
+    await client`grant all on function __pgdifficult_record() to public`;
     for (const table of tables) {
       await client`drop trigger if exists __pgdifficult_notify on ${client(table.name)};`;
       await client`create trigger __pgdifficult_notify after insert or update or delete on ${client(table.name)} for each row execute procedure __pgdifficult_record();`;
