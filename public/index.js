@@ -3,10 +3,28 @@ const { Window } = RauiWindow;
 
 Ractive.use(RauiButton.plugin(), RauiForm.plugin({ includeStyle: true }), RauiShell.plugin(), RauiMenu.plugin(), RauiWindow.plugin(), RauiAppBar.plugin(), RauiTabs.plugin(), RauiTable.plugin({ includeGrid: true }));
 
-function constr(config) {
-  return `${config.username || 'postgres'}@${config.host || 'localhost'}:${config.port || 5432}/${config.database || 'postgres'}`;
+function constr(config, extra) {
+  const cfg = Object.assign({}, config, extra);
+  return `${cfg.username || 'postgres'}@${cfg.host || 'localhost'}:${cfg.port || 5432}/${cfg.database || 'postgres'}`;
 }
 Ractive.helpers.constr = constr;
+Ractive.helpers.age = function(ts) {
+  const now = Ractive.sharedGet('now');
+  const d = new Date(ts);
+  const today = evaluate({ d: ts }, 'date(d :midnight)');
+  const yesterday = evaluate({ d: ts }, 'date(d :midnight) - #1d#');
+  if (+now - +d < 120000) return `${Math.ceil((+now - +d) / 1000)} seconds ago`;
+  else if (+now - +d < 5400000) return `${Math.ceil((+now - +d) / 60000)} minutes ago`;
+  else if (+d > +today) return `${evaluate({ d }, `d#date,'HH:mm'`)} today`;
+  else if (+d > +yesterday) return `${evaluate({ d }, `d#date,'HH:mm'`)} yesterday`;
+  else if (+now - +d < (300 * 86400000)) return evaluate({ d }, `d#date,'MMM d'`);
+  else if (+now - +d > (7 * 86400000)) return evaluate({ d }, `d#date,'yyyy-MM-dd'`);
+  else return evaluate({ d }, `d#date,'HH:mm EEE'`);
+}
+
+setInterval(() => {
+  Ractive.sharedSet('now', new Date());
+}, 5000);
 
 Ractive.styleSet({
   raui: {
@@ -69,12 +87,26 @@ const app = globalThis.app = new Ractive({
      if (v && v.length) this.set('last', v[v.length - 1].stamp);
      else this.set('last', undefined);
     },
-    'status.clients'(v) {
-      const active = Object.values(v || {}).map(v => {
-        return { title: v.source, action() { app.openEntries(v.id) } }
-      });
-      if (active.length > 1) active.unshift({ title: 'All Entries', action() { app.openEntries() } });
-      this.set('diffs', active);
+    'status.clients': {
+      handler(v) {
+        const active = Object.values(v || {}).map(v => {
+          return { title: v.source, action() { app.openEntries(v.id) } };
+        });
+        if (active.length > 1) active.unshift({ title: 'All Entries', action() { app.openEntries() } });
+        this.set('diffs', active);
+      },
+      strict: true, init: false,
+    },
+    'status.leaks': {
+      handler(v) {
+        const all = Object.values(v || {}).reduce((a, c) => {
+          a.push.apply(a, c.databases.map(d => ({ title: constr(c.config, { database: d }), action() { app.openLeak(c.id, d) } })));
+          return a;
+        }, []);
+        if (all.length > 1) all.unshift({ title: 'All Connections', action() { app.openLeak() } });
+        this.set('leaks', all);
+      },
+      strict: true, init: false,
     },
     'connections savedQueries': {
       handler(v, _o, k) {
@@ -137,6 +169,19 @@ const app = globalThis.app = new Ractive({
       this.host.addWindow(win, { id: wid, title: `All Entries` });
     }
   },
+  openLeak(id, database) {
+    const wid = `leaks-${id ?? 'all'}-${database || 'all'}`;
+    let win = this.host.getWindow(wid);
+    if (win) return win.raise(true);
+    if (id != null) {
+      const con = this.get(`status.leaks.${id}.config`);
+      win = new Leaks(id, database);
+      this.host.addWindow(win, { id: wid, title: `Monitored Connections for ${constr(con, { database })}` });
+    } else {
+      win = new Leaks();
+      this.host.addWindow(win, { id: wid, title: 'All Monitored Connections' });
+    }
+  },
   ask(question, title) {
     const w = new Ask({ data: { message: question } });
     this.host.addWindow(w, { title, block: true });
@@ -167,6 +212,13 @@ class ControlPanel extends Window {
     const clients = Object.values(this.get('status.clients') || {}).map(c => c.source);
     return clients.includes(constr(cfg));
   }
+  hasLeak(cfg) {
+    const clients = Object.values(this.get('status.leaks') || {}).reduce((a, c) => {
+      for (const db of c.databases) a.push(constr(c.config, { database: db }));
+      return a;
+    }, []);
+    return clients.includes(constr(cfg));
+  }
   startDiff(config) {
     notify({ action: 'start', config });
   }
@@ -182,25 +234,47 @@ class ControlPanel extends Window {
     const res = await wnd.result;
     if (res !== false) this.startDiff(res);
   }
+  startLeak(config) {
+    notify({ action: 'leak', config });
+  }
+  stopLeak(config) {
+    const cfg = Object.assign({}, config);
+    notify({ action: 'unleak', config: cfg });
+  }
+  async addLeak() {
+    const wnd = new Connect();
+    this.host.addWindow(wnd, { block: this });
+    const res = await wnd.result;
+    if (res !== false) this.startLeak(res);
+  }
   clear() {
     notify({ action: 'clear' });
   }
-  query(config) {
-    app.openQuery(config);
+  query(config, database) {
+    app.openQuery(database ? Object.assign({}, config, { database }) : config);
   }
-  schema(config) {
-    app.openSchema(config);
+  schema(config, database) {
+    app.openSchema(database ? Object.assign({}, config, { database }) : config);
   }
   entries(id) {
-    app.openEntries(id);
+    if (typeof id === 'object') id = Object.values(this.get('status.clients')).find(c => constr(c.config) === constr(id))?.id;
+    if (id != null) app.openEntries(id);
+  }
+  leaks(id, database) {
+    if (typeof id === 'object') {
+      database = id.database;
+      id = Object.values(this.get('status.leaks')).find(c => c.databases.map(d => constr(c.config, { database: d })).includes(constr(id)))?.id;
+      if (id != null) app.openLeak(id, database);
+    } else app.openLeak(id, database);
   }
 }
 Window.extendWith(ControlPanel, {
   template: '#control-panel',
   css: `
-.connection { display: flex; align-items: center; }
-.connection .constr { flex-grow: 1; min-width: 20em; }
-.connection .actions { flex-grow: 0 }
+.record { display: flex; align-items: center; justify-content: space-between; }
+.connection { display: flex; flex-direction: column; }
+.connection .constr { display: flex; flex-grow: 1; min-width: 20em; align-items: center; justify-content: space-between; }
+.connection .actions { display: flex; justify-content: space-between; }
 .query { display: flex; align-items: center; }
 .query .name { width: 15%; }
 .query .sql { width: 60%; }
@@ -376,6 +450,71 @@ h2 { padding: 1em 0 0.5em 0; position: sticky; top: -1em; background-color: #fff
   }
 });
 
+class Leaks extends Window {
+  constructor(id, database, opts) {
+    super(opts);
+    this.leakId = id;
+    this.database = database;
+  }
+}
+Window.extendWith(Leaks, {
+  template: '#leaks',
+  options: { flex: true, resizable: true, width: '40em', height: '30em' },
+  css: `
+.leak { display: flex; flex-wrap: wrap; }
+.leak > * { box-sizing: border-box; padding: 0.2em; }
+.leak.header { font-weight: bold; position: sticky; top: -0.5em; background-color: #fff; border-bottom: 1px solid; z-index: 1; margin-top: -0.5em; padding-top: 0.5em; }
+.leak .user { width: 8em; }
+.leak .application { width: 12em; }
+.leak .client { width: 12em; }
+.leak .state { width: 5em; }
+.leak .started { width: 13em; }
+.leak .constr { width: 18em; }
+.leak .pid { width: 6em; text-align: right; }
+`,
+  computed: {
+    leaks() {
+      if (this.leakId != null) {
+        const leak = app.get(`status.leaks.${this.leakId}`);
+        return leak.current.filter(l => l.database === this.database && !leak.initial[this.database].find(k => k.pid === l.pid && k.started === l.started)).map(l => Object.assign({ source: constr(leak.config, { database: l.database }) }, l));
+      } else {
+        return Object.values(app.get('status.leaks')).reduce((a, leak) => {
+          const inits = Object.values(leak.initial).reduce((a, c) => (a.push.apply(a, c), a), []);
+          a.push.apply(a, leak.current.filter(l => leak.databases.includes(l.database) && !inits.find(k => k.pid === l.pid && k.started === l.started)).map(l => Object.assign({ source: constr(leak.config, { database: l.database }) }, l)));
+          return a;
+        }, []);
+      }
+    },
+    current() {
+      if (this.leakId != null) {
+        const leak = app.get(`status.leaks.${this.leakId}`);
+        return (app.get(`status.leaks.${this.leakId}.current`) || []).filter(l => l.database === this.database).map(l => Object.assign({ source: constr(leak, { database: l.database }) }, l));
+      } else {
+        return Object.values(app.get('status.leaks')).reduce((a, c) => {
+          a.push.apply(a, c.current.filter(l => c.databases.includes(l.database)).map(l => Object.assign({ source: constr(c.config, { database: l.database }) }, l)));
+          return a;
+        }, []);
+      }
+    },
+    initial() {
+      if (this.leakId != null) {
+        const leak = app.get(`status.leaks.${this.leakId}`);
+        return (app.get(`status.leaks.${this.leakId}.initial.${this.database}`) || []).filter(l => l.database === this.database).map(l => Object.assign({ source: constr(leak, { database: l.database }) }, l));
+      } else {
+        return Object.values(app.get('status.leaks')).reduce((a, c) => {
+          const all = Object.values(c.initial);
+          for (const set of all) {
+            for (const l of set) {
+              if (!a.find(e => e.pid === l.pid) && c.databases.includes(l.database)) a.push(Object.assign({ source: constr(c.config, { database: l.database }) }, l));
+            }
+          }
+          return a;
+        }, []);
+      }
+    },
+  },
+});
+
 class Schema extends Window {
   constructor(config, opts) {
     super(opts);
@@ -496,6 +635,9 @@ function connect() {
         notify({ action: 'check', since: app.get('last') });
         break;
       case 'entries': app.push.apply(app, ['entries'].concat(msg.entries || [])); break;
+      case 'leaks':
+        for (const k in msg.map) app.set(`status.leaks.${k}.current`, msg.map[k]);
+        break;
       default:
         if ('id' in msg) request.response(msg.id, msg);
         break;

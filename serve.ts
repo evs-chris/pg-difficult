@@ -13,8 +13,19 @@ interface DatabaseConfig {
   ssl?: 'prefer'|'require';
 }
 
+interface Connection {
+  pid: string;
+  user: string;
+  application: string;
+  database: string;
+  started: string;
+  state: string;
+  client: string;
+}
+
 const config = {
   port: 1999,
+  pollingInterval: 10000,
 };
 
 // process args
@@ -22,6 +33,10 @@ for (let i = 0; i < Deno.args.length; i++) {
   switch (Deno.args[i]) {
     case '--port': case '-p':
       config.port = +Deno.args[++i] || 1999;
+      break;
+
+    case '--interval': case '-t':
+      config.pollingInterval = +Deno.args[++i] || 10000;
       break;
   }
 }
@@ -37,6 +52,9 @@ interface State {
   saved: diff.Entry[];
   diffId: number;
   diffs: { [id: number]: Client }
+  leakId: number;
+  leaks: { [id: number]: { client: Client; initial: { [database: string]: Connection[] }; current: Connection[]; databases: string[] } };
+  leakTimer?: number;
 }
 
 const state: State = {
@@ -44,14 +62,16 @@ const state: State = {
   saved: [],
   diffId: 0,
   diffs: {},
+  leakId: 0,
+  leaks: {},
 };
 
 function source(config: DatabaseConfig): string {
   return `${config.username || 'postgres'}@${config.host || 'localhost'}:${config.port || 5432}/${config.database || 'postgres'}`;
 }
 
-function prepareConfig(config: DatabaseConfig): DatabaseConfig {
-  return Object.assign({ onnotice() {} }, config, { host: config.host || 'localhost', username: config.username || 'postgres', database: config.database || 'postgres', port: config.port || 5432 });
+function prepareConfig(cfg: DatabaseConfig, extra?: Partial<DatabaseConfig> & { app?: string }): DatabaseConfig {
+  return Object.assign({ onnotice() {}, connection: { application_name: `pg-difficult:${config.port}${extra?.app ? `(${extra.app})` : ''}` } }, cfg, { host: cfg.host || 'localhost', username: cfg.username || 'postgres', database: cfg.database || 'postgres', port: cfg.port || 5432 }, extra);
 }
 
 // set up server
@@ -116,7 +136,9 @@ interface Segment { action: 'segment'; segment: string }
 interface Check { action: 'check'; since?: string }
 interface Schema { action: 'schema'; client?: number|DatabaseConfig; id?: string }
 interface Query { action: 'query'; client: number|DatabaseConfig; query: string; id: string }
-type Message = Ping|Start|Stop|Status|Clear|Segment|Check|Schema|Query;
+interface Leak { action: 'leak'; config: DatabaseConfig }
+interface Unleak { action: 'unleak', config: DatabaseConfig }
+type Message = Ping|Start|Stop|Status|Clear|Segment|Check|Schema|Query|Leak|Unleak;
 
 async function message(this: WebSocket, msg: Message) {
   try {
@@ -130,6 +152,8 @@ async function message(this: WebSocket, msg: Message) {
       case 'check': check(this, msg.since); break;
       case 'schema': schema(this, msg.client, msg.id); break;
       case 'query': query(msg.client, msg.query, msg.id, this); break;
+      case 'leak': leak(msg.config); break;
+      case 'unleak': unleak(msg.config); break;
     }
   } catch (e) {
     if ('id' in msg) error(e.message, this, { id: msg.id });
@@ -152,7 +176,7 @@ async function start(config: DatabaseConfig) {
     if (source(st.config) === source(config)) return error(`Already connected to ${source(config)}`);
   }
 
-  config = prepareConfig(config);
+  config = prepareConfig(config, { app: 'diff' });
   if (!config.ssl) config.ssl = 'prefer';
 
   let client: undefined|postgres.Sql<Record<string, unknown>>;
@@ -198,9 +222,13 @@ function status() {
   const status = {
     segment: state.segment,
     clients: {} as { [k: number]: { id: number; config: DatabaseConfig; source: string } },
+    leaks: {} as { [k: number]: { id: number; config: DatabaseConfig; databases: string[]; initial: { [database: string]: Connection[] }; current: Connection[] } },
   };
   for (const k in state.diffs) {
     status.clients[k] = { id: +k, config: state.diffs[k].config, source: source(state.diffs[k].config) };
+  }
+  for (const k in state.leaks) {
+    status.leaks[k] = { id: +k, config: state.leaks[k].client.config, databases: state.leaks[k].databases, initial: state.leaks[k].initial, current: state.leaks[k].current };
   }
   notify({ action: 'status', status });
 }
@@ -242,7 +270,7 @@ async function schema(ws: WebSocket, client?: number|DatabaseConfig, id?: string
     if (!c) return error(`Cannot retrieve schema for unknown client ${client}.`, ws, { id });
     res[c.id] = await diff.schema(c.client);
   } else if (client) {
-    const c = postgres(prepareConfig(client));
+    const c = postgres(prepareConfig(client, { app: 'schema' }));
     try {
       await c`select 1 as x`;
     } catch (e) {
@@ -277,7 +305,7 @@ async function query(client: DatabaseConfig|number, query: string, id: string, w
       error(`Error running query: ${e.message}`, ws, { id });
     }
   } else {
-    const c = postgres(prepareConfig(client));
+    const c = postgres(prepareConfig(client, { app: 'query' }));
     try {
       await c`select 1 as x`;
     } catch (e) {
@@ -296,6 +324,82 @@ async function query(client: DatabaseConfig|number, query: string, id: string, w
   }
 }
 
+async function listConnections(client: postgres.Sql<Record<string, unknown>>): Promise<Connection[]> {
+  return await client<Connection[]>`select pid, usename as user, application_name as application, datname as database, backend_start as started, state, client_addr || ':' || client_port as client from pg_stat_activity order by backend_start desc`;
+}
+
+async function leak(config: DatabaseConfig) {
+  config = prepareConfig(config);
+  for (const c of Object.values(state.leaks)) {
+    if (source(prepareConfig(c.client.config, { database: config.database || 'postgres' })) === source(config)) {
+      if (c.databases.includes(config.database)) return error(`Already connected to ${source(config)}`);
+      else {
+        c.databases.push(config.database);
+        c.initial[config.database] = await listConnections(c.client.client);
+        return status();
+      }
+    }
+  }
+
+  if (!config.ssl) config.ssl = 'prefer';
+  const c = postgres(prepareConfig(config, { app: 'monitor' }));
+
+  await c`select 1 as x`;
+  const id = state.leakId++;
+
+  try {
+    const connections = await listConnections(c);
+    state.leaks[id] = { client: { id, client: c, config }, initial: { [config.database || 'postgres']: connections }, current: connections, databases: [config.database || 'postgres'] };
+  } catch (e) {
+    c.end();
+    throw (e);
+  }
+
+  status();
+
+  poll(true);
+}
+
+async function unleak(client: DatabaseConfig) {
+  const cfg = source(prepareConfig(client));
+  const c = Object.values(state.leaks).find(v => source(prepareConfig(v.client.config, { database: client.database || 'postgres' })) === cfg);
+  if (!c) throw new Error(`Cannot stop what is not started`);
+
+  c.databases = c.databases.filter(d => d !== (client.database || 'postgres'));
+  delete c.initial[client.database || 'postgres'];
+
+  if (c.databases.length < 1) {
+    await c.client.client.end();
+    delete state.leaks[c.client.id];
+  }
+  
+  status();
+
+  poll(true);
+}
+
+async function poll(out: boolean) {
+  const leaks = Object.values(state.leaks);
+  if (leaks.length < 1) {
+    if (state.leakTimer != null && out) clearTimeout(state.leakTimer);
+    delete state.leakTimer;
+    return;
+  }
+
+  for (const l of leaks) l.current = await listConnections(l.client.client);
+
+  if (out && state.leakTimer != null) {
+    clearTimeout(state.leakTimer);
+    delete state.leakTimer;
+  }
+
+  const send: { [id: number]: Connection[] } = {};
+  for (const l of leaks) send[l.client.id] = l.current;
+  notify({ action: 'leaks', map: send });
+
+  state.leakTimer = setTimeout(poll, config.pollingInterval);
+}
+
 app.addEventListener('listen', ({ secure, hostname, port }) => {
   console.info(`pg_difficult server is available at ${secure ? 'https://' : 'http://'}${hostname}:${port}/`);
 });
@@ -307,7 +411,14 @@ Deno.addSignalListener('SIGINT', async () => {
     try {
       await diff.stop(client.client);
       await client.client.end();
-    } catch {/* sure */ }
+    } catch { /* sure */ }
+    if (state.leakTimer != null) clearTimeout(state.leakTimer);
+    for (const k in state.leaks) {
+      const leak = state.leaks[k];
+      try {
+        await leak.client.client.end();
+      } catch { /* sure */ }
+    }
   }
   console.log(`
 pg_difficult stopped`);

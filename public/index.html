@@ -128,12 +128,12 @@
 
   .striped:nth-child(odd) {
     background-color: #eee;
-    padding: 0.3em;
-    box-sizing: border-box;
-    border-radius: 0.3em;
   }
   .striped {
     background-color: #fff;
+    padding: 0.3em;
+    box-sizing: border-box;
+    border-radius: 0.3em;
   }
   .striped > * {
     overflow: hidden;
@@ -161,6 +161,7 @@
         </container>
         <item title="Control Panel" on-action="@.host.getWindow('control-panel').raise(true)" />
         <section title="Active Diffs" bind-items="~/diffs" bind-hidden="(~/diffs || []).length < 1" />
+        <section title="Monitored Connections" bind-items="~/leaks" bind-hiddne="(~/leaks || []).length < 1" />
         <section title="Queries" bind-items="~/queries" bind-hidden="(~/queries || []).length < 1" />
       </menu>
     </right>
@@ -203,15 +204,30 @@
       <div style="overflow: auto;">
         {{#each connections}}
           <div class="connection striped">
-            <div class="constr">{{constr(.)}}</div>
+            <div class="constr">
+              <div>{{constr(.)}}</div>
+              <div>
+                <button class=flat on-click="@.editConnection(@index)" {{#if @.hasDiff(.) || @.hasLeak(.)}}disabled title="Stop active watchers to modify this connection"{{else}}title="Edit this saved connection."{{/if}}>Edit</button>
+                <button class=flat on-click="@.splice('connections', @index, 1)" {{#if @.hasDiff(.) || @.hasLeak(.)}}disabled title="Stop active watchers to modify this connection"{{else}}title="Remove this saved connection."{{/if}}>Remove</button><br/>
+              </div>
+            </div>
             <div class="actions">
               {{#if !@.hasDiff(.)}}<button on-click="@.startDiff(.)" title="Begin recording changes to tables in this database.">Start Diff</button>
-              {{else}}<button on-click="@.stopDiff(.)" title="Cease recording changes to tables in this database.">Stop Diff</button>
+              {{else}}
+                <div>
+                  <button on-click="@.stopDiff(.)" title="Cease recording changes to tables in this database.">Stop Diff</button>
+                  <button on-click="@.entries(.)" title="View recoded entries from this database">Entries</button>
+                </div>
+              {{/if}}
+              {{#if !@.hasLeak(.)}}<button on-click="@.startLeak(.)" title="Begin monitoring connections to this database.">Start Monitor</button>
+              {{else}}
+                <div>
+                  <button on-click="@.stopLeak(.)" title="Cease monitoring connections to this database.">Stop Monitor</button>
+                  <button on-click="@.leaks(.)" title="View monitored connecstions to this database">Connections</button>
+                </div>
               {{/if}}
               <button on-click="@.query(.)" title="Open a query window to run queries against this database.">Query</button>
               <button on-click="@.schema(.)" title="View this database's schema.">Schema</button>
-              <button class=flat on-click="@.editConnection(@index)" title="Edit this saved connection.">Edit</button>
-              <button class=flat on-click="@.splice('connections', @index, 1)" title="Remove this saved connection.">Remove</button>
             </div>
           </div>
         {{else}}
@@ -229,7 +245,7 @@
       </div>
       <div style="overflow: auto;">
         {{#each Object.values(~/status.clients || {})}}
-          <div class="connection striped">
+          <div class="record striped">
             <div class="constr">{{.source}}</div>
             <div class="actions">
               <button on-click="@.query(.config)" title="Open a query widnow to run queries against this database.">Query</button>
@@ -240,6 +256,34 @@
           </div>
         {{else}}
           There are no active diffs.
+        {{/each}}
+      </div>
+    </tab>
+    <tab title="Connection Monitor">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div style="flex-grow: 1;">
+          The connection monitor polls the server for active connections at a set interval. Connections that appear after the initial connection is made are monitored.
+        </div>
+        <div style="text-align: right;">
+          <button on-click="@.leaks()" title="View monitored connections for all databases.">All Connections</button>
+          <button on-click="@.addLeak()" title="Start monitoring connections on an ephemeral connection.">Add Connection</button>
+        </div>
+      </div>
+      <div style="overflow: auto;">
+        {{#each Object.values(~/status.leaks || {})}}
+          {{#each .databases}}
+            <div class="record striped">
+              <div class="constr">{{constr(^^/config, { database: . })}}</div>
+              <div class=actions>
+                <button on-click="@.query(^^/config, .)" title="Open a query widnow to run queries against this database.">Query</button>
+                <button on-click="@.leaks(^^/id, .)" title="View monitored connections to this database.">Connections</button>
+                <button on-click="@.schema(^^/config, .)" title="View this database's schema.">Schema</button>
+                <button on-click="@.stopLeak(^^/config, .)">Stop Monitor</button>
+              </div>
+            </div>
+          {{/each}}
+        {{else}}
+          There are no active connection monitors.
         {{/each}}
       </div>
     </tab>
@@ -327,6 +371,44 @@
       No change entries have been recorded.
     {{/each}}
   </div>
+</script>
+
+<script type=text/ractive id=leaks>
+  {{#partial leak}}
+    <div class="leak header">
+      <div class=user>User</div>
+      <div class=application>Application</div>
+      <div class=client>Client</div>
+      <div class=state>State</div>
+      <div class=started>Started</div>
+      <div class=constr>Connection</div>
+      <div class=pid>Process ID</div>
+    </div>
+    {{#each leaks}}
+      <div class="leak striped">
+        <div class=user>{{.user}}</div>
+        <div class=application>{{.application}}</div>
+        <div class=client>{{.client}}</div>
+        <div class=state>{{.state}}</div>
+        <div class=started title="{{.started}}">{{age(.started)}}</div>
+        <div class=constr>{{.source}}</div>
+        <div class=pid>{{.pid}}</div>
+      </div>
+    {{else}}
+      No connections.
+    {{/each}}
+  {{/partial}}
+  <tabs style="overflow: hidden;" no-pad>
+    <tab title="Added">
+      <div class=content-wrapper>{{>leak leaks as leaks}}</div>
+    </tab>
+    <tab title="Current" defer>
+      <div class=content-wrapper>{{>leak current as leaks}}</div>
+    </tab>
+    <tab title="Initial" defer>
+      <div class=content-wrapper>{{>leak initial as leaks}}</div>
+    </tab>
+  </tabs>
 </script>
 
 <script type=text/ractive id=schema>
