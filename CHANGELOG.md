@@ -1,3 +1,17 @@
+## 1.0.2
+
+2023-03-07
+
+### Bugs
+
+* The backing tables, sequence, and trigger function now have universal access granted so that if you connect with a superuser for the change tracking but not for an actual application, you can still run CRUD statements from the application.
+* The layout of added/removed entries in the change view no longer squishes the data source on the end of the change name.
+
+### Features
+
+* Per special request, you can now reorder saved connections in the list.
+
+
 ## 1.0.1
 
 2023-03-07
