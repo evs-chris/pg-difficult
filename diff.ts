@@ -110,7 +110,7 @@ export async function start(client: Client) {
   $trigger$ language plpgsql;`;
     for (const table of tables) {
       await client`drop trigger if exists __pgdifficult_notify on ${client(table.name)};`;
-      await client`create trigger __pgdifficult_notify after insert or update or delete on ${client(table.name)} for each row execute function __pgdifficult_record();`;
+      await client`create trigger __pgdifficult_notify after insert or update or delete on ${client(table.name)} for each row execute procedure __pgdifficult_record();`;
     }
   });
 }
