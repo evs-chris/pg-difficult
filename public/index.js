@@ -444,8 +444,8 @@ Window.extendWith(Entries, {
 .diff.whole .name { width: 100%; }
 .entry { padding: 0.2em; }
 .entry .key { font-weight: bold; }
-.wrapper > .name { display: flex; justify-content: space-between; }
-.wrapper > .name > .src { opacity: 0.4; }
+.wrapper > .name, .diff.whole > .name { display: flex; justify-content: space-between; }
+.wrapper > .name > .src, .diff.whole > .name > .src { opacity: 0.4; }
 h2 { padding: 1em 0 0.5em 0; position: sticky; top: -1em; background-color: #fff; }
 `,
   computed: {
