@@ -138,7 +138,8 @@ interface Schema { action: 'schema'; client?: number|DatabaseConfig; id?: string
 interface Query { action: 'query'; client: number|DatabaseConfig; query: string; id: string }
 interface Leak { action: 'leak'; config: DatabaseConfig }
 interface Unleak { action: 'unleak', config: DatabaseConfig }
-type Message = Ping|Start|Stop|Status|Clear|Segment|Check|Schema|Query|Leak|Unleak;
+interface Interval { action: 'interval', time: number }
+type Message = Ping|Start|Stop|Status|Clear|Segment|Check|Schema|Query|Leak|Unleak|Interval;
 
 async function message(this: WebSocket, msg: Message) {
   try {
@@ -154,6 +155,10 @@ async function message(this: WebSocket, msg: Message) {
       case 'query': query(msg.client, msg.query, msg.id, this); break;
       case 'leak': leak(msg.config); break;
       case 'unleak': unleak(msg.config); break;
+      case 'interval':
+        config.pollingInterval = msg.time > 1000 ? msg.time : 10000;
+        status();
+        break;
     }
   } catch (e) {
     if ('id' in msg) error(e.message, this, { id: msg.id });
@@ -223,6 +228,7 @@ function status() {
     segment: state.segment,
     clients: {} as { [k: number]: { id: number; config: DatabaseConfig; source: string } },
     leaks: {} as { [k: number]: { id: number; config: DatabaseConfig; databases: string[]; initial: { [database: string]: Connection[] }; current: Connection[] } },
+    pollingInterval: config.pollingInterval,
   };
   for (const k in state.diffs) {
     status.clients[k] = { id: +k, config: state.diffs[k].config, source: source(state.diffs[k].config) };

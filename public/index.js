@@ -9,17 +9,19 @@ function constr(config, extra) {
 }
 Ractive.helpers.constr = constr;
 Ractive.helpers.age = function(ts) {
-  const now = Ractive.sharedGet('now');
+  Ractive.sharedGet('now'); // trigger updates with global interval
+  const now = new Date();
   const d = new Date(ts);
-  const today = evaluate({ d: ts }, 'date(d :midnight)');
-  const yesterday = evaluate({ d: ts }, 'date(d :midnight) - #1d#');
-  if (+now - +d < 120000) return `${Math.ceil((+now - +d) / 1000)} seconds ago`;
-  else if (+now - +d < 5400000) return `${Math.ceil((+now - +d) / 60000)} minutes ago`;
-  else if (+d > +today) return `${evaluate({ d }, `d#date,'HH:mm'`)} today`;
-  else if (+d > +yesterday) return `${evaluate({ d }, `d#date,'HH:mm'`)} yesterday`;
-  else if (+now - +d < (300 * 86400000)) return evaluate({ d }, `d#date,'MMM d'`);
-  else if (+now - +d > (7 * 86400000)) return evaluate({ d }, `d#date,'yyyy-MM-dd'`);
-  else return evaluate({ d }, `d#date,'HH:mm EEE'`);
+  let tmp;
+  if ((tmp = +now - +d) < 120000) return `${Math.ceil(tmp / 1000)} second${tmp > 1000 ? 's' : ''} ago`;
+  if ((tmp = +now - +d) < 5400000) return `${Math.ceil(tmp / 60000)} minute${tmp > 6000 ? 's' : ''} ago`;
+  const today = evaluate({ d: new Date(ts) }, 'date(d :midnight)');
+  if (+d > +today) return `${evaluate({ d }, `d#date,'HH:mm'`)} today`;
+  const yesterday = evaluate({ d: new Date(ts) }, 'date(d :midnight) - #1d#');
+  if (+d > +yesterday) return `${evaluate({ d }, `d#date,'HH:mm'`)} yesterday`;
+  if (+now - +d < (300 * 86400000)) return evaluate({ d }, `d#date,'MMM d'`);
+  if (+now - +d > (7 * 86400000)) return evaluate({ d }, `d#date,'yyyy-MM-dd'`);
+  return evaluate({ d }, `d#date,'HH:mm EEE'`);
 }
 
 setInterval(() => {
@@ -267,6 +269,9 @@ class ControlPanel extends Window {
       if (id != null) app.openLeak(id, database);
     } else app.openLeak(id, database);
   }
+  poll() {
+    app.notify({ action: 'interval', time: this.get('status.pollingInterval') });
+  }
 }
 Window.extendWith(ControlPanel, {
   template: '#control-panel',
@@ -463,7 +468,7 @@ Window.extendWith(Leaks, {
   css: `
 .leak { display: flex; flex-wrap: wrap; }
 .leak > * { box-sizing: border-box; padding: 0.2em; }
-.leak.header { font-weight: bold; position: sticky; top: -0.5em; background-color: #fff; border-bottom: 1px solid; z-index: 1; margin-top: -0.5em; padding-top: 0.5em; }
+.leak.header { font-weight: bold; position: sticky; top: -0.5em; background-color: #fff; border-bottom: 1px solid; z-index: 1; padding-top: 0.5em; }
 .leak .user { width: 8em; }
 .leak .application { width: 12em; }
 .leak .client { width: 12em; }
@@ -511,6 +516,11 @@ Window.extendWith(Leaks, {
           return a;
         }, []);
       }
+    },
+  },
+  on: {
+    init() {
+      this.link('status', 'status', { instance: app });
     },
   },
 });
@@ -624,7 +634,7 @@ function connect() {
   ws.addEventListener('message', ev => {
     const msg = JSON.parse(ev.data);
     switch (msg.action) {
-      case 'status': app.set('status', msg.status); break;
+      case 'status': app.set('status', Object.assign(msg.status, { lastUpdate: new Date() })); break;
       case 'clear': app.set('entries', []); break;
       case 'error':
         app.host.toast(msg.error || '(unknown error)', { type: 'error' });
@@ -637,6 +647,7 @@ function connect() {
       case 'entries': app.push.apply(app, ['entries'].concat(msg.entries || [])); break;
       case 'leaks':
         for (const k in msg.map) app.set(`status.leaks.${k}.current`, msg.map[k]);
+        app.set('status.lastUpdate', new Date());
         break;
       default:
         if ('id' in msg) request.response(msg.id, msg);

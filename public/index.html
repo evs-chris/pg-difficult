@@ -269,6 +269,9 @@
           <button on-click="@.addLeak()" title="Start monitoring connections on an ephemeral connection.">Add Connection</button>
         </div>
       </div>
+      <div>
+        <label as-field>Polling Interval<input type=number value="{{~/status.pollingInterval}}" on-change="@.poll()" lazy></label>
+      </div>
       <div style="overflow: auto;">
         {{#each Object.values(~/status.leaks || {})}}
           {{#each .databases}}
@@ -375,6 +378,7 @@
 
 <script type=text/ractive id=leaks>
   {{#partial leak}}
+    <div>Updated {{age(~/status.lastUpdate)}}</div>
     <div class="leak header">
       <div class=user>User</div>
       <div class=application>Application</div>
