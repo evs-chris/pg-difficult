@@ -1,3 +1,12 @@
+## 1.0.1
+
+2023-03-07
+
+### Bugs
+
+* The data change tracker will now install triggers on the table using syntax that's compatible with versions of PostgreSQL older than 11.
+
+
 ## 1.0.0
 
 2023-03-07
