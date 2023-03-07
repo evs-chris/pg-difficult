@@ -354,7 +354,7 @@
       {{#if entry.status}}
         {{#if entry.changed}}
           <div class="wrapper striped">
-            <div class=name>{{record.table}} {{entry.status}}</div>
+            <div class=name><span>{{record.table}} {{entry.status}}</span><span class=src>({{record.source}})</span></div>
             {{#each entry.changed as pair}}
               <div class="diff">
                 <div class="name">{{@key}}</div>
@@ -365,7 +365,7 @@
           </div>
         {{else}}
           <div class="diff whole striped">
-            <div class="name">{{record.table}} {{entry.status}}</div>
+            <div class=name><span>{{record.table}} {{entry.status}}</span><span class=src>{{record.source}}</span></div>
             {{#each entry.record}}
               <div class="entry"><div class="key">{{@key}}</div><div class="value">{{.}}</div></div>
             {{/each}}
