@@ -24,16 +24,20 @@ Queries can be saved to browser storage and recalled into a particular query win
 
 ## Running
 
+The easiest way would be to download a release from the GitHub releases. The safest way is to clone this repo and run manually with your local Deno, so you can have compplete control over what it gets to access.
+
 To run pg-difficult, you'll need a recent version of [Deno](https://deno.land) for your platform and the source.
 
 pg-difficult will try to connect using a tls encrypted connection by default, but if that fails, it will fall back to an unencrypted connection. If your PostgreSQL cluster is not configured to allow plain host connections, and you don't have a properly signed certificate, you'll probably have issues connecting to the server. The workaround for this is to pass `--unsafely-ignore-certificate-errors` to Deno, at the very least, for the host name of your server.
+
+The binaries are all built to allow all access and ignore certificate errors.
 
 ## Building an executable
 
 To build pg-difficult:
 
 1. Assemble the client files into a module with the included script: `deno run -A ./build-client.ts`
-2. Compile the executable with `deno run -A --unsafely-ignore-certificate-errors ./serve.ts`, and you can also specify a target to cross-compile for other platforms.
+2. Run the serve script with `deno run -A --unsafely-ignore-certificate-errors ./serve.ts`. You could also compile instead of run, and specify a target to cross-compile for other platforms.
 3. ???
 4. Profit!
 
