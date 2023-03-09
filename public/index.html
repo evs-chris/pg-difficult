@@ -148,6 +148,8 @@
     padding: 0.5em;
     box-sizing: border-box;
   }
+
+  .version { opacity: 0.5; }
 </style>
 
 <script type=text/ractive id=template>
@@ -156,7 +158,7 @@
       <menu>
         <container>
           <div style="display: flex; align-items: center; justify-content: space-around; height: 3.4em; background-color: #325932;">
-            pg-difficult
+            <span>pg-difficult <span class=version>- v{{~/status.VERSION}}</span></span>
           </div>
         </container>
         <item title="Control Panel" on-action="@.host.getWindow('control-panel').raise(true)" />

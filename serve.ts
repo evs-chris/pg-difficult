@@ -4,6 +4,8 @@ import * as diff from './diff.ts';
 import { decode } from 'https://deno.land/std@0.177.0/encoding/base64url.ts'
 import { fs } from './client.ts';
 
+const VERSION = '1.0.2';
+
 interface DatabaseConfig {
   host: string;
   username?: string;
@@ -229,6 +231,7 @@ function status() {
     clients: {} as { [k: number]: { id: number; config: DatabaseConfig; source: string } },
     leaks: {} as { [k: number]: { id: number; config: DatabaseConfig; databases: string[]; initial: { [database: string]: Connection[] }; current: Connection[] } },
     pollingInterval: config.pollingInterval,
+    VERSION,
   };
   for (const k in state.diffs) {
     status.clients[k] = { id: +k, config: state.diffs[k].config, source: source(state.diffs[k].config) };
@@ -407,7 +410,7 @@ async function poll(out: boolean) {
 }
 
 app.addEventListener('listen', ({ secure, hostname, port }) => {
-  console.info(`pg_difficult server is available at ${secure ? 'https://' : 'http://'}${hostname}:${port}/`);
+  console.info(`pg-difficult server v${VERSION} is available at ${secure ? 'https://' : 'http://'}${hostname}:${port}/`);
 });
 
 // make sure interrupt stops the diff
