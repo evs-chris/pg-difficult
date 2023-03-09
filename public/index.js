@@ -4,6 +4,7 @@ const { Window } = RauiWindow;
 Ractive.use(RauiButton.plugin(), RauiForm.plugin({ includeStyle: true }), RauiShell.plugin(), RauiMenu.plugin(), RauiWindow.plugin(), RauiAppBar.plugin(), RauiTabs.plugin(), RauiTable.plugin({ includeGrid: true }));
 
 function constr(config, extra) {
+  if (typeof config === 'string') return config;
   const cfg = Object.assign({}, config, extra);
   return `${cfg.username || 'postgres'}@${cfg.host || 'localhost'}:${cfg.port || 5432}/${cfg.database || 'postgres'}`;
 }
@@ -138,6 +139,30 @@ const app = globalThis.app = new Ractive({
       },
       init: false,
     },
+    '@.host': {
+      handler(v) {
+        if (v) {
+          const bb = () => {
+            const wins = v.get('windows');
+            const list = [];
+            for (const k in wins) {
+              if (!/query-|leaks-|entries-|control-/.test(k)) list.push({ title: wins[k].title, action() { v.raise(k, true); } });
+            }
+            this.set('others', list);
+          };
+          let tm;
+          const cb = () => {
+            if (tm != null) return;
+            tm = setTimeout(() => {
+              tm = null;
+              bb();
+            }, 200);
+          };
+          v.observe('windows.* windows.*.title', cb, { strict: true });
+        }
+      },
+      strict: true,
+    },
   },
   on: {
     render() {
@@ -204,7 +229,17 @@ const app = globalThis.app = new Ractive({
     const w = new Ask({ data: { message: question } });
     this.host.addWindow(w, { title, block: true });
     return w.result;
-  }
+  },
+  async loadEntries() {
+    const file = await load('.pgdd');
+    const win = new Entries('Local File', { data: { loaded: JSON.parse(file.text) } });
+    app.host.addWindow(win, { title: `Loaded entries from ${file.name}` });
+  },
+  async loadSchema() {
+    const file = await load('.pgds');
+    const win = new Schema(undefined, { data: { schema: JSON.parse(file.text) } });
+    app.host.addWindow(win, { title: `Loaded schema from ${file.name}` });
+  },
 });
 
 app.set('connections', JSON.parse(localStorage.getItem('connections') || '[]'));
@@ -449,11 +484,16 @@ res
 `);
     return res;
   }
+  download() {
+    const db = this.source ? this.source.replace(/.*@([^:]+).*\/(.*)/, '$1-$2') : 'multiple';
+    download(`diff ${db} ${evaluate(`#now##date,'yyyy-MM-dd HH mm'`)}.pgdd`, JSON.stringify(this.get('entries')), 'application/pg-difficult-diff');
+  }
 }
 Window.extendWith(Entries, {
   template: '#entries',
   options: { flex: true, resizable: true, width: '40em', height: '30em' },
   css: `
+.download { position: absolute; top: 0.3em; right: 0.3em; z-index: 10; }
 .diff { padding: 0.3em; display: flex; flex-wrap: wrap; }
 .diff .name, .diff .left, .diff .right { width: 33%; }
 .diff .name, .wrapper .name { font-weight: bold; }
@@ -466,6 +506,8 @@ h2 { padding: 1em 0 0.5em 0; position: sticky; top: -1em; background-color: #fff
 `,
   computed: {
     entries() {
+      const loaded = this.get('loaded');
+      if (loaded) return loaded;
       const entries = app.get('entries');
       if (this.source != null) return entries.filter(e => e.source === this.source);
       return entries;
@@ -570,11 +612,15 @@ class Schema extends Window {
       const left = target.schema.reduce((a, t) => (a[t.name] = { schema: t.schema }, t.columns.reduce((a, c) => (a[`${t.name}.${c.name}`] = c, a), a), a), {});
       const right = local.reduce((a, t) => (a[t.name] = { schema: t.schema }, t.columns.reduce((a, c) => (a[`${t.name}.${c.name}`] = c, a), a), a), {});
       const w = new SchemaCompare({ data: { diff: evaluate({ left, right }, 'diff(left right)') } });
-      this.host.addWindow(w, { title: `Comparing schema ${constr(target.config)} to ${constr(this.config)}` });
+      this.host.addWindow(w, { title: `Comparing schema ${constr(target.config)} to ${constr(this.config || 'Local File')}` });
     } else {
-      this.set('compareSchema', { config: this.config, schema: local });
+      this.set('compareSchema', { config: this.config || 'Local File', schema: local });
       this.host.toast('Click Compare on another schema to compare', { type: 'info', timeout: 4000 });
     }
+  }
+  download() {
+    const db = this.config ? `${this.config.host || 'localhost'}-${this.config.database || 'postgres'}` : `Local File`;
+    download(`schema ${db} ${evaluate(`#now##date,'yyyy-MM-dd HH mm'`)}.pgds`, JSON.stringify(this.get('schema')), 'application/pg-difficult-schema');
   }
 }
 Window.extendWith(Schema, {
@@ -599,6 +645,7 @@ Window.extendWith(Schema, {
       this.link('compareSchema', 'compareSchema', { instance: app });
     },
     async render() {
+      if (!this.config) return;
       this.blocked = true;
       try {
         const msg = await request({ action: 'schema', client: this.config });
@@ -676,6 +723,37 @@ function connect() {
 
 function reconnect() {
   if (!app.get('connected')) setTimeout(() => connect(), 10000);
+}
+
+function download(name, value, type) {
+  const blob = typeof value === 'string' ? new Blob([value], { type: type || 'application/octet-stream' }) : value;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.download = name;
+  a.href = url;
+  a.style.display = 'none';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+async function load(ext, multi) {
+  const file = document.getElementById('file');
+  file.accept = ext || '.json';
+  file.multiple = multi;
+  let ok, fail;
+  const res = new Promise((o, f) => (ok = o, fail = f));
+  file.onchange = async () => {
+    if (file.files.length < 1) fail(new Error('No files selected'));
+    const res = [];
+    for (const f of file.files) res.push({ name: f.name, text: await f.text() });
+    if (multi) ok(res);
+    else ok(res[0]);
+    file.value = '';
+  };
+  file.click();
+  return res;
 }
 
 connect();

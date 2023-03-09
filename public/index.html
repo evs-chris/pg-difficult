@@ -165,6 +165,11 @@
         <section title="Active Diffs" bind-items="~/diffs" bind-hidden="(~/diffs || []).length < 1" />
         <section title="Monitored Connections" bind-items="~/leaks" bind-hidden="(~/leaks || []).length < 1" />
         <section title="Queries" bind-items="~/queries" bind-hidden="(~/queries || []).length < 1" />
+        <section title="Tools" style="margin-top: 1em;">
+          <item title="Reload Saved Entries" on-action="@.loadEntries()" />
+          <item title="Reload Saved Schema" on-action="@.loadSchema()" />
+        </section>
+        <section title="Other Windows" style="margin-top: 1em;" bind-items="~/others" bind-hidden="(~/others || []).length < 1" />
       </menu>
     </right>
     <center style="display: flex; flex-direction: column;">
@@ -194,6 +199,7 @@
       <div class=reconnecting>Reconnecting...</div>
     </div>
   </div>{{/unless}}
+  <input type=file id=file />
 </script>
 
 <script type=text/ractive id=control-panel>
@@ -354,6 +360,9 @@
 </script>
 
 <script type=text/ractive id=entries>
+  {{#if ~/entries.length}}
+    <button class=download on-click="@.download()" title="Download a file containing these entries.">Download</button>
+  {{/if}}
   <div class="content-wrapper">
     {{#each ~/entries as record}}{{#with @.details(record) as entry}}
       {{#if @index === 0 || ~/entries[@index - 1].segment !== .segment}}<h2>{{.segment}}</h2>{{/if}}
@@ -434,6 +443,7 @@
         {{else}}
           <label as-field style="flex-grow: 0;"><button on-click="@.set('compareSchema', undefined)" title="Cancel eaiting for another schema to be selected to compare to this schema.">Cancel</button></label>
         {{/if}}
+        <label as-field style="flex-grow: 0;"><button on-click="@.download()" title="Download a file containing this schema.">Download</button></label>
       </div>
       <div class="schema-row" style="font-weight: bold;">
         <div class="name">Name</div>
@@ -473,9 +483,9 @@
     {{#each diff as pair}}
       {{#if pair[0] != null && pair[1] != null}}
         <div class="schema-diff striped">
-          <div class="name">{{@key}}</div>
-          <div class="left">{{pair[0]}}</div>
-          <div class="right">{{pair[1]}}</div>
+          <div class="name" title="{{@key}}">{{@key}}</div>
+          <div class="left" title="{{pair[0]}}">{{pair[0]}}</div>
+          <div class="right" title="{{pair[1]}}">{{pair[1]}}</div>
         </div>
       {{else}}
         <div class="schema-diff whole striped">
