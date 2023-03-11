@@ -361,7 +361,7 @@
 
 <script type=text/ractive id=entries>
   {{#if ~/entries.length}}
-    <button class=download on-click="@.download()" title="Download a file containing these entries. Hold the ctrl key to open a popup window of the HTML for printing/saving.">Download</button>
+    <button class=download on-click="@.download()" title="Download a file containing these entries. Hold the ctrl key while clicking to open a popup window of the HTML. Hold the shift key while clicking to download the HTML directly.">Download</button>
   {{/if}}
   <div class="content-wrapper">
     {{#each ~/entries as record}}{{#with @.details(record) as entry}}

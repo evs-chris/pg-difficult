@@ -499,34 +499,43 @@ res
   download() {
     if (this.event?.event?.ctrlKey) return this.openHtml();
     const db = this.source ? this.source.replace(/.*@([^:]+).*\/(.*)/, '$1-$2') : 'multiple';
-    download(`diff ${db} ${evaluate(`#now##date,'yyyy-MM-dd HH mm'`)}.pgdd`, JSON.stringify(this.get('entries')), 'application/pg-difficult-diff');
+    const name = `diff ${db} ${evaluate(`#now##date,'yyyy-MM-dd HH mm'`)}`;
+    const ext = this.event?.event?.shiftKey ? 'html' : 'pgdd';
+    let html, css;
+    const text = this.event?.event?.shiftKey ? ([html, css] = this.getHtml(), `<html><head><title>${name}</title><style>${css}</style></head><body>${html}</body></html>`) : JSON.stringify(this.get('entries'));
+    download(`${name}.${ext}`, text, ext === 'html' ? 'text/html' : 'application/pg-difficult-diff');
   }
   openHtml() {
     const wnd = window.open('about:blank', '_blank', 'popup');
     if (wnd) setTimeout(() => {
+      const [html, css] = this.getHtml();
       const style = wnd.document.createElement('style');
-      style.textContent = EntryCSS + `
-    html { margin: 0; padding: 0; font-family: sans-serif; height: 100%; }
-    body { margin: 0; padding: 0; display: flex; flex-direction: column; height: 100%; }
-    @media print {
-      body { height: auto; }
-      html: { height: auto; }
-      .diff, .entry { break-inside: avoid; }
-    }
-    button { display: none; }
-    .stretch-fields { display: flex; }
-    .stretch-fields > * { flex-grow: 1; }
-
-    .striped:nth-child(odd) { background-color: #eee; }
-    .striped { background-color: #fff; padding: 0.3em; box-sizing: border-box; border-radius: 0.3em; }
-    .striped > * { overflow: hidden; text-overflow: ellipsis; }
-
-    .content-wrapper { display: flex; flex-direction: column; overflow: auto; position: relative; padding: 0.5em; box-sizing: border-box; }
-      `;
+      style.textContent = css;
       wnd.document.head.appendChild(style);
-      const el = this.find('.rwindow-content');
-      wnd.document.body.innerHTML = el.innerHTML;
+      wnd.document.body.innerHTML = html;
     }, 100);
+  }
+  getHtml() {
+    const css = EntryCSS + `
+      html { margin: 0; padding: 0; font-family: sans-serif; height: 100%; }
+      body { margin: 0; padding: 0; display: flex; flex-direction: column; height: 100%; }
+      @media print {
+        body { height: auto; }
+        html: { height: auto; }
+        .diff, .entry { break-inside: avoid; }
+      }
+      button { display: none; }
+      .stretch-fields { display: flex; }
+      .stretch-fields > * { flex-grow: 1; }
+
+      .striped:nth-child(odd) { background-color: #eee; }
+      .striped { background-color: #fff; padding: 0.3em; box-sizing: border-box; border-radius: 0.3em; }
+      .striped > * { overflow: hidden; text-overflow: ellipsis; }
+
+      .content-wrapper { display: flex; flex-direction: column; overflow: auto; position: relative; padding: 0.5em; box-sizing: border-box; }
+    `;
+    const el = this.find('.rwindow-content');
+    return [el.innerHTML, css];
   }
 }
 Window.extendWith(Entries, {
