@@ -459,6 +459,18 @@ Window.extendWith(Query, {
   },
 });
 
+const EntryCSS = `
+.download { position: absolute; top: 0.3em; right: 0.3em; z-index: 10; }
+.diff { padding: 0.3em; display: flex; flex-wrap: wrap; }
+.diff .name, .diff .left, .diff .right { width: 33%; overflow: hidden; text-overflow: ellipsis; }
+.diff .name, .wrapper .name { font-weight: bold; }
+.diff.whole .name { width: 100%; }
+.entry { padding: 0.2em 0.5em; }
+.entry .key { font-weight: bold; }
+.wrapper > .name, .diff.whole > .name { display: flex; justify-content: space-between; }
+.wrapper > .name > .src, .diff.whole > .name > .src { opacity: 0.4; }
+h2 { padding: 1em 0 0.5em 0; position: sticky; top: -1em; background-color: #fff; }
+`
 class Entries extends Window {
   constructor(source, opts) {
     super(opts);
@@ -485,25 +497,42 @@ res
     return res;
   }
   download() {
+    if (this.event?.event?.ctrlKey) return this.openHtml();
     const db = this.source ? this.source.replace(/.*@([^:]+).*\/(.*)/, '$1-$2') : 'multiple';
     download(`diff ${db} ${evaluate(`#now##date,'yyyy-MM-dd HH mm'`)}.pgdd`, JSON.stringify(this.get('entries')), 'application/pg-difficult-diff');
+  }
+  openHtml() {
+    const wnd = window.open('about:blank', '_blank', 'popup');
+    if (wnd) setTimeout(() => {
+      const style = wnd.document.createElement('style');
+      style.textContent = EntryCSS + `
+    html { margin: 0; padding: 0; font-family: sans-serif; height: 100%; }
+    body { margin: 0; padding: 0; display: flex; flex-direction: column; height: 100%; }
+    @media print {
+      body { height: auto; }
+      html: { height: auto; }
+      .diff, .entry { break-inside: avoid; }
+    }
+    button { display: none; }
+    .stretch-fields { display: flex; }
+    .stretch-fields > * { flex-grow: 1; }
+
+    .striped:nth-child(odd) { background-color: #eee; }
+    .striped { background-color: #fff; padding: 0.3em; box-sizing: border-box; border-radius: 0.3em; }
+    .striped > * { overflow: hidden; text-overflow: ellipsis; }
+
+    .content-wrapper { display: flex; flex-direction: column; overflow: auto; position: relative; padding: 0.5em; box-sizing: border-box; }
+      `;
+      wnd.document.head.appendChild(style);
+      const el = this.find('.rwindow-content');
+      wnd.document.body.innerHTML = el.innerHTML;
+    }, 100);
   }
 }
 Window.extendWith(Entries, {
   template: '#entries',
   options: { flex: true, resizable: true, width: '40em', height: '30em' },
-  css: `
-.download { position: absolute; top: 0.3em; right: 0.3em; z-index: 10; }
-.diff { padding: 0.3em; display: flex; flex-wrap: wrap; }
-.diff .name, .diff .left, .diff .right { width: 33%; }
-.diff .name, .wrapper .name { font-weight: bold; }
-.diff.whole .name { width: 100%; }
-.entry { padding: 0.2em; }
-.entry .key { font-weight: bold; }
-.wrapper > .name, .diff.whole > .name { display: flex; justify-content: space-between; }
-.wrapper > .name > .src, .diff.whole > .name > .src { opacity: 0.4; }
-h2 { padding: 1em 0 0.5em 0; position: sticky; top: -1em; background-color: #fff; }
-`,
+  css: EntryCSS,
   computed: {
     entries() {
       const loaded = this.get('loaded');
