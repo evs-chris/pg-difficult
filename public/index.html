@@ -3,7 +3,7 @@
   <head>
     <title>pg-difficult</title>
     <link rel="shortcut icon" href="./icon.png" />
-    <script src="./ractive@1.4.0.js"></script>
+    <script src="./ractive@1.4.2.js"></script>
     <script src="./raport@0.15.1.js"></script>
     <script src="./raui@0.12.0/button.js"></script>
     <script src="./raui@0.12.0/form.js"></script>
@@ -462,15 +462,20 @@
         {{/if}}
         {{#if ~/expanded[.name] || (~/filter || ~/expr) && @.matches(., null)}}
           {{#each .columns}}
-            {{#if ~/expanded[../../name] || @.matches(../../, .)}}
-              <div class="column schema-row striped">
-                <div class="name {{#if .pkey}}pkey{{/if}}" {{#if .default}}title="Default: {{.default}}"{{/if}}>{{.name}}</div>
-                <div class="nullable">{{.nullable ? 'Y' : 'N'}}</div>
-                <div class="default" {{#if .default}}title="{{.default}}"{{/if}}>{{.default ? 'Y' : 'N'}}</div>
-                <div class="type" {{#if .enum}}title="Values: {{.enum.join(', ')}}"{{/if}}>{{.pgtype}}</div>
-                <div class="size">{{#if .length != null}}{{.length}}{{elseif .precision != null}}{{.precision}}{{/if}}</div>
-              </div>
-            {{/if}}
+            {{#with ~/expanded[../../name] as expanded, @.matches(../../, .) as matched}}
+              {{#if expanded || matched}}
+                <div class="column schema-row striped">
+                  <div class="name {{#if .pkey}}pkey{{/if}}" {{#if .default}}title="Default: {{.default}}"{{/if}}>
+                    <div class=expand-indicator class-expanded class-matched />
+                    {{.name}}
+                  </div>
+                  <div class="nullable">{{.nullable ? 'Y' : 'N'}}</div>
+                  <div class="default" {{#if .default}}title="{{.default}}"{{/if}}>{{.default ? 'Y' : 'N'}}</div>
+                  <div class="type" {{#if .enum}}title="Values: {{.enum.join(', ')}}"{{/if}}>{{.pgtype}}</div>
+                  <div class="size">{{#if .length != null}}{{.length}}{{elseif .precision != null}}{{.precision}}{{/if}}</div>
+                </div>
+              {{/if}}
+            {{/with}}
           {{/each}}
         {{/if}}
       {{/each}}
