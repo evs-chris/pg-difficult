@@ -107,7 +107,7 @@ export async function start(client: Client) {
       else
         raise exception 'Unknown trigger op: "%"', TG_OP;
     end case;
-    notify __pg_difficult;
+    notify __pg_difficult, 'record';
     return rec;
   end;
   $trigger$ language plpgsql;`;
@@ -176,6 +176,7 @@ export async function stop(client: Client): Promise<Segment> {
     const tables: Table[] = await t.unsafe(tableQuery);
     for (const table of tables) await t`drop trigger if exists __pgdifficult_notify on ${t(table.name)}`;
     await t`drop function if exists __pgdifficult_record();`;
+    await t`notify __pg_difficult, 'stopped'`;
   });
   return res;
 }

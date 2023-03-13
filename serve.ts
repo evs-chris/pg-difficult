@@ -130,7 +130,9 @@ router.get('/:path*', async ctx => {
 });
 
 interface Ping { action: 'ping' }
-interface Start { action: 'start'; config: DatabaseConfig }
+interface Start { action: 'start'; id: number; config: DatabaseConfig }
+interface Restart { action: 'restart'; id: number; config: DatabaseConfig }
+interface Resume { action: 'resume'; id: number; config: DatabaseConfig }
 interface Stop { action: 'stop', id: number, save?: true }
 interface Status { action: 'status' }
 interface Clear { action: 'clear' }
@@ -141,12 +143,14 @@ interface Query { action: 'query'; client: number|DatabaseConfig; query: string;
 interface Leak { action: 'leak'; config: DatabaseConfig }
 interface Unleak { action: 'unleak', config: DatabaseConfig }
 interface Interval { action: 'interval', time: number }
-type Message = Ping|Start|Stop|Status|Clear|Segment|Check|Schema|Query|Leak|Unleak|Interval;
+type Message = Ping|Start|Restart|Resume|Stop|Status|Clear|Segment|Check|Schema|Query|Leak|Unleak|Interval;
 
 async function message(this: WebSocket, msg: Message) {
   try {
     switch (msg.action) {
-      case 'start': await start(msg.config); break;
+      case 'start': await start(msg.config, msg.id, this); break;
+      case 'resume': await start(msg.config, msg.id, this, 'resume'); break;
+      case 'restart': await start(msg.config, msg.id, this, 'restart'); break;
       case 'stop': await stop(msg.id, msg.save); break;
       case 'status': status(); break;
       case 'clear': await clear(); break;
@@ -177,7 +181,7 @@ function error(message: string, ws?: WebSocket, extra?: Record<string, unknown>)
   notify(Object.assign({}, extra, { action: 'error', error: message }), ws);
 }
 
-async function start(config: DatabaseConfig) {
+async function start(config: DatabaseConfig, id: number, ws: WebSocket, start?: 'resume'|'restart') {
   for (const k in state.diffs) {
     const st = state.diffs[k];
     if (source(st.config) === source(config)) return error(`Already connected to ${source(config)}`);
@@ -186,29 +190,45 @@ async function start(config: DatabaseConfig) {
   config = prepareConfig(config, { app: 'diff' });
   if (!config.ssl) config.ssl = 'prefer';
 
-  let client: undefined|postgres.Sql<Record<string, unknown>>;
+  const client = postgres(config);
+  await client`select 1 as x`;
+
+  // check for started diff
+  let restart = false;
   try {
-    client = postgres(config);
-    await client`select 1 as x`;
-  } catch (e) {
-    client = undefined;
-    throw e;
+    await client`select * from __pgdifficult_state`;
+    restart = true;
+    if (!start) return notify({ id, action: 'resume' }, ws);
+  } catch { /* good */ }
+
+  if (restart && start === 'restart') {
+    await diff.stop(client);
+  } else if (restart && start === 'resume') {
+    await client`notify __pg_difficult, 'joined'`;
+    notify({ id, action: 'resumed' }, ws);
+  } else {
+    try {
+      await diff.start(client);
+    } catch (e) {
+      await client.end();
+      throw e;
+    }
+
+    await diff.next(client, state.segment);
+    notify({ id, action: 'started' }, ws);
   }
 
-  try {
-    await diff.start(client);
-  } catch (e) {
-    await client.end();
-    client = undefined;
-    throw e;
-  }
+  const did = state.diffId++;
+  state.diffs[did] = { client, config, id: did };
 
-  const id = state.diffId++;
-  state.diffs[id] = { client, config, id };
-
-  await diff.next(client, state.segment);
-  await client.listen('__pg_difficult', () => {
-    notify({ action: 'check' });
+  await client.listen('__pg_difficult', async v => {
+    if (v === 'stopped') {
+      await client.end();
+      delete state.diffs[id];
+      status();
+    } else if (!v || v === 'record') {
+      notify({ action: 'check' });
+    }
   });
 
   status();

@@ -230,6 +230,11 @@ const app = globalThis.app = new Ractive({
     this.host.addWindow(w, { title, block: true });
     return w.result;
   },
+  choose(question, buttons, title) {
+    const w = new Choose({ data: { message: question, buttons } });
+    this.host.addWindow(w, { title, block: true });
+    return w.result;
+  },
   async loadEntries() {
     const file = await load('.pgdd');
     const win = new Entries('Local File', { data: { loaded: JSON.parse(file.text) } });
@@ -272,8 +277,16 @@ class ControlPanel extends Window {
     }, []);
     return clients.includes(constr(cfg));
   }
-  startDiff(config) {
-    notify({ action: 'start', config });
+  async startDiff(config) {
+    const res = await request({ action: 'start', config });
+    if (res.action === 'resume') {
+      const what = await app.choose('There is already a running diff in this database. Would you like to cancel, resume the diff that is already running from this instance, or restart start the diff and disconnect any other instances that are connected?', [
+        { label: 'Cancel', action() { this.close() }, where: 'left' },
+        { label: 'Restart', action() { this.close(false, 'restart') }, where: 'center' },
+        { label: 'Resume', action() { this.close(false, 'resume'); } }
+      ], 'Restart or resume diff?');
+      if (what) request({ action: what, config });
+    }
   }
   stopDiff(config) {
     const clients = Object.values(this.get('status.clients') || {});
@@ -362,6 +375,14 @@ class Ask extends Window {
 }
 Window.extendWith(Ask, {
   template: '#ask',
+  options: { flex: true, close: false, resizable: false, maximize: false, minimize: false, width: 'auto', height: 'auto' },
+});
+
+class Choose extends Window {
+  constructor(opts) { super(opts); }
+}
+Window.extendWith(Choose, {
+  template: '#choose',
   options: { flex: true, close: false, resizable: false, maximize: false, minimize: false, width: 'auto', height: 'auto' },
 });
 
@@ -776,7 +797,7 @@ function download(name, value, type) {
   URL.revokeObjectURL(url);
 }
 
-async function load(ext, multi) {
+function load(ext, multi) {
   const file = document.getElementById('file');
   file.accept = ext || '.json';
   file.multiple = multi;

@@ -521,12 +521,20 @@
 </script>
 
 <script type=text/ractive id=ask>
-  <div class="message">{{.message}}</div>
-  <label as-field class=inline><input value="{{.value}}" /></label>
+  <div class=content-wrapper>
+    <div class="message" style="max-width: 36em;">{{.message}}</div>
+    <label as-field class=inline><input value="{{.value}}" /></label>
+  </div>
   <buttons>
     <button left class=flat on-click="@.close()">Cancel</button>
     <button on-click="@.close(true, ~/value)">Done</button>
   </buttons>
+</script>
+
+<script type=text/ractive id=choose>
+  <div class=content-wrapper>
+    <div class="message" style="max-width: 36em;">{{.message}}</div>
+  </div>
 </script>
 
   </head>

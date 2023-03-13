@@ -82,8 +82,8 @@ The client takes advantage of local storage in the browser to save connection de
 * Provide a way to download ~~diffs, schemas, and~~ query results.
 * Integrate the Raport designer and allow queries to be defined as provided sources for reports.
 * Sort the fields in diffed output.
-* Come up with a good way to resume a detached server session.
 * Allow exporting and importing application settings.
 * Add unwind support to rollback changes that have aggregated in a database.
 * Add a dark theme.
 * Expose all server connections in additional tabs in the monitor.
+* Add other instance polling so that multiple servers can diff the same database and let the last one out turn off the lights.
