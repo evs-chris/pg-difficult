@@ -1,4 +1,4 @@
-import postgres from 'https://deno.land/x/postgresjs@v3.3.3/mod.js';
+import postgres from 'https://deno.land/x/postgresjs@v3.3.4/mod.js';
 
 type Client = postgres.Sql<Record<string, unknown>>;
 
@@ -82,7 +82,7 @@ export interface Change {
 export async function start(client: Client) {
   await client.begin(async client => {
     const tables: Table[] = await client.unsafe(tableQuery);
-    await client`create table __pgdifficult_entries (id bigserial primary key, "table" varchar not null, segment varchar not null, old json, new json, stamp timestamptz not null);`;
+    await client`create table __pgdifficult_entries (id bigserial primary key, "schema" varchar not null, "table" varchar not null, segment varchar not null, old json, new json, stamp timestamptz not null);`;
     await client`grant all on table __pgdifficult_entries to public`;
     await client`grant all on sequence __pgdifficult_entries_id_seq to public`;
     await client`create table __pgdifficult_state (key varchar primary key, value varchar);`;
@@ -93,16 +93,17 @@ export async function start(client: Client) {
     segment varchar;
     rec record;
   begin
+    set timezone = 'UTC';
     select value into segment from __pgdifficult_state where key = 'segment';
     case TG_OP
       when 'UPDATE' then
-        insert into __pgdifficult_entries ("table", "segment", "old", "new", stamp) values (TG_TABLE_NAME, segment, row_to_json(OLD), row_to_json(NEW), CURRENT_TIMESTAMP(3));
+        insert into __pgdifficult_entries ("table", "schema", "segment", "old", "new", stamp) values (TG_TABLE_NAME, TG_TABLE_SCHEMA, segment, row_to_json(OLD), row_to_json(NEW), CURRENT_TIMESTAMP(3));
         rec := NEW;
       when 'INSERT' then
-        insert into __pgdifficult_entries ("table", "segment", "old", "new", stamp) values (TG_TABLE_NAME, segment, null, row_to_json(NEW), CURRENT_TIMESTAMP(3));
+        insert into __pgdifficult_entries ("table", "schema", "segment", "old", "new", stamp) values (TG_TABLE_NAME, TG_TABLE_SCHEMA, segment, null, row_to_json(NEW), CURRENT_TIMESTAMP(3));
         rec := NEW;
       when 'DELETE' then
-        insert into __pgdifficult_entries ("table", "segment", "old", "new", stamp) values (TG_TABLE_NAME, segment, row_to_json(OLD), null, CURRENT_TIMESTAMP(3));
+        insert into __pgdifficult_entries ("table", "schema", "segment", "old", "new", stamp) values (TG_TABLE_NAME, TG_TABLE_SCHEMA, segment, row_to_json(OLD), null, CURRENT_TIMESTAMP(3));
         rec := OLD;
       else
         raise exception 'Unknown trigger op: "%"', TG_OP;

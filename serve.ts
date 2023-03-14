@@ -1,5 +1,5 @@
 import * as oak from 'https://deno.land/x/oak@v11.1.0/mod.ts';
-import postgres from 'https://deno.land/x/postgresjs@v3.3.3/mod.js';
+import postgres from 'https://deno.land/x/postgresjs@v3.3.4/mod.js';
 import * as diff from './diff.ts';
 import { decode } from 'https://deno.land/std@0.177.0/encoding/base64url.ts'
 import { fs } from './client.ts';
@@ -75,7 +75,16 @@ function source(config: DatabaseConfig): string {
 }
 
 function prepareConfig(cfg: DatabaseConfig, extra?: Partial<DatabaseConfig> & { app?: string }): DatabaseConfig {
-  return Object.assign({ onnotice() {}, connection: { application_name: `pg-difficult:${config.port}${extra?.app ? `(${extra.app})` : ''}` } }, cfg, { host: cfg.host || 'localhost', username: cfg.username || 'postgres', database: cfg.database || 'postgres', port: cfg.port || 5432 }, extra);
+  const base = {
+    onnotice() {},
+    types: { date: {
+      to: 1184, from: [1082, 1114, 1184],
+      serialize: (v: string) => v,
+      parse: (v: string) => v,
+    } },
+    connection: { application_name: `pg-difficult:${config.port}${extra?.app ? `(${extra.app})` : ''}` },
+  }
+  return Object.assign(base, cfg, { host: cfg.host || 'localhost', username: cfg.username || 'postgres', database: cfg.database || 'postgres', port: cfg.port || 5432 }, extra);
 }
 
 // set up server
@@ -138,7 +147,7 @@ interface Resume { action: 'resume'; id: number; config: DatabaseConfig }
 interface Stop { action: 'stop', id: number, save?: true }
 interface Status { action: 'status' }
 interface Clear { action: 'clear' }
-interface Segment { action: 'segment'; segment: string }
+interface Segment { action: 'segment'; segment: string, id?: string }
 interface Check { action: 'check'; since?: string }
 interface Schema { action: 'schema'; client?: number|DatabaseConfig; id?: string }
 interface Query { action: 'query'; client: number|DatabaseConfig; query: string[]; params?: unknown[][]; id: string }
@@ -156,7 +165,7 @@ async function message(this: WebSocket, msg: Message) {
       case 'stop': await stop(msg.id, msg.save); break;
       case 'status': status(); break;
       case 'clear': await clear(); break;
-      case 'segment': await next(msg.segment); break;
+      case 'segment': await next(msg.segment, this, msg.id); break;
       case 'ping': this.send(JSON.stringify({ action: 'pong' })); break;
       case 'check': check(this, msg.since); break;
       case 'schema': schema(this, msg.client, msg.id); break;
@@ -256,15 +265,15 @@ function status() {
     VERSION,
   };
   for (const k in state.diffs) {
-    status.clients[k] = { id: +k, config: state.diffs[k].config, source: source(state.diffs[k].config) };
+    status.clients[k] = { id: +k, config: Object.assign({}, state.diffs[k].config, { types: undefined, connection: undefined }), source: source(state.diffs[k].config) };
   }
   for (const k in state.leaks) {
-    status.leaks[k] = { id: +k, config: state.leaks[k].client.config, databases: state.leaks[k].databases, initial: state.leaks[k].initial, current: state.leaks[k].current };
+    status.leaks[k] = { id: +k, config: Object.assign({}, state.leaks[k].client.config, { types: undefined, connection: undefined }), databases: state.leaks[k].databases, initial: state.leaks[k].initial, current: state.leaks[k].current };
   }
   notify({ action: 'status', status });
 }
 
-async function next(segment: string) {
+async function next(segment: string, ws: WebSocket, id?: string) {
   if (!segment) return error('Segment is required.');
   state.segment = segment;
   for (const k in state.diffs) {
@@ -272,6 +281,8 @@ async function next(segment: string) {
   }
 
   status();
+
+  if (id) notify({ action: 'segment-change', id }, ws);
 }
 
 async function clear() {
@@ -337,6 +348,7 @@ async function query(client: DatabaseConfig|number, query: string[], params: unk
         notify({ action: 'query', id, result: results.length === 1 ? results[0] : results, time: Date.now() - start });
       });
     } catch (e) {
+      console.error(e, query);
       error(`Error running query: ${e.message}`, ws, { id });
     }
   } else {
@@ -355,6 +367,7 @@ async function query(client: DatabaseConfig|number, query: string[], params: unk
         notify({ action: 'query', id, result: results.length === 1 ? results[0] : results, time: Date.now() - start });
       });
     } catch (e) {
+      console.error(e, query);
       error(`Error running query: ${e.message}`, ws, { id });
     } finally {
       await c.end();

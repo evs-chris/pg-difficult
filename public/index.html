@@ -360,16 +360,26 @@
 </script>
 
 <script type=text/ractive id=entries>
-  {{#if ~/entries.length}}
-    <button class=download on-click="@.download()" title="Download a file containing these entries. Hold the ctrl key while clicking to open a popup window of the HTML. Hold the shift key while clicking to download the HTML directly.">Download</button>
-  {{/if}}
   <div class="content-wrapper">
+    <div class="controls">
+      {{#if @.source}}
+        <label title="Check to enable undoing segments"><input type=checkbox bind-checked="~/allowUndoSegment" /> Undo segments?</label>
+        <label title="Check to enable undoing individual entries"><input type=checkbox bind-checked="~/allowUndoSingle" /> Undo single?</label>
+      {{else}}
+        <div />
+      {{/if}}
+      {{#if ~/entries.length}}
+        <button class=download on-click="@.download()" title="Download a file containing these entries. Hold the ctrl key while clicking to open a popup window of the HTML. Hold the shift key while clicking to download the HTML directly.">Download</button>
+      {{else}}
+        <div />
+      {{/if}}
+    </div>
     {{#each ~/entries as record}}{{#with @.details(record) as entry}}
-      {{#if @index === 0 || ~/entries[@index - 1].segment !== .segment}}<h2>{{.segment}}</h2>{{/if}}
+      {{#if @index === 0 || ~/entries[@index - 1].segment !== .segment}}<div class=header><h2>{{.segment}}</h2> {{#if ~/allowUndoSegment && @.source}}<button class=undo on-click="@.undoSegment(record)" title="Undo all changes in this segment by replaying the changes in reverse. This will also create a new segment named 'Undo {{.segment}}', unless you hold the ctrl key when clicking this button.">Undo</button>{{/if}}</div>{{/if}}
       {{#if entry.status}}
         {{#if entry.changed}}
           <div class="wrapper striped">
-            <div class=name><span>{{record.table}} {{entry.status}}</span><span class=src>({{record.source}})</span></div>
+            <div class=name><span>{{record.table}} {{entry.id || ''}} {{entry.status}}</span><span class=src>({{record.source}})</span></div>
             {{#each entry.changed as pair}}
               <div class="diff">
                 <div class="name">{{@key}}</div>
@@ -377,13 +387,17 @@
                 <div class="right">{{pair[1]}}</div>
               </div>
             {{/each}}
+
+            {{#if ~/allowUndoSingle && @.source}}<button class=undo on-click="@.undoSingle(record)" title="Undo this change by running the inverse of the statment that created the change.">Undo</button>{{/if}}
           </div>
         {{else}}
           <div class="diff whole striped">
-            <div class=name><span>{{record.table}} {{entry.status}}</span><span class=src>{{record.source}}</span></div>
+            <div class=name><span>{{record.table}} {{entry.id || ''}} {{entry.status}}</span><span class=src>{{record.source}}</span></div>
             {{#each entry.record}}
               <div class="entry"><div class="key">{{@key}}</div><div class="value">{{.}}</div></div>
             {{/each}}
+
+            {{#if ~/allowUndoSingle && @.source}}<button class=undo on-click="@.undoSingle(record)" title="Undo this change by running the inverse of the statment that created the change.">Undo</button>{{/if}}
           </div>
         {{/if}}
       {{/if}}

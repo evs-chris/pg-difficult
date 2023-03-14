@@ -113,6 +113,17 @@ const app = globalThis.app = new Ractive({
         });
         if (active.length > 1) active.unshift({ title: 'All Entries', action() { app.openEntries() } });
         this.set('diffs', active);
+
+        const found = [];
+        const schemas = this.get('schemas') || {};
+        for (const client of Object.values(v || {})) {
+          found.push(client.source);
+          if (schemas[client.source]) continue;
+          request({ action: 'schema', client: client.config }).then(s => this.set(`schemas.${Ractive.escapeKey(client.source)}`, s.schema));
+        }
+        for (const k in schemas) {
+          if (!~found.indexOf(k)) this.set(`schemas.${Ractive.escapeKey(k)}`, undefined);
+        }
       },
       strict: true, init: false,
     },
@@ -227,12 +238,12 @@ const app = globalThis.app = new Ractive({
   },
   ask(question, title) {
     const w = new Ask({ data: { message: question } });
-    this.host.addWindow(w, { title, block: true });
+    this.host.addWindow(w, { title, block: true, top: 'center', left: 'center' });
     return w.result;
   },
   choose(question, buttons, title) {
     const w = new Choose({ data: { message: question, buttons } });
-    this.host.addWindow(w, { title, block: true });
+    this.host.addWindow(w, { title, block: true, top: 'center', left: 'center' });
     return w.result;
   },
   async loadEntries() {
@@ -325,6 +336,7 @@ class ControlPanel extends Window {
   entries(id) {
     if (typeof id === 'object') id = Object.values(this.get('status.clients')).find(c => constr(c.config) === constr(id))?.id;
     if (id != null) app.openEntries(id);
+    else app.openEntries();
   }
   leaks(id, database) {
     if (typeof id === 'object') {
@@ -480,8 +492,28 @@ Window.extendWith(Query, {
   },
 });
 
+function reverseEntry(entry, schema) {
+  if (entry.old && !entry.new) {
+    return [`insert into "${entry.schema}"."${entry.table}" (${Object.keys(entry.old).map(k => `"${k}"`).join(', ')}) values (${Object.keys(entry.old).map((_k, i) => `$${i + 1}`).join(', ')})`, Object.values(entry.old)];
+  } else if (entry.new && !entry.old) {
+    const tbl = schema.find(t => t.schema === entry.schema && t.name === entry.table);
+    if (!tbl) return;
+    const keys = tbl.columns.filter(c => c.pkey);
+    if (keys.length) return [`delete from "${entry.schema}"."${entry.table}" where ${keys.map((k, i) => `"${k.name}" = $${i + 1}`).join(' and ')}`, keys.map(k => entry.new[k])];
+    else return [`delete from "${entry.schema}"."${entry.table}" where ${tbl.columns.map((c, i) => `"${c.name}" = $${i + 1}`).join(' and ')}`, tbl.columns.map(c => entry.new[c.name])];
+  } else {
+    const tbl = schema.find(t => t.schema === entry.schema && t.name === entry.table);
+    if (!tbl) return;
+    const keys = tbl.columns.filter(c => c.pkey);
+    // TODO: maybe diff this down to only the changed fields at some point
+    let i = 1;
+    if (keys.length) return [`update "${entry.schema}"."${entry.table}" set ${Object.keys(entry.old).map(k => `"${k}" = $${i++}`).join(', ')} where ${keys.map(k => `"${k.name}" = $${i++}`).join(' and ')}`, Object.keys(entry.old).map(k => entry.old[k]).concat(keys.map(k => entry.old[k.name]))];
+    else return [`update "${entry.schema}"."${entry.table}" set ${Object.keys(entry.old).map(k => `"${k}" = $${i++}`).join(', ')} where ${Object.keys(entry.new).map(k => `"${k}" = $${i++}`).join(' and ')}`, Object.keys(entry.old).map(k => entry.old[k]).concat(Object.keys(entry.new).map(k => entry.new[k]))];
+  }
+}
+
 const EntryCSS = `
-.download { position: absolute; top: 0.3em; right: 0.3em; z-index: 10; }
+.controls { display: flex; justify-content: space-between; align-items: center; }
 .diff { padding: 0.3em; display: flex; flex-wrap: wrap; }
 .diff .name, .diff .left, .diff .right { width: 33%; overflow: hidden; text-overflow: ellipsis; }
 .diff .name, .wrapper .name { font-weight: bold; }
@@ -490,15 +522,20 @@ const EntryCSS = `
 .entry .key { font-weight: bold; }
 .wrapper > .name, .diff.whole > .name { display: flex; justify-content: space-between; }
 .wrapper > .name > .src, .diff.whole > .name > .src { opacity: 0.4; }
-h2 { padding: 1em 0 0.5em 0; position: sticky; top: -1em; background-color: #fff; }
+.wrapper, .diff.whole, .header { position: relative; }
+h2 { padding: 1em 0 0.5em 0; }
+button.undo { position: absolute; top: 0.2em; right: 0; opacity: 0; transition: opacity 0.3s ease; }
+.header button.undo { top: 0.75em; }
+.header:hover button.undo, .wrapper:hover button.undo, .diff.whole:hover button.undo { opacity: 1; z-index: 20; }
+.header { position: sticky; top: -1em; background-color: #fff; z-index: 30; }
 `
 class Entries extends Window {
   constructor(source, opts) {
     super(opts);
-    this.source = source;
+    this.set('@.source', source);
   }
   details(entry) {
-    const res = evaluate({ entry }, `
+    const res = evaluate({ entry, schema: this.get('schema') }, `
 set res = { table:entry.table segment:entry.segment }
 if entry.old and entry.new {
  let d = diff(entry.old entry.new)
@@ -513,6 +550,9 @@ if entry.old and entry.new {
  set res.status = :removed
  set res.record = entry.old
 }
+set table = find(schema =>schema == ~entry.schema and name == ~entry.table)
+set keys = filter(table.columns =>pkey)
+if keys.length then set res.id = join(map(keys =>'{name} = {~entry.old[name] ?? ~entry.new[name]}') ', ')
 res
 `);
     return res;
@@ -545,7 +585,7 @@ res
         html: { height: auto; }
         .diff, .entry { break-inside: avoid; }
       }
-      button { display: none; }
+      button, .controls { display: none; }
       .stretch-fields { display: flex; }
       .stretch-fields > * { flex-grow: 1; }
 
@@ -558,6 +598,37 @@ res
     const el = this.find('.rwindow-content');
     return [el.innerHTML, css];
   }
+  undoSingle(entry) {
+    if (!this.source) return;
+    const schema = this.get('schema');
+    const reverse = reverseEntry(entry, schema);
+    if (reverse) request({ action: 'query', query: [reverse[0]], params: [reverse[1]], client: Object.values(app.get('status.clients') || {}).find(c => c.source === this.source).config });
+    else this.host.toast(`Undo is not supported for this table`, { type: 'error', timeout: 3000 });
+  }
+  async undoSegment(entry) {
+    if (!this.source) return;
+    const schema = this.get('schema');
+    const base = app.get('entries') || [];
+    const entries = [];
+
+    for (let i = 0; i < base.length; i++) {
+      if (!entries.length) {
+        if (entry.id === base[i].id) entries.push(base[i]);
+        else continue;
+      }
+      if (base[i] !== entry.segment) break;
+      else entries.push(base[i]);
+    }
+
+    if (!entries.length) return this.host.toast('Nothing to undo', { type: 'info', timeout: 3000 });
+
+    const reverse = entries.map(e => reverseEntry(e, schema)).filter(e => e);
+    if (reverse.length !== entries.length) return this.host.toast(`Undo is not supported for this segment`, { type: 'error', timeout: 3000 });
+
+    if (!this.event?.event?.ctrlKey) await request({ action: 'segment', segment: `Undo ${entry.segment}` });
+
+    request({ action: 'query', query: reverse.map(p => p[0]), params: reverse.map(p => p[1]), client: Object.values(app.get('status.clients') || {}).find(c => c.source === this.source).config });
+  }
 }
 Window.extendWith(Entries, {
   template: '#entries',
@@ -565,13 +636,29 @@ Window.extendWith(Entries, {
   css: EntryCSS,
   computed: {
     entries() {
+      const source = this.get('@.source');
       const loaded = this.get('loaded');
       if (loaded) return loaded;
       const entries = app.get('entries');
-      if (this.source != null) return entries.filter(e => e.source === this.source);
+      if (source != null) return entries.filter(e => e.source === this.source);
       return entries;
     }
-  }
+  },
+  on: {
+    complete() {
+      if (!this.source) return;
+      this.link(`schemas.${Ractive.escapeKey(this.source)}`, 'schema', { instance: app });
+      this.scroller = this.find('.content-wrapper');
+    }
+  },
+  observe: {
+    'entries.length'() {
+      if (this.scroller) {
+        const s = this.scroller;
+        if (s.scrollTop + s.clientHeight >= s.scrollHeight - 10) setTimeout(() => s.children[s.children.length - 1].scrollIntoView({ behavior: 'smooth', block: 'end' }), 100);
+      }
+    }
+  },
 });
 
 class Leaks extends Window {
