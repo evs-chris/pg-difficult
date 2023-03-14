@@ -4,6 +4,8 @@ import * as diff from './diff.ts';
 import { decode } from 'https://deno.land/std@0.177.0/encoding/base64url.ts'
 import { fs } from './client.ts';
 
+type JSONValue = postgres.JSONValue;
+
 const VERSION = '1.0.2';
 
 interface DatabaseConfig {
@@ -139,7 +141,7 @@ interface Clear { action: 'clear' }
 interface Segment { action: 'segment'; segment: string }
 interface Check { action: 'check'; since?: string }
 interface Schema { action: 'schema'; client?: number|DatabaseConfig; id?: string }
-interface Query { action: 'query'; client: number|DatabaseConfig; query: string; id: string }
+interface Query { action: 'query'; client: number|DatabaseConfig; query: string; params?: unknown[]; id: string }
 interface Leak { action: 'leak'; config: DatabaseConfig }
 interface Unleak { action: 'unleak', config: DatabaseConfig }
 interface Interval { action: 'interval', time: number }
@@ -158,7 +160,7 @@ async function message(this: WebSocket, msg: Message) {
       case 'ping': this.send(JSON.stringify({ action: 'pong' })); break;
       case 'check': check(this, msg.since); break;
       case 'schema': schema(this, msg.client, msg.id); break;
-      case 'query': query(msg.client, msg.query, msg.id, this); break;
+      case 'query': query(msg.client, msg.query, msg.params || [], msg.id, this); break;
       case 'leak': leak(msg.config); break;
       case 'unleak': unleak(msg.config); break;
       case 'interval':
@@ -322,13 +324,13 @@ async function schema(ws: WebSocket, client?: number|DatabaseConfig, id?: string
   notify({ action: 'schema', schema: res, id }, ws);
 }
 
-async function query(client: DatabaseConfig|number, query: string, id: string, ws: WebSocket) {
+async function query(client: DatabaseConfig|number, query: string, params: unknown[], id: string, ws: WebSocket) {
   if (typeof client === 'number') {
     const c = state.diffs[client];
     if (!c) return error(`Could not query unknown client ${client}.`, ws, { id });
 
     try {
-      const result = await c.client.unsafe(query);
+      const result = await c.client.unsafe(query, params as JSONValue[]);
       notify({ action: 'query', id, result });
     } catch (e) {
       error(`Error running query: ${e.message}`, ws, { id });
@@ -343,7 +345,7 @@ async function query(client: DatabaseConfig|number, query: string, id: string, w
 
     try {
       const start = Date.now();
-      const result = await c.unsafe(query);
+      const result = await c.unsafe(query, params as JSONValue[]);
       notify({ action: 'query', id, result, time: Date.now() - start });
     } catch (e) {
       error(`Error running query: ${e.message}`, ws, { id });
