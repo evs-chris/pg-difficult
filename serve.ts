@@ -141,7 +141,7 @@ interface Clear { action: 'clear' }
 interface Segment { action: 'segment'; segment: string }
 interface Check { action: 'check'; since?: string }
 interface Schema { action: 'schema'; client?: number|DatabaseConfig; id?: string }
-interface Query { action: 'query'; client: number|DatabaseConfig; query: string; params?: unknown[]; id: string }
+interface Query { action: 'query'; client: number|DatabaseConfig; query: string[]; params?: unknown[][]; id: string }
 interface Leak { action: 'leak'; config: DatabaseConfig }
 interface Unleak { action: 'unleak', config: DatabaseConfig }
 interface Interval { action: 'interval', time: number }
@@ -324,14 +324,18 @@ async function schema(ws: WebSocket, client?: number|DatabaseConfig, id?: string
   notify({ action: 'schema', schema: res, id }, ws);
 }
 
-async function query(client: DatabaseConfig|number, query: string, params: unknown[], id: string, ws: WebSocket) {
+async function query(client: DatabaseConfig|number, query: string[], params: unknown[][], id: string, ws: WebSocket) {
   if (typeof client === 'number') {
     const c = state.diffs[client];
     if (!c) return error(`Could not query unknown client ${client}.`, ws, { id });
 
     try {
-      const result = await c.client.unsafe(query, params as JSONValue[]);
-      notify({ action: 'query', id, result });
+      const start = Date.now();
+      await c.client.begin(async sql => {
+        const results: unknown[] = [];
+        for (let i = 0; i < query.length; i++) results.push(await sql.unsafe(query[i], params[i] as JSONValue[]));
+        notify({ action: 'query', id, result: results.length === 1 ? results[0] : results, time: Date.now() - start });
+      });
     } catch (e) {
       error(`Error running query: ${e.message}`, ws, { id });
     }
@@ -345,8 +349,11 @@ async function query(client: DatabaseConfig|number, query: string, params: unkno
 
     try {
       const start = Date.now();
-      const result = await c.unsafe(query, params as JSONValue[]);
-      notify({ action: 'query', id, result, time: Date.now() - start });
+      await c.begin(async sql => {
+        const results: unknown[] = [];
+        for (let i = 0; i < query.length; i++) results.push(await sql.unsafe(query[i], params[i] as JSONValue[]));
+        notify({ action: 'query', id, result: results.length === 1 ? results[0] : results, time: Date.now() - start });
+      });
     } catch (e) {
       error(`Error running query: ${e.message}`, ws, { id });
     } finally {

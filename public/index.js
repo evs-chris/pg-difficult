@@ -408,7 +408,7 @@ class Query extends Window {
   async run(query) {
     this.blocked = true;
     try {
-      const res = await request({ action: 'query', query, client: this.config });
+      const res = await request({ action: 'query', query: [query], client: this.config });
       this.set('result', res.result);
       this.set('runtime', res.time);
     } catch (e) {
