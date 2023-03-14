@@ -423,8 +423,12 @@ class Query extends Window {
       const res = await request({ action: 'query', query: [query], client: this.config });
       this.set('result', res.result);
       this.set('runtime', res.time);
+      this.set('affected', res.affected);
+      this.set('error', null);
     } catch (e) {
-      this.set('result', e.error);
+      this.set('error', e.message);
+      this.set('result', []);
+      this.set('affected', null);
     }
     this.blocked = false;
   }

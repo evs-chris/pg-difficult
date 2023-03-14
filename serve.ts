@@ -345,7 +345,7 @@ async function query(client: DatabaseConfig|number, query: string[], params: unk
       await c.client.begin(async sql => {
         const results: unknown[] = [];
         for (let i = 0; i < query.length; i++) results.push(await sql.unsafe(query[i], params[i] as JSONValue[]));
-        notify({ action: 'query', id, result: results.length === 1 ? results[0] : results, time: Date.now() - start });
+        notify({ action: 'query', id, result: results.length === 1 ? results[0] : results, time: Date.now() - start, affected: results.length === 1 ? (results[0] as { count: number }).count : results.map(r => (r as { count: number }).count) });
       });
     } catch (e) {
       console.error(e, query);
@@ -364,7 +364,7 @@ async function query(client: DatabaseConfig|number, query: string[], params: unk
       await c.begin(async sql => {
         const results: unknown[] = [];
         for (let i = 0; i < query.length; i++) results.push(await sql.unsafe(query[i], params[i] as JSONValue[]));
-        notify({ action: 'query', id, result: results.length === 1 ? results[0] : results, time: Date.now() - start });
+        notify({ action: 'query', id, result: results.length === 1 ? results[0] : results, time: Date.now() - start, affected: results.length === 1 ? (results[0] as { count: number }).count : results.map(r => (r as { count: number }).count) });
       });
     } catch (e) {
       console.error(e, query);

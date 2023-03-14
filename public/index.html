@@ -350,7 +350,7 @@
       <data-table no-wrap fixed-header allow-select=false on-init="@.set('@.table', $1)" items="{{.result}}">
         <bottom>
           <div style="display:flex; justify-content: space-between;">
-            <span>{{.result.length || 'No'}} rows{{#if .result.length}}, {{@.table.data.columns.length}} cols{{/if}}</span>
+            <span>{{#if !.result.length && .affected != null}}{{.affected}} rows affected.{{/if}} {{#unless .error}}{{.result.length || 'No'}} rows{{#if .result.length}}, {{@.table.data.columns.length}} cols{{/if}}{{/unless}}</span>
             <span>{{#if runtime != null}}Completed in {{runtime}}ms{{/if}}</span>
           </div>
         </bottom>
