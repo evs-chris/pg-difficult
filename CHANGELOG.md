@@ -1,6 +1,18 @@
+## 1.1.1
+
+2023-03-15
+
+### Bugs
+
+* Undoing a diff segment will now run the reversing statements in the correct order and apply all of the necessary statements.
+* Undoing an insertion diff in a table with a primary key will now work correctly.
+
+
 ## 1.1.0
 
 2023-03-15
+
+__You probably shouldn't use this version if you want to undo diff segments.__
 
 ### Bugs
 
