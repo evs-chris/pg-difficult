@@ -523,7 +523,7 @@ function reverseEntry(entry, schema) {
     const tbl = schema.find(t => t.schema === entry.schema && t.name === entry.table);
     if (!tbl) return;
     const keys = tbl.columns.filter(c => c.pkey);
-    if (keys.length) return [`delete from "${entry.schema}"."${entry.table}" where ${keys.map((k, i) => `"${k.name}" = $${i + 1}`).join(' and ')}`, keys.map(k => entry.new[k])];
+    if (keys.length) return [`delete from "${entry.schema}"."${entry.table}" where ${keys.map((k, i) => `"${k.name}" = $${i + 1}`).join(' and ')}`, keys.map(k => entry.new[k.name])];
     else return [`delete from "${entry.schema}"."${entry.table}" where ${tbl.columns.map((c, i) => `"${c.name}" = $${i + 1}`).join(' and ')}`, tbl.columns.map(c => entry.new[c.name])];
   } else {
     const tbl = schema.find(t => t.schema === entry.schema && t.name === entry.table);
@@ -648,11 +648,11 @@ res
 
     for (let i = 0; i < base.length; i++) {
       if (!entries.length) {
-        if (entry.id === base[i].id) entries.push(base[i]);
-        else continue;
+        if (entry.id === base[i].id) entries.unshift(base[i]);
+        continue;
       }
-      if (base[i] !== entry.segment) break;
-      else entries.push(base[i]);
+      if (base[i].segment !== entry.segment) break;
+      else entries.unshift(base[i]);
     }
 
     if (!entries.length) return this.host.toast('Nothing to undo', { type: 'info', timeout: 3000 });
