@@ -12,6 +12,12 @@ The titular tool on this bat-database bat-tool bat-belt. Diffs can be started on
 
 As long as there is at least one diff running, previously started and stopped diffs will be retained on the server. Entries can be cleared from the control panel while diffs are still running to reset saved and active state.
 
+If you're feeling spicy, you can enable undo on a diff window and roll back individual or whole segments of changes. This is accomplished under the hood by running the inverse of the recorded change e.g. a delete for an insert or an inverted update.
+
+### Monitor
+
+When testing something that changes things in a database, it is often useful to keep an eye out for connection leaks. The connection monitor tool will connect to your database, grab a list of all active connections, and poll connections until you stop it, surfacing any new connections that happen along the way. You can select a polling interval from at least 1s on, and it defaults to 10s.
+
 ### Schema
 
 Next up is the schema tool. This lists every table and column in the database in an expandable, searchable list. The search can be done by name or using a Raport expression. There's also a comparison function, so if you happen to have a few different test databases and need to quickly see what schema changes may have been applied to one and not another, you can get a diff of the entire database schema relatively quickly.
