@@ -93,6 +93,8 @@ let request;
   }
 }
 
+let reportId = 0;
+
 const app = globalThis.app = new Ractive({
   target: '#target',
   template: '#template',
@@ -138,9 +140,13 @@ const app = globalThis.app = new Ractive({
       },
       strict: true, init: false,
     },
-    'connections savedQueries': {
+    'connections savedQueries savedReports': {
       handler(v, _o, k) {
         localStorage.setItem(k, JSON.stringify(v || []));
+        if (k === 'savedReports') {
+          const min = Math.max.apply(Math, v.map(r => +r.id).concat([reportId]));
+          reportId = min;
+        }
       },
       init: false,
     },
@@ -236,6 +242,14 @@ const app = globalThis.app = new Ractive({
       this.host.addWindow(win, { id: wid, title: 'All Monitored Connections' });
     }
   },
+  openReport(report) {
+    const id = report?.id ?? ++reportId;
+    const wid = `report-${id}`;
+    let win = this.host.getWindow(wid);
+    if (win) return win.raise(true);
+    win = new Report({ data: { reportId } }, report);
+    this.host.addWindow(win, { id: wid, title: `Loading report...` });
+  },
   ask(question, title) {
     const w = new Ask({ data: { message: question } });
     this.host.addWindow(w, { title, block: true, top: 'center', left: 'center' });
@@ -261,6 +275,7 @@ const app = globalThis.app = new Ractive({
 app.set('connections', JSON.parse(localStorage.getItem('connections') || '[]'));
 app.set('settings', JSON.parse(localStorage.getItem('settings') || '{}'));
 app.set('savedQueries', JSON.parse(localStorage.getItem('savedQueries') || '[]'));
+app.set('savedReports', JSON.parse(localStorage.getItem('savedReports') || '[]'));
 
 class ControlPanel extends Window {
   constructor(opts) { super(opts); }
@@ -348,6 +363,9 @@ class ControlPanel extends Window {
   poll() {
     app.notify({ action: 'interval', time: this.get('status.pollingInterval') });
   }
+  report(rep) {
+    app.openReport(rep);
+  }
 }
 Window.extendWith(ControlPanel, {
   template: '#control-panel',
@@ -360,6 +378,7 @@ Window.extendWith(ControlPanel, {
 .query .name { width: 15%; }
 .query .sql { width: 60%; }
 .query .actions { width: 25%; }
+.report { display: flex; align-items: center; justify-content: space-between; }
 `,
   options: { title: 'Control Panel', flex: true, close: false, resizable: true, width: '60em', height: '45em', id: 'control-panel' },
   on: {
@@ -370,6 +389,7 @@ Window.extendWith(ControlPanel, {
       this.link('entries', 'entries', { instance: app });
       this.link('settings', 'settings', { instance: app });
       this.link('savedQueries', 'savedQueries', { instance: app });
+      this.link('savedReports', 'savedReports', { instance: app });
       this.link('loadedQuery', 'loadedQuery', { instance: app });
     },
   },
@@ -822,6 +842,135 @@ Window.extendWith(SchemaCompare, {
 .entry { padding: 0.2em; }
 .entry .key { font-weight: bold; }
 `,
+});
+
+let reportFrameId = 0;
+class Report extends Window {
+  constructor(opts, report) {
+    super(opts);
+    this.ownerId = 0;
+    this.callbacks = {};
+    const id = this.get('reportId') || ++reportId;
+    report = report || { id, sources: [], definition: { type: 'page', size: { width: 51, height: 66, margin: [1.5, 1.5] }, name: 'New Report', classifyStyles: true } };
+    this.set('report', JSON.parse(JSON.stringify(report)));
+  }
+
+  handleMessage(ev) {
+    if (ev.data.frameId !== this.frameId) return;
+
+    if (ev.data.ownerId != null) {
+      if (this.callbacks[ev.data.ownerId]) this.callbacks[ev.data.ownerId][ev.data.error ? 1 : 0](ev.data);
+      return;
+    }
+
+    const wnd = this.find('iframe').contentWindow;
+
+    if (this.frameId == null && ev.data.action === 'init') {
+      this.frameId = reportFrameId++;
+      wnd.postMessage({ action: 'init', frameId: this.frameId });
+      return;
+    }
+
+    switch (ev.data.action) {
+      case 'ready':
+        wnd.postMessage({ action: 'set', set: { showProjects: false, report: this.get('report.definition') || {}, sources: this.get('report.sources') || [] } });
+        break;
+
+      case 'new-source': case 'edit-source':
+        this.editSource(ev.data);
+        break;
+
+      case 'fetch-source':
+        this.fetchSource(ev.data);
+        break;
+
+      case 'name':
+        this.title = `Report - ${ev.data.name}`;
+        break;
+
+      case 'save':
+        this.save();
+        break;
+    }
+  }
+
+  async editSource(msg) {
+    const src = msg.source || {};
+    const wnd = new SourceEdit({ data: { source: src } });
+    this.host.addWindow(wnd, { block: this, title: msg.source ? 'Edit Source' : 'Add Source' });
+    const res = await wnd.result;
+    if (res) {
+      if (msg.source) {
+        const idx = (this.get('report.sources') || []).find(s => s.name === msg.source.name);
+        if (~idx) this.splice('report.sources', idx, 1, res);
+        else this.push('report.sources', res);
+      } else {
+        this.push('report.sources', res);
+      }
+      this.respond({ source: res }, msg);
+    } else this.respond({ error: 'cancelled' }, msg);
+  }
+
+  async fetchSource(msg) {
+    const src = msg.source;
+    if (src.type === 'diff') this.respond({ data: app.get('entries') }, msg);
+    else if (src.type === 'diff-schema') this.respond({ data: app.get('schemas') }, msg);
+    else {
+      try {
+        this.respond({ data: (await request({ action: 'query', query: [src.query], client: src.config })).result }, msg);
+      } catch (e) {
+        this.respond({ error: e.message }, msg);
+      }
+    }
+  }
+
+  respond(message, source) {
+    const wnd = this.find('iframe').contentWindow;
+    const base = {};
+    if (source && source.designId != null) base.designId = source.designId;
+    wnd.postMessage(Object.assign(base, message));
+  }
+
+  request(message) {
+    const id = this.ownerId++;
+    let ok, fail;
+    const wnd = this.find('iframe').contentWindow;
+    const res = new Promise((o, f) => (ok = o, fail = f));
+    this.callbacks[id] = [ok, fail];
+    message.ownerId = id;
+    wnd.postMessage(message);
+    return res;
+  }
+
+  async save() {
+    const saved = app.get('savedReports') || [];
+    const report = this.get('report');
+    report.definition = (await this.request({ action: 'get', get: 'report' })).get;
+    const idx = saved.findIndex(r => r.id === report.id);
+    if (~idx) app.splice('savedReports', idx, 1, report);
+    else app.push('savedReports', report);
+  }
+}
+Window.extendWith(Report, {
+  template: '#report',
+  options: { flex: true, resizable: true, minimize: true, width: '105em', height: '75em' },
+  css: `iframe { flex-grow: 1; border: 0; }`,
+  on: {
+    render() {
+      window.addEventListener('message', (this._messageHandler = this.handleMessage.bind(this)));
+    },
+    unrender() {
+      window.removeEventListener('message', this._messageHandler);
+    },
+  },
+});
+
+class SourceEdit extends Window {
+  constructor(opts) { super(opts); }
+}
+Window.extendWith(SourceEdit, {
+  template: '#source-edit',
+  options: { close: false, flex: true, resizable: true, maximize: false, minimize: false, width: '40em', height: '30em' },
 });
 
 const wsUrl = new URL(window.location);

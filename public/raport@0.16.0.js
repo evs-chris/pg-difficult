@@ -1918,23 +1918,21 @@
      * swapped for the evaluation and replaced afterwards. Swap should only be used for applications that are
      * passing the context value as the first local.
      */
-    function evalApply(ctx, value, locals, swap, special) {
+    function evalApply(ctx, value, locals, special) {
         if (isApplication(value)) {
-            const c = swap ? ctx : extend$1(ctx, { value: locals[0], special });
-            const l = ctx.locals;
+            const c = extend$1(ctx, { value: locals[0], special, fork: !ctx.locals });
             let res;
             if ('n' in value) {
                 const map = value.n.reduce((a, c, i) => (a[c] = locals[i], a), {});
                 c.locals = map;
             }
             res = evalValue(c, value.a);
-            c.locals = l;
             return res;
         }
         else {
-            const v = evalParse(ctx, value);
+            const v = evalParse(extend$1(ctx, { value: locals[0], special, fork: !ctx.locals }), value);
             if (isApplication(v))
-                return evalApply(ctx, v, locals, false, special);
+                return evalApply(ctx, v, locals, special);
             else
                 return v;
         }
@@ -1979,10 +1977,17 @@
     function getOperator(name) {
         return opMap[name];
     }
-    function mungeSort(context, sorts) {
+    const _defaultGetValue = (c, b, v) => evalApply(c, b, [v]);
+    function sort(context, arr, sorts, getValue) {
         let sortArr;
         if (Array.isArray(sorts)) {
             sortArr = sorts;
+        }
+        else if (isApplication(sorts)) {
+            sortArr = [sorts];
+        }
+        else if (typeof sorts === 'object' && sorts && 'by' in sorts) {
+            sortArr = [sorts];
         }
         else {
             const s = evalParse(context, sorts);
@@ -1990,6 +1995,8 @@
                 sortArr = s;
             else if (typeof s === 'string')
                 sortArr = [{ v: s }];
+            else if (typeof sorts === 'string')
+                sortArr = [sorts];
         }
         if (sortArr) {
             let el;
@@ -1998,13 +2005,54 @@
                 const by = isLiteral(el) ? el.v : el;
                 if (typeof by === 'string') {
                     if (by[0] === '-')
-                        sortArr[i] = { by: by.substr(1), desc: true };
+                        sortArr[i] = { by: by.slice(1), desc: true };
                     else
-                        sortArr[i] = { by: by[0] === '+' ? by.substr(1) : by, desc: false };
+                        sortArr[i] = { by: by[0] === '+' ? by.slice(1) : by, desc: false };
                 }
             }
         }
-        return sortArr;
+        getValue = getValue || _defaultGetValue;
+        if (sortArr && sortArr.length) {
+            const dirs = sortArr.map(s => {
+                if (typeof s === 'object') {
+                    if ('by' in s) {
+                        if ('desc' in s) {
+                            if (typeof s.desc === 'boolean')
+                                return s.desc;
+                            return evalParse(context, s.desc);
+                        }
+                        else if ('dir' in s) {
+                            const lower = typeof s.dir === 'string' ? s.dir.toLowerCase() : s.dir;
+                            const dir = lower === 'asc' || lower === 'desc' ? lower : evalParse(context, s.dir);
+                            const val = typeof dir === 'string' ? dir.toLowerCase() : dir;
+                            if (val === 'desc')
+                                return true;
+                        }
+                    }
+                }
+                // default to asc
+                return false;
+            });
+            arr.sort((a, b) => {
+                for (let i = 0; i < sortArr.length; i++) {
+                    const s = sortArr[i];
+                    const desc = dirs[i];
+                    const by = typeof s === 'string' ? s : s && s.by ? s.by : s;
+                    const l = getValue(context, by, a);
+                    const r = getValue(context, by, b);
+                    const cmp = l == null && r != null ? -1
+                        : l != null && r == null ? 1
+                            : (l < r) === (r < l) ? 0
+                                : l < r ? -1
+                                    : l > r ? 1
+                                        : 0;
+                    if (cmp)
+                        return (desc ? -1 : 1) * cmp;
+                }
+                return 0;
+            });
+        }
+        return arr;
     }
     function filter(ds, filter, sorts, groups, context) {
         const _ds = Array.isArray(ds) ? { value: ds } : ds;
@@ -2027,47 +2075,8 @@
                     values.push(row);
             });
         }
-        const sortArr = mungeSort(_context, sorts);
-        if (sortArr && sortArr.length) {
-            const dirs = sortArr.map(s => {
-                if (typeof s === 'object') {
-                    if ('by' in s) {
-                        if ('desc' in s) {
-                            if (typeof s.desc === 'boolean')
-                                return s.desc;
-                            return evalParse(_context, s.desc);
-                        }
-                        else if ('dir' in s) {
-                            const lower = typeof s.dir === 'string' ? s.dir.toLowerCase() : s.dir;
-                            const dir = lower === 'asc' || lower === 'desc' ? lower : evalParse(_context, s.dir);
-                            const val = typeof dir === 'string' ? dir.toLowerCase() : dir;
-                            if (val === 'desc')
-                                return true;
-                        }
-                    }
-                }
-                // default to asc
-                return false;
-            });
-            values.sort((a, b) => {
-                for (let i = 0; i < sortArr.length; i++) {
-                    const s = sortArr[i];
-                    const desc = dirs[i];
-                    const by = typeof s === 'string' ? s : s && s.by ? s.by : s;
-                    const l = evalApply(_context, by, [a]);
-                    const r = evalApply(_context, by, [b]);
-                    const cmp = l == null && r != null ? -1
-                        : l != null && r == null ? 1
-                            : (l < r) === (r < l) ? 0
-                                : l < r ? -1
-                                    : l > r ? 1
-                                        : 0;
-                    if (cmp)
-                        return (desc ? -1 : 1) * cmp;
-                }
-                return 0;
-            });
-        }
+        if (sorts)
+            sort(_context, values, sorts);
         if (groups && !Array.isArray(groups))
             groups = [groups];
         if (Array.isArray(groups) && groups.length) {
@@ -2105,7 +2114,7 @@
         if (!op) {
             const local = safeGet(root, operation.op) || safeGet(root.root, operation.op);
             if (isApplication(local)) {
-                return evalApply(root, local, operation.args.map(a => evalParse(root, a)));
+                return evalApply(root, local, (operation.args || []).map(a => evalParse(root, a)));
             }
             else if (operation.op === 'pipe') { // handle the special built-in pipe operator
                 if (!operation.args || !operation.args.length)
@@ -2236,7 +2245,7 @@
     }
     function extend$1(context, opts) {
         return {
-            parent: context,
+            parent: opts.fork ? context.parent : context,
             root: context.root,
             path: opts.path || '',
             value: 'value' in opts ? opts.value : context.value,
@@ -3674,12 +3683,7 @@
                 _listwrap = { array: o, union: o, args: o, keys: o };
             else {
                 const b = !o.base ? 0 : o.base === true ? 1 : o.base;
-                _listwrap = {
-                    array: 'array' in o ? (!o.array ? 0 : o.array === true ? 1 : o.array) : b,
-                    union: 'union' in o ? (!o.union ? 0 : o.union === true ? 1 : o.union) : b,
-                    args: 'args' in o ? (!o.args ? 0 : o.args === true ? 1 : o.args) : b,
-                    keys: 'keys' in o ? (!o.keys ? 0 : o.keys === true ? 1 : o.keys) : b,
-                };
+                _listwrap = Object.keys(_listwrap).reduce((a, c) => (a[c] = c in o && o[c] != null ? (!o[c] ? 0 : o[c] === true ? 1 : o[c]) : b, a), {});
             }
         }
         else
@@ -3962,20 +3966,15 @@
         }
         else if (Array.isArray(value.v)) {
             if (_noarr)
-                return `(array${value.v.length ? ' ' : ''}${value.v.map(v => _stringify({ v })).join(_listcommas ? ', ' : ' ')})`;
-            return `[${value.v.map(v => _stringify({ v })).join(_listcommas ? ', ' : ' ')}]`;
+                return wrapArgs('(array', value.v.map(v => ({ v })), null, ')', null, 'array');
+            return wrapArgs('[', value.v.map(v => ({ v })), null, ']', null, 'array');
         }
         else if (typeof value.v === 'object') {
             if (isDateRel(value.v)) {
                 return stringifyDate(value.v);
             }
             else {
-                const keys = Object.keys(value.v);
-                let res = '';
-                res += '{';
-                res += `${keys.map(k => `${_key = true, _stringify({ v: k })}:${_key = false, _stringify({ v: value.v[k] })}`).join(_listcommas ? ', ' : ' ')}`;
-                res += '}';
-                return res;
+                return wrapArgs('{', Object.entries(value.v).reduce((a, c) => (a.push({ v: c[0] }, { v: c[1] }), a), []), null, '}', 2, 'keys');
             }
         }
     }
@@ -4127,7 +4126,7 @@
     function indentAll(amount, str) {
         return str.replace(/\n/gm, `\n${amount}`);
     }
-    function wrapArgs(open, args, opts, close, keyMod, call) {
+    function wrapArgs(open, args, opts, close, keyMod, wrapSetting) {
         if ((!args || !args.length) && !opts)
             return `${open}${close}`;
         _level++;
@@ -4184,7 +4183,7 @@
         let join = _listcommas ? ', ' : ' ';
         if (_noindent || (parts.length == 1 && !~parts[0].indexOf('\n')))
             return `${open}${parts.join(join)}${close}`;
-        let wrap = _listwrap.args;
+        let wrap = _listwrap[wrapSetting || 'args'];
         const base = parts.join(_listcommas ? ', ' : ' ');
         if (!wrap && ~base.indexOf('\n'))
             wrap = 1;
@@ -4648,6 +4647,9 @@
             return true;
         return false;
     }
+    function isSchema(what) {
+        return what && typeof what === 'object' && 'type' in what && typeof what.type === 'string';
+    }
     function inspect(base, flat) {
         const root = getType(base);
         if (Array.isArray(base)) {
@@ -4845,7 +4847,7 @@
             let tmp;
             for (let i = 0; i < checks.length; i++) {
                 const c = checks[i];
-                tmp = evalApply(ctx, c, [value], true);
+                tmp = evalApply(ctx, c, [value]);
                 if (!tmp || typeof tmp == 'string')
                     errs.push({ error: typeof tmp !== 'string' || !tmp ? `check ${i + 1} failed` : tmp, path, value, type: 'check', expected: stringifySchema(schema, true) });
             }
@@ -5059,13 +5061,17 @@
         }
     }
     // basic ops
-    registerOperator(simple(['is', 'is-not', '==', '!=', 'strict-is', 'strict-is-not'], (name, values) => {
+    registerOperator(simple(['is', 'is-not', '==', '!='], (name, values) => {
         const [l, r] = values;
-        const res = equals(l, r);
-        return name === 'is' || name === '==' ? res : !res;
+        let cmp = equals(l, r);
+        if (!cmp && (name === 'is' || name === 'is-not') && isSchema(r))
+            cmp = validate(l, r, 'loose') === true;
+        return name === 'is' || name === '==' ? cmp : !cmp;
     }), simple(['strict-is', 'strict-is-not'], (name, values) => {
         const [l, r] = values;
-        const res = l === r;
+        let res = l === r;
+        if (!res && isSchema(r))
+            res = validate(l, r, 'strict') === true;
         return name === 'strict-is' ? res : !res;
     }), simple(['deep-is', 'deep-is-not', '===', '!=='], (name, values, _opts, ctx) => {
         let [l, r, equal] = values;
@@ -5158,9 +5164,9 @@
         else if (isApplication(l)) {
             let found = false;
             if (Array.isArray(r) || r && typeof r === 'object' && '0' in r)
-                found = Array.prototype.find.call(r, (e, i) => evalApply(ctx, l, [e, i], false, { index: i, key: i }));
+                found = Array.prototype.find.call(r, (e, i) => evalApply(ctx, l, [e, i], { index: i, key: i }));
             else if (r && typeof r === 'object')
-                found = Object.entries(r).find((e, i) => evalApply(ctx, l, [e[1], i, e[0]], false, { index: i, key: e[0] }));
+                found = Object.entries(r).find((e, i) => evalApply(ctx, l, [e[1], i, e[0]], { index: i, key: e[0] }));
             return name === 'in' ? !!found : !found;
         }
         else if (!Array.isArray(r) && typeof r !== 'string') {
@@ -5183,9 +5189,9 @@
         else if (isApplication(r)) {
             let found = false;
             if (Array.isArray(l) || l && typeof l === 'object' && '0' in l)
-                found = Array.prototype.find.call(l, (e, i) => evalApply(ctx, r, [e, i], false, { index: i, key: i }));
+                found = Array.prototype.find.call(l, (e, i) => evalApply(ctx, r, [e, i], { index: i, key: i }));
             else if (r && typeof l === 'object')
-                found = Object.entries(l).find((e, i) => evalApply(ctx, r, [e[1], i, e[0]], false, { index: i, key: e[0] }));
+                found = Object.entries(l).find((e, i) => evalApply(ctx, r, [e[1], i, e[0]], { index: i, key: e[0] }));
             return name === 'contains' ? !!found : !found;
         }
         else if (!Array.isArray(l) && typeof l !== 'string') {
@@ -5224,8 +5230,12 @@
         if (!Array.isArray(arr)) {
             if (arr && Array.isArray(arr.value))
                 arr = arr.value;
-            else if (typeof arr === 'object' && arr)
-                return Object.entries(arr).filter((e, i) => evalApply(ctx, flt, [e[1], i, e[0]], false, { index: i, key: e[0] })).reduce((a, c) => (a[c[0]] = c[1], a), {});
+            else if (typeof arr === 'object' && arr) {
+                let step = Object.entries(arr).filter((e, i) => evalApply(ctx, flt, [e[1], i, e[0]], { index: i, key: e[0] }));
+                if (sorts)
+                    step = sort(ctx, step, sorts, (c, b, v) => evalApply(c, b, [v[1], v[0]], { key: v[0] }));
+                return step.reduce((a, c) => (a[c[0]] = c[1], a), {});
+            }
             else
                 return [];
         }
@@ -5234,7 +5244,7 @@
         const [val, app] = values;
         let source = typeof val === 'object' && val && 'value' in val ? val : { value: val };
         if (isApplication(app))
-            return evalApply(ctx, app, [], false, { source });
+            return evalApply(ctx, app, [], { source });
         return source;
     }), simple(['group'], (_name, values, _opts, ctx) => {
         let [arr, groups] = values;
@@ -5246,14 +5256,21 @@
         }
         return filter({ value: arr }, null, null, groups, ctx).value;
     }), simple(['sort'], (_name, values, _opts, ctx) => {
-        let [arr, sort] = values;
+        let [arr, sorts] = values;
         if (!Array.isArray(arr)) {
             if (arr && Array.isArray(arr.value))
                 arr = arr.value;
+            else if (arr && typeof arr === 'object') {
+                if (!sorts)
+                    sorts = [{ a: { r: { p: '@', k: ['key'] } } }];
+                return sort(ctx, Object.entries(arr), sorts, (c, b, v) => evalApply(c, b, [v[1], v[0]], { key: v[0] })).reduce((a, c) => (a[c[0]] = c[1], a), {});
+            }
             else
                 return {};
         }
-        return filter({ value: arr }, null, sort, null, ctx).value;
+        if (!sorts)
+            sorts = [{ a: { r: { k: ['_'] } } }];
+        return sort(ctx, arr, sorts);
     }), simple(['time-span', 'time-span-ms'], (_name, args, opts) => {
         const namedArgs = opts || {};
         const span = isDateRel(args[0]) && isDateRel(args[1]) ? datesDiff(dateRelToDate(args[0]), dateRelToDate(args[1])) : isTimespan(args[0]) ? args[0] : 0;
@@ -6024,13 +6041,13 @@
             else if (isApplication(args[1]))
                 v = evalParse(ctx, args[0]), app = evalParse(ctx, args[1]);
             if ((Array.isArray(v) || v && '0' in v) && isApplication(app))
-                return Array.prototype.map.call(v, (e, i) => evalApply(ctx, app, [e, i], false, { index: i, key: i }));
+                return Array.prototype.map.call(v, (e, i) => evalApply(ctx, app, [e, i], { index: i, key: i }));
             else if (v && typeof v === 'object' && isApplication(app)) {
                 if (opts && opts.array)
-                    return Object.entries(v).map((p, i) => evalApply(ctx, app, [p[1], i, p[0]], false, { index: i, key: p[0] }));
+                    return Object.entries(v).map((p, i) => evalApply(ctx, app, [p[1], i, p[0]], { index: i, key: p[0] }));
                 if (opts && opts.entries)
                     return Object.entries(v).reduce((a, p, i) => {
-                        const r = evalApply(ctx, app, [p[1], i, p[0]], false, { index: i, key: p[0] });
+                        const r = evalApply(ctx, app, [p[1], i, p[0]], { index: i, key: p[0] });
                         if (r === null)
                             return a;
                         if (Array.isArray(r) && r.length === 2 && typeof r[0] === 'string')
@@ -6041,7 +6058,7 @@
                     }, []);
                 const res = {};
                 Object.entries(v).forEach((e, i) => {
-                    const r = evalApply(ctx, app, [e[1], i, e[0]], false, { index: i, key: e[0] });
+                    const r = evalApply(ctx, app, [e[1], i, e[0]], { index: i, key: e[0] });
                     if (Array.isArray(r) && r.length === 2 && typeof r[0] === 'string')
                         res[r[0]] = r[1];
                     else if (r == null)
@@ -6090,13 +6107,13 @@
             if (!args[0])
                 return;
             else if (isApplication(args[0]))
-                return arr.find((e, i) => evalApply(ctx, args[0], [e, i], false, { index: i, key: i }));
+                return arr.find((e, i) => evalApply(ctx, args[0], [e, i], { index: i, key: i }));
             else if (isApplication(args[1])) {
                 const v = evalParse(ctx, args[0]);
                 if (Array.isArray(v))
-                    return v.find((e, i) => evalApply(ctx, args[1], [e, i], false, { index: i, key: i }));
+                    return v.find((e, i) => evalApply(ctx, args[1], [e, i], { index: i, key: i }));
                 else if (typeof v === 'object' && v) {
-                    const e = Object.entries(v).find((e, i) => evalApply(ctx, args[1], [e[1], i, e[0]], false, { index: i, key: e[0] }));
+                    const e = Object.entries(v).find((e, i) => evalApply(ctx, args[1], [e[1], i, e[0]], { index: i, key: e[0] }));
                     if (e)
                         return e[1];
                 }
@@ -6113,7 +6130,7 @@
             const last = args.length - 1;
             if (last < 0)
                 return;
-            const c = extend$1(ctx, { locals: {} });
+            const c = extend$1(ctx, { locals: {}, fork: !ctx.locals });
             for (let i = 0; i < last; i++)
                 evalParse(c, args[i]);
             return evalParse(c, args[last]);

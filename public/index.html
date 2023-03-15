@@ -4,7 +4,7 @@
     <title>pg-difficult</title>
     <link rel="shortcut icon" href="./icon.png" />
     <script src="./ractive@1.4.2.js"></script>
-    <script src="./raport@0.15.1.js"></script>
+    <script src="./raport@0.16.0.js"></script>
     <script src="./raui@0.12.0/button.js"></script>
     <script src="./raui@0.12.0/form.js"></script>
     <script src="./raui@0.12.0/Window.js"></script>
@@ -325,6 +325,25 @@
         {{/each}}
       </div>
     </tab>
+    <tab title="Reports">
+      <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.3em;">
+        <div style="padding: 0.3em;">Reports are currently experimental and somewhat limited. Report definitions are saved in browser storage.</div>
+        <div style="flex-shrink: 0;"><button title="Open a new report designer." on-click="@.report()">New Designer</button></div>
+        </div>
+      <div style="overflow: auto;">
+        {{#each savedReports}}
+          <div class="report striped">
+            <div class=name>{{.definition.name}}</div>
+            <div class=actions>
+              <button on-click="@.report(.)" title="Open this report in the designer.">Designer</button>
+              <button on-click="@.splice('savedReports', @index, 1)" title="Remove this report from browser storage.">Remove</button>
+            </div>
+          </div>
+        {{else}}
+          No reports have been saved.
+        {{/each}}
+      </div>
+    </tab>
     <tab title="Settings">
       <label as-field class=inline><input type=checkbox bind-checked="~/settings.queryOrderColumns" /> Order query result columns alphabetically?</label>
     </tab>
@@ -518,6 +537,42 @@
       No differences.
     {{/each}}
   </div>
+</script>
+
+<script type=text/ractive id=report>
+  <iframe src="/report.html"></iframe>
+  {{#unless ~/control.topmost}}<div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0;" />{{/unless}}
+  <buttons>
+    <button left on-click="@.close()">Cancel</button>
+    <button on-click="@.save()">Save</button>
+  </buttons>
+</script>
+
+<script type=text/ractive id=source-edit>
+  <div class=content-wrapper>
+    <div>
+      <label as-field>Name<input value="{{source.name}}" /></label>
+      <label as-field>Type<select value="{{source.type}}" on-change="@node.value === 'diff' ? @.set('source', { type: 'diff'}) : true">
+        <option value="diff">Diff Entries</option>
+        <option value="diff-schema">Diff Schema</option>
+        <option value="query">Query</option>
+      </select></label>
+    </div>
+    {{#if source.type === 'query'}}
+      <div>
+        <label as-field>Host<input value="{{source.config.host}}" /></label>
+        <label as-field>Port<input type=number value="{{source.config.port}}" /></label>
+        <label as-field>User<input value="{{source.config.username}}" /></label>
+        <label as-field>Password<input type=password value="{{source.config.password}}" /></label>
+        <label as-field>Database<input value="{{source.config.database}}" /></label>
+      </div>
+      <label as-field>Query<textarea>{{source.query}}</textarea></label>
+    {{/if}}
+  </div>
+  <buttons>
+    <button left on-click="@.close()">Cancel</button>
+    <button on-click="@.close(false, source)">Done</button>
+  </buttons>
 </script>
 
 <script type=text/ractive id=connect>
