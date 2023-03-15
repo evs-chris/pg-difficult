@@ -569,10 +569,10 @@ if entry.old and entry.new {
  }
 } elif not entry.old {
  set res.status = :added
- set res.record = entry.new
+ set res.record = sort(entry.new)
 } elif not entry.new {
  set res.status = :removed
- set res.record = entry.old
+ set res.record = sort(entry.old)
 }
 set table = find(schema =>schema == ~entry.schema and name == ~entry.table)
 set keys = filter(table.columns =>pkey)
