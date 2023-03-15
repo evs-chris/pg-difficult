@@ -402,8 +402,8 @@
             {{#each entry.changed as pair}}
               <div class="diff">
                 <div class="name">{{@key}}</div>
-                <div class="left">{{pair[0]}}</div>
-                <div class="right">{{pair[1]}}</div>
+                <div class="left">{{typeof pair[0] === 'object' ? JSON.stringify(pair[0]) : pair[0]}}</div>
+                <div class="right">{{typeof pair[1] === 'object' ? JSON.stringify(pair[1]) : pair[1]}}</div>
               </div>
             {{/each}}
 
@@ -413,7 +413,7 @@
           <div class="diff whole striped">
             <div class=name><span>{{record.table}} {{entry.id || ''}} {{entry.status}}</span><span class=src>{{record.source}}</span></div>
             {{#each entry.record}}
-              <div class="entry"><div class="key">{{@key}}</div><div class="value">{{.}}</div></div>
+              <div class="entry"><div class="key">{{@key}}</div><div class="value">{{typeof . === 'object' ? JSON.stringify(.) : .}}</div></div>
             {{/each}}
 
             {{#if ~/allowUndoSingle && @.source}}<button class=undo on-click="@.undoSingle(record)" title="Undo this change by running the inverse of the statment that created the change.">Undo</button>{{/if}}
