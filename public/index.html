@@ -381,7 +381,7 @@
 <script type=text/ractive id=entries>
   <div class="content-wrapper">
     <div class="controls">
-      {{#if @.source}}
+      {{#if @.source && !~/loaded}}
         <label title="Check to enable undoing segments"><input type=checkbox bind-checked="~/allowUndoSegment" /> Undo segments?</label>
         <label title="Check to enable undoing individual entries"><input type=checkbox bind-checked="~/allowUndoSingle" /> Undo single?</label>
       {{else}}
@@ -394,7 +394,7 @@
       {{/if}}
     </div>
     {{#each ~/entries as record}}{{#with @.details(record) as entry}}
-      {{#if @index === 0 || ~/entries[@index - 1].segment !== .segment}}<div class=header><h2>{{.segment}}</h2> {{#if ~/allowUndoSegment && @.source}}<button class=undo on-click="@.undoSegment(record)" title="Undo all changes in this segment by replaying the changes in reverse. This will also create a new segment named 'Undo {{.segment}}', unless you hold the ctrl key when clicking this button.">Undo</button>{{/if}}</div>{{/if}}
+      {{#if @index === 0 || ~/entries[@index - 1].segment !== .segment}}<div class=header><h2>{{.segment}}</h2> {{#if ~/allowUndoSegment}}<button class=undo on-click="@.undoSegment(record)" title="Undo all changes in this segment by replaying the changes in reverse. This will also create a new segment named 'Undo {{.segment}}', unless you hold the ctrl key when clicking this button.">Undo</button>{{/if}}</div>{{/if}}
       {{#if entry.status}}
         {{#if entry.changed}}
           <div class="wrapper striped">
@@ -407,7 +407,7 @@
               </div>
             {{/each}}
 
-            {{#if ~/allowUndoSingle && @.source}}<button class=undo on-click="@.undoSingle(record)" title="Undo this change by running the inverse of the statment that created the change.">Undo</button>{{/if}}
+            {{#if ~/allowUndoSingle}}<button class=undo on-click="@.undoSingle(record)" title="Undo this change by running the inverse of the statment that created the change.">Undo</button>{{/if}}
           </div>
         {{else}}
           <div class="diff whole striped">
@@ -416,7 +416,7 @@
               <div class="entry"><div class="key">{{@key}}</div><div class="value">{{typeof . === 'object' ? JSON.stringify(.) : .}}</div></div>
             {{/each}}
 
-            {{#if ~/allowUndoSingle && @.source}}<button class=undo on-click="@.undoSingle(record)" title="Undo this change by running the inverse of the statment that created the change.">Undo</button>{{/if}}
+            {{#if ~/allowUndoSingle}}<button class=undo on-click="@.undoSingle(record)" title="Undo this change by running the inverse of the statment that created the change.">Undo</button>{{/if}}
           </div>
         {{/if}}
       {{/if}}

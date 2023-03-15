@@ -262,7 +262,7 @@ const app = globalThis.app = new Ractive({
   },
   async loadEntries() {
     const file = await load('.pgdd');
-    const win = new Entries('Local File', { data: { loaded: JSON.parse(file.text) } });
+    const win = new Entries(undefined, { data: { loaded: JSON.parse(file.text) } });
     app.host.addWindow(win, { title: `Loaded entries from ${file.name}` });
   },
   async loadSchema() {
