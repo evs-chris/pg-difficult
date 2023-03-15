@@ -559,7 +559,7 @@ class Entries extends Window {
     this.set('@.source', source);
   }
   details(entry) {
-    const res = evaluate({ entry, schema: this.get('schema') }, `
+    const res = evaluate({ entry, schema: (this.get('schemas') || {})[entry.source] }, `
 set res = { table:entry.table segment:entry.segment }
 if entry.old and entry.new {
  let d = diff(entry.old entry.new)
@@ -587,7 +587,16 @@ res
     const name = `diff ${db} ${evaluate(`#now##date,'yyyy-MM-dd HH mm'`)}`;
     const ext = this.event?.event?.shiftKey ? 'html' : 'pgdd';
     let html, css;
-    const text = this.event?.event?.shiftKey ? ([html, css] = this.getHtml(), `<html><head><title>${name}</title><style>${css}</style></head><body>${html}</body></html>`) : JSON.stringify(this.get('entries'));
+    let text;
+    if (this.event?.event?.shiftKey) {
+      [html, css] = this.getHtml();
+      text = `<html><head><title>${name}</title><style>${css}</style></head><body>${html}</body></html>`
+    } else {
+      const out = { entries: this.get('entries') };
+      if (this.source) out.schemas = { [this.source]: (this.get('schemas') || {})[this.source] };
+      else out.schemas = this.get('schemas');
+      text = JSON.stringify(out);
+    }
     download(`${name}.${ext}`, text, ext === 'html' ? 'text/html' : 'application/pg-difficult-diff');
   }
   openHtml() {
@@ -624,14 +633,16 @@ res
   }
   undoSingle(entry) {
     if (!this.source) return;
-    const schema = this.get('schema');
+    const schemas = this.get('schemas') || {};
+    const schema = schemas[entry.source];
     const reverse = reverseEntry(entry, schema);
     if (reverse) request({ action: 'query', query: [reverse[0]], params: [reverse[1]], client: Object.values(app.get('status.clients') || {}).find(c => c.source === this.source).config });
     else this.host.toast(`Undo is not supported for this table`, { type: 'error', timeout: 3000 });
   }
   async undoSegment(entry) {
     if (!this.source) return;
-    const schema = this.get('schema');
+    const schemas = this.get('schemas') || {};
+    const schema = schemas[entry.source];
     const base = app.get('entries') || [];
     const entries = [];
 
@@ -662,7 +673,11 @@ Window.extendWith(Entries, {
     entries() {
       const source = this.get('@.source');
       const loaded = this.get('loaded');
-      if (loaded) return loaded;
+      if (loaded) {
+        if (Array.isArray(loaded)) return loaded;
+        else if (loaded && typeof loaded === 'object' && 'entries' in loaded) return loaded.entries;
+        else return [];
+      }
       const entries = app.get('entries');
       if (source != null) return entries.filter(e => e.source === this.source);
       return entries;
@@ -670,8 +685,8 @@ Window.extendWith(Entries, {
   },
   on: {
     complete() {
-      if (!this.source) return;
-      this.link(`schemas.${Ractive.escapeKey(this.source)}`, 'schema', { instance: app });
+      if (this.get('loaded')) this.link('loaded.schemas', 'schemas');
+      else this.link(`schemas`, 'schemas', { instance: app });
       this.scroller = this.find('.content-wrapper');
     }
   },
