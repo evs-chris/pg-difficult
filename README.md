@@ -90,3 +90,4 @@ The client takes advantage of local storage in the browser to save connection de
 * Add a dark theme.
 * Expose all server connections in additional tabs in the monitor.
 * Add other instance polling so that multiple servers can diff the same database and let the last one out turn off the lights.
+* Store smaller diffs when a record changes.

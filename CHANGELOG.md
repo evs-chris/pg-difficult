@@ -1,3 +1,14 @@
+## 1.1.2
+
+2023-03-16
+
+### Bugs
+
+* The change logging triggers are now deferred to the end of transactions so that the diff entries are available when immediately after the notification fires.
+* The notification from the server to the client are now throttled to avoid floods of requests for diff records during heavy updates and interleaved transactions.
+* The client will now only fire a single request for new entries at a time to avoid race conditions.
+
+
 ## 1.1.1
 
 2023-03-15
