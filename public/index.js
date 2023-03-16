@@ -512,6 +512,12 @@ class Query extends Window {
       name: q.name,
     });
   }
+  clicked(ev, col, rec) {
+    const val = ev.ctrlKey ? rec : col;
+    const msg = `Copied ${ev.ctrlKey ? 'record JSON' : 'column value'} to clipboard.`;
+    const str = val && typeof val === 'object' ? JSON.stringify(val) : val;
+    Ractive.helpers.copyToClipboard(str, msg);
+  }
 }
 Window.extendWith(Query, {
   template: '#query',
@@ -540,7 +546,7 @@ Window.extendWith(Query, {
       if (order.length) {
         const cols = [];
         for (const k of order) {
-          cols.push({ title: k, label: [k], content: [{ t: 2, r: k }], attrs: [{ t: 13, n: 'style', f: [`width: ${Math.ceil(Math.min(20, Math.max(4, k.length, `${first[k]}`.length)) / 1.4)}em;`]}] });
+          cols.push({ label: [k], content: [{ t: 2, x: { r: [k], s: '_0&&typeof _0==="object"?JSON.stringify(_0):_0' } }], attrs: [{ t: 13, n: 'style', f: [`width: ${Math.ceil(Math.min(20, Math.max(4, k.length, `${first[k]}`.length)) / 1.4)}em;`]}, { t: 70, n: ['click'], f: { r: ['@this', '@event', k, '.'], s: '[_0.clicked(_1,_2,_3)]' } }] });
         }
         this.table.replaceColumns(cols);
       } else {
@@ -1127,6 +1133,32 @@ function load(ext, multi) {
 }
 
 connect();
+
+Ractive.helpers.copyToClipboard = (function() {
+  let clipEl;
+  return function copyToClipboard(text, message) {
+    if (!clipEl) {
+      clipEl = document.createElement('textarea');
+      clipEl.id = 'clipEl';
+      clipEl.style.position = 'absolute';
+      clipEl.style.width = '1em';
+      clipEl.style.height = '1em';
+      clipEl.tabIndex = -1;
+      clipEl.style.left = '-10000px';
+      document.body.appendChild(clipEl);
+    }
+
+    try {
+      clipEl.value = text;
+      clipEl.select();
+      document.execCommand('copy');
+      if (message) app.host.toast(message, { type: 'success', timeout: 2000 });
+      return Promise.resolve(true);
+    } catch {
+      return Promise.resolve(false);
+    }
+  }
+})();
 
 // Set up debug helper
 let el;

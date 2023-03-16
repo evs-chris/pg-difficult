@@ -372,7 +372,7 @@
   <div class="query">
     <div class="query-text"><textarea value="{{.query}}" on-keydown="@event.ctrlKey && @event.key === 'Enter' ? @.run(.query) : true" /></div>
     <div class="result">
-      <data-table no-wrap fixed-header allow-select=false on-init="@.set('@.table', $1)" items="{{.result}}">
+      <data-table auto-titles no-wrap fixed-header allow-select=false on-init="@.set('@.table', $1)" items="{{.result}}">
         <bottom>
           <div style="display:flex; justify-content: space-between;">
             <span>{{#if !.result.length && .affected != null}}{{.affected}} rows affected.{{/if}} {{#unless .error}}{{.result.length || 'No'}} rows{{#if .result.length}}, {{@.table.data.columns.length}} cols{{/if}}{{/unless}}</span>
