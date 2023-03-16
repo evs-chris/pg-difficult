@@ -539,19 +539,22 @@ Window.extendWith(Query, {
     },
   },
   observe: {
-    'result settings.queryOrderColumns'() {
-      const result = this.get('result') || [];
-      const first = (result && result[0]) || {};
-      const order = this.get('settings.queryOrderColumns') ? Object.keys(first).sort() : Object.keys(first);
-      if (order.length) {
-        const cols = [];
-        for (const k of order) {
-          cols.push({ label: [k], content: [{ t: 2, x: { r: [k], s: '_0&&typeof _0==="object"?JSON.stringify(_0):_0' } }], attrs: [{ t: 13, n: 'style', f: [`width: ${Math.ceil(Math.min(20, Math.max(4, k.length, `${first[k]}`.length)) / 1.4)}em;`]}, { t: 70, n: ['click'], f: { r: ['@this', '@event', k, '.'], s: '[_0.clicked(_1,_2,_3)]' } }] });
+    'result settings.queryOrderColumns': {
+      handler() {
+        const result = this.get('result') || [];
+        const first = (result && result[0]) || {};
+        const order = this.get('settings.queryOrderColumns') ? Object.keys(first).sort() : Object.keys(first);
+        if (order.length) {
+          const cols = [];
+          for (const k of order) {
+            cols.push({ label: [k], content: [{ t: 2, x: { r: [k], s: '_0&&typeof _0==="object"?JSON.stringify(_0):_0' } }], attrs: [{ t: 13, n: 'style', f: [`width: ${Math.ceil(Math.min(20, Math.max(4, k.length, `${first[k]}`.length)) / 1.4)}em;`]}, { t: 70, n: ['click'], f: { r: ['@this', '@event', k, '.'], s: '[_0.clicked(_1,_2,_3)]' } }] });
+          }
+          this.table.replaceColumns(cols);
+        } else {
+          this.table.replaceColumns([]);
         }
-        this.table.replaceColumns(cols);
-      } else {
-        this.table.replaceColumns([]);
-      }
+      },
+      init: false,
     }
   },
 });
