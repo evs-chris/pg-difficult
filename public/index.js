@@ -93,6 +93,38 @@ let request;
   }
 }
 
+let gate;
+{
+  const thunks = {};
+  const pending = {};
+  const defer = function(action, thunk) {
+    let ok, fail;
+    const res = new Promise((o, f) => (ok = o, fail = f));
+    (thunks[action] || (thunks[action] = [])).push([thunk, ok, fail]);
+    return res;
+  }
+  const pump = async function(action) {
+    while ((thunks[action] || []).length) {
+      const [thunk, ok, fail] = thunks[action].shift();
+      const req = pending[action] = request(thunk());
+      req.then(ok, fail);
+      try {
+        await req;
+      } catch { /* ok */ }
+    }
+    pending[action] = undefined;
+  }
+  gate = function gate(action, thunk) {
+    if (pending[action]) return defer(action, thunk);
+    else {
+      const req = request(thunk());
+      pending[action] = req;
+      req.then(() => pump(action), () => pump(action));
+      return req;
+    }
+  };
+}
+
 let reportId = 0;
 
 const app = globalThis.app = new Ractive({
@@ -105,7 +137,7 @@ const app = globalThis.app = new Ractive({
   },
   observe: {
     entries(v) {
-     if (v && v.length) this.set('last', v[v.length - 1].stamp);
+     if (v && v.length) this.set('last', v.reduce((a, c) => c.id > a ? c.id : a, 0));
      else this.set('last', undefined);
     },
     'status.clients': {
@@ -836,7 +868,7 @@ Window.extendWith(Schema, {
         const msg = await request({ action: 'schema', client: this.config });
         this.blocked = false;
         this.set('schema', msg.schema);
-      } catch (e) {
+      } catch {
         setTimeout(() => this.close(), 1000);
       }
     },
@@ -998,7 +1030,7 @@ function connect() {
     app.set('connected', true);
     app.set('entries', []);
     notify({ action: 'status' });
-    notify({ action: 'check' });
+    gate('check', () => ({ action: 'check' }));
   });
   ws.addEventListener('error', () => {
     ws.close();
@@ -1019,19 +1051,27 @@ function connect() {
         app.host.toast(msg.error || '(unknown error)', { type: 'error' });
         if ('id' in msg) request.error(msg.id, msg);
         break;
+
       case 'check':
         if (msg.reset) app.set('entries', []);
-        notify({ action: 'check', since: app.get('last') });
+        gate('check', () => ({ action: 'check', since: app.get('last') }));
         break;
-      case 'entries': app.push.apply(app, ['entries'].concat(msg.entries || [])); break;
+
+      case 'entries': { 
+        const current = app.get('entries');
+        const add = (msg.entries || []).filter(e => !current.find(o => o.source === e.source && o.id === e.id));
+        add.unshift('entries');
+        app.push.apply(app, add);
+        break;
+      }
+
       case 'leaks':
         for (const k in msg.map) app.set(`status.leaks.${k}.current`, msg.map[k]);
         app.set('status.lastUpdate', new Date());
         break;
-      default:
-        if ('id' in msg) request.response(msg.id, msg);
-        break;
     }
+
+    if ('id' in msg) request.response(msg.id, msg);
   });
 }
 

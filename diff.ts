@@ -115,7 +115,7 @@ export async function start(client: Client) {
     await client`grant all on function __pgdifficult_record() to public`;
     for (const table of tables) {
       await client`drop trigger if exists __pgdifficult_notify on ${client(table.name)};`;
-      await client`create trigger __pgdifficult_notify after insert or update or delete on ${client(table.name)} for each row execute procedure __pgdifficult_record();`;
+      await client`create constraint trigger __pgdifficult_notify after insert or update or delete on ${client(table.name)} deferrable initially deferred for each row execute procedure __pgdifficult_record();`;
     }
   });
 }
@@ -161,7 +161,7 @@ export async function dump(client: Client): Promise<Segment> {
 }
 
 export async function entries(client: Client, since?: string): Promise<Entry[]> {
-  if (since) return await client`select * from __pgdifficult_entries where stamp > ${since} order by id asc;`;
+  if (since) return await client`select * from __pgdifficult_entries where id > ${since} order by id asc;`;
   else return await client`select * from __pgdifficult_entries where 1 = ${1} order by id asc;`; // gotta pass a param to get a result that doesn't have to be cast to any[]
 }
 

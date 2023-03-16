@@ -148,7 +148,7 @@ interface Stop { action: 'stop', id: number, save?: true }
 interface Status { action: 'status' }
 interface Clear { action: 'clear' }
 interface Segment { action: 'segment'; segment: string, id?: string }
-interface Check { action: 'check'; since?: string }
+interface Check { action: 'check'; since?: string, id: string }
 interface Schema { action: 'schema'; client?: number|DatabaseConfig; id?: string }
 interface Query { action: 'query'; client: number|DatabaseConfig; query: string[]; params?: unknown[][]; id: string }
 interface Leak { action: 'leak'; config: DatabaseConfig }
@@ -167,7 +167,7 @@ async function message(this: WebSocket, msg: Message) {
       case 'clear': await clear(); break;
       case 'segment': await next(msg.segment, this, msg.id); break;
       case 'ping': this.send(JSON.stringify({ action: 'pong' })); break;
-      case 'check': check(this, msg.since); break;
+      case 'check': check(this, msg.id, msg.since); break;
       case 'schema': schema(this, msg.client, msg.id); break;
       case 'query': query(msg.client, msg.query, msg.params || [], msg.id, this); break;
       case 'leak': leak(msg.config); break;
@@ -192,6 +192,22 @@ function error(message: string, ws?: WebSocket, extra?: Record<string, unknown>)
   notify(Object.assign({}, extra, { action: 'error', error: message }), ws);
 }
 
+let throttleCheck: () => void;
+{
+  let tm: number|undefined;
+  throttleCheck = () => {
+    if (tm != null) {
+      console.log('skipping check for throttle');
+      return;
+    }
+    tm = setTimeout(() => {
+      tm = undefined;
+      console.log('firing throttled check');
+      notify({ action: 'check' });
+    }, 1000);
+  };
+}
+
 async function start(config: DatabaseConfig, id: number, ws: WebSocket, start?: 'resume'|'restart') {
   for (const k in state.diffs) {
     const st = state.diffs[k];
@@ -202,45 +218,58 @@ async function start(config: DatabaseConfig, id: number, ws: WebSocket, start?: 
   if (!config.ssl) config.ssl = 'prefer';
 
   const client = postgres(config);
-  await client`select 1 as x`;
-
-  // check for started diff
-  let restart = false;
-  try {
-    await client`select * from __pgdifficult_state`;
-    restart = true;
-    if (!start) return notify({ id, action: 'resume' }, ws);
-  } catch { /* good */ }
-
-  if (restart && start === 'restart') {
-    await diff.stop(client);
-  } else if (restart && start === 'resume') {
-    await client`notify __pg_difficult, 'joined'`;
-    notify({ id, action: 'resumed' }, ws);
-  } else {
-    try {
-      await diff.start(client);
-    } catch (e) {
-      await client.end();
-      throw e;
-    }
-
-    await diff.next(client, state.segment);
-    notify({ id, action: 'started' }, ws);
-  }
 
   const did = state.diffId++;
   state.diffs[did] = { client, config, id: did };
 
-  await client.listen('__pg_difficult', async v => {
-    if (v === 'stopped') {
-      await client.end();
-      delete state.diffs[id];
-      status();
-    } else if (!v || v === 'record') {
-      notify({ action: 'check' });
+  try {
+    await client`select 1 as x`;
+
+    // check for started diff
+    let restart = false;
+    try {
+      await client`select * from __pgdifficult_state`;
+      restart = true;
+      if (!start) {
+        await client.end();
+        delete state.diffs[did];
+        return notify({ id, action: 'resume' }, ws);
+      }
+    } catch { /* good */ }
+
+    if (restart && start === 'restart') {
+      await diff.stop(client);
+    } else if (restart && start === 'resume') {
+      await client`notify __pg_difficult, 'joined'`;
+      notify({ id, action: 'resumed' }, ws);
+    } else {
+      try {
+        await diff.start(client);
+      } catch (e) {
+        await client.end();
+        throw e;
+      }
+
+      await diff.next(client, state.segment);
+      notify({ id, action: 'started' }, ws);
     }
-  });
+
+    await client.listen('__pg_difficult', async v => {
+      if (v === 'stopped') {
+        await client.end();
+        delete state.diffs[id];
+        status();
+      } else if (!v || v === 'record') {
+        throttleCheck();
+      }
+    });
+  } catch (e) {
+    delete state.diffs[did];
+    try {
+      await client.end();
+    } catch { /* sure */ }
+    throw e;
+  }
 
   status();
   notify({ action: 'check', reset: true });
@@ -293,7 +322,7 @@ async function clear() {
   notify({ action: 'clear' });
 }
 
-async function check(ws: WebSocket, since?: string) {
+async function check(ws: WebSocket, id: string, since?: string) {
   const entries: diff.Entry[] = ([] as diff.Entry[]).concat(state.saved);
   for (const k in state.diffs) {
     const client = state.diffs[k];
@@ -302,7 +331,7 @@ async function check(ws: WebSocket, since?: string) {
     for (const e of res) e.source = src;
     entries.push.apply(entries, res);
   }
-  notify({ action: 'entries', entries }, ws);
+  notify({ action: 'entries', entries, id }, ws);
 }
 
 async function schema(ws: WebSocket, client?: number|DatabaseConfig, id?: string) {
