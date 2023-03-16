@@ -345,7 +345,13 @@
       </div>
     </tab>
     <tab title="Settings">
-      <label as-field class=inline><input type=checkbox bind-checked="~/settings.queryOrderColumns" /> Order query result columns alphabetically?</label>
+      <div style="display: flex; flex-direction: column;">
+        <label as-field class=inline><input type=checkbox bind-checked="~/settings.queryOrderColumns" /> Order query result columns alphabetically?</label>
+        <label as-field class=inline><input type=checkbox bind-checked="~/settings.allowUndoSegment" /> Enable undoing diff segments by default?</label>
+        <label as-field class=inline><input type=checkbox bind-checked="~/settings.allowUndoSingle" /> Enable undoing individual diff entries by default?</label>
+        <label as-field class=inline><input type=checkbox bind-checked="~/settings.hideBlankFields" /> Hide empty string fields in diff records by default?</label>
+        <label as-field class=inline><input type=checkbox bind-checked="~/settings.hideDefaultFields" /> Hide defaulted fields in diff records by default?</label>
+      </div>
     </tab>
   </tabs>
 </script>
@@ -384,9 +390,14 @@
       {{#if @.source && !~/loaded}}
         <label title="Check to enable undoing segments"><input type=checkbox bind-checked="~/allowUndoSegment" /> Undo segments?</label>
         <label title="Check to enable undoing individual entries"><input type=checkbox bind-checked="~/allowUndoSingle" /> Undo single?</label>
-      {{else}}
-        <div />
       {{/if}}
+      {{#if schemas}}
+        <label title="Check to hide empty string fields in entries"><input type=checkbox bind-checked="~/hideBlankFields" /> Hide blank?</label>
+        <label title="Check to hide fields with default values in entries"><input type=checkbox bind-checked="~/hideDefaultFields" /> Hide default?</label>
+      {{/if}}
+      {{#unless (@.source && !~/loaded) && schemas}}
+        <div />
+      {{/unless}}
       {{#if ~/entries.length}}
         <button class=download on-click="@.download()" title="Download a file containing these entries. Hold the ctrl key while clicking to open a popup window of the HTML. Hold the shift key while clicking to download the HTML directly.">Download</button>
       {{else}}

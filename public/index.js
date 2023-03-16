@@ -1,5 +1,7 @@
-const { evaluate } = Raport;
+const { evaluate, registerOperator } = Raport;
 const { Window } = RauiWindow;
+
+registerOperator({ type: 'value', names: ['log'], apply: (_name, args) => console.log.apply(console, args) });
 
 Ractive.use(RauiButton.plugin(), RauiForm.plugin({ includeStyle: true }), RauiShell.plugin(), RauiMenu.plugin(), RauiWindow.plugin(), RauiAppBar.plugin(), RauiTabs.plugin(), RauiTable.plugin({ includeGrid: true }));
 
@@ -591,7 +593,7 @@ class Entries extends Window {
     this.set('@.source', source);
   }
   details(entry) {
-    const res = evaluate({ entry, schema: (this.get('schemas') || {})[entry.source] }, `
+    const res = evaluate({ entry, schema: (this.get('schemas') || {})[entry.source], hideBlank: this.get('hideBlankFields'), hideDefault: this.get('hideDefaultFields') }, `
 set res = { table:entry.table segment:entry.segment }
 if entry.old and entry.new {
  let d = diff(entry.old entry.new)
@@ -609,13 +611,21 @@ if entry.old and entry.new {
 set table = find(schema =>schema == ~entry.schema and name == ~entry.table)
 set keys = filter(table.columns =>pkey)
 if keys.length then set res.id = join(map(keys =>'{name} = {~entry.old[name] ?? ~entry.new[name]}') ', ')
+if hideBlank then set res.record = filter(res.record =>_ strict-is-not '')
+if hideDefault then set res.record = filter(res.record |val idx key| => {
+  let col = find(~table.columns =>name == key)
+  if not col then true
+  elif col.default and '{val}' strict-is '{eval(replace(col.default, '^\\\\(?([^):]+).*', '$1', ''))}' then false
+  elif col.nullable and val strict-is null then false
+  else true
+});
 res
 `);
     return res;
   }
   download() {
     if (this.event?.event?.ctrlKey) return this.openHtml();
-    const db = this.source ? this.source.replace(/.*@([^:]+).*\/(.*)/, '$1-$2') : 'multiple';
+    const db = this.source ? this.source.replace(/.*@([^:]+).*\/(.*)/, '$1-$2') : this.get('loaded') ? 'Local file' : 'multiple';
     const name = `diff ${db} ${evaluate(`#now##date,'yyyy-MM-dd HH mm'`)}`;
     const ext = this.event?.event?.shiftKey ? 'html' : 'pgdd';
     let html, css;
@@ -699,7 +709,7 @@ res
 }
 Window.extendWith(Entries, {
   template: '#entries',
-  options: { flex: true, resizable: true, width: '40em', height: '30em' },
+  options: { flex: true, resizable: true, width: '50em', height: '40em' },
   css: EntryCSS,
   computed: {
     entries() {
@@ -717,6 +727,12 @@ Window.extendWith(Entries, {
   },
   on: {
     complete() {
+      this.set({
+        allowUndoSegment: app.get('settings.allowUndoSegment'),
+        allowUndoSingle: app.get('settings.allowUndoSingle'),
+        hideBlankFields: app.get('settings.hideBlankFields'),
+        hideDefaultFields: app.get('settings.hideDefaultFields'),
+      });
       if (this.get('loaded')) this.link('loaded.schemas', 'schemas');
       else this.link(`schemas`, 'schemas', { instance: app });
       this.scroller = this.find('.content-wrapper');
