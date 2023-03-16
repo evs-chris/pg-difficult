@@ -243,12 +243,11 @@ async function start(config: DatabaseConfig, id: number, ws: WebSocket, start?: 
       }
     } catch { /* good */ }
 
-    if (restart && start === 'restart') {
-      await diff.stop(client);
-    } else if (restart && start === 'resume') {
+    if (restart && start === 'resume') {
       await client`notify __pg_difficult, 'joined'`;
       notify({ id, action: 'resumed' }, ws);
     } else {
+      if (restart && start === 'restart') await diff.stop(client);
       try {
         await diff.start(client);
       } catch (e) {
