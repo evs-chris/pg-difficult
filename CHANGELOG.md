@@ -1,3 +1,15 @@
+## 1.2.0
+
+2023-03-16
+
+### Features
+
+* The diff view can now optionally hide default and/or empty fields for whole record display e.g. for added and removed records. Changed records already have minimal output, so they are not affected by these settings.
+* The settings tab on the control panel can now set defaults for allowing undo and hiding fields in diff views.
+* Columns in query results now have their full value in a title attribute, so you can get the full value as a tooltip on hover.
+* Clicking a column value in query results will copy it to the clipboard. Holding ctrl and clicking a column value in query results will copy the record as JSON to the clipboard.
+
+
 ## 1.1.2
 
 2023-03-16
