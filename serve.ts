@@ -197,12 +197,10 @@ let throttleCheck: () => void;
   let tm: number|undefined;
   throttleCheck = () => {
     if (tm != null) {
-      console.log('skipping check for throttle');
       return;
     }
     tm = setTimeout(() => {
       tm = undefined;
-      console.log('firing throttled check');
       notify({ action: 'check' });
     }, 1000);
   };
