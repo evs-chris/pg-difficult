@@ -119,25 +119,33 @@ router.get('/:path*', async ctx => {
     if (path.includes('..')) return ctx.throw(400);
     try {
       const f = await Deno.readFile(`./public/${path}`);
+      ctx.response.type = path.slice(path.lastIndexOf('.') + 1);
       return ctx.response.body = f;
     } catch {
       if (!path || path[path.length - 1] === '/') {
         try {
           const f = await Deno.readFile(`./public/${path}index.html`);
+          ctx.response.type = 'html';
           return ctx.response.body = f;
         } catch { /* sure */ }
       }
     }
   }
 
-  if (path in fs) return ctx.response.body = decode(fs[path]);
+  if (path in fs) {
+    ctx.response.type = path.slice(path.lastIndexOf('.') + 1);
+    return ctx.response.body = decode(fs[path]);
+  }
   if (!path || path[path.length - 1] === '/') {
     const index = `${path}index.html`;
     if (index in fs) ctx.response.body = decode(fs[index]);
+    ctx.response.type = 'html';
     return;
   }
 
-  ctx.throw(404);
+  ctx.response.status = 404;
+  ctx.response.body = 'Not found';
+  ctx.response.type = 'txt';
 });
 
 interface Ping { action: 'ping' }
