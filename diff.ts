@@ -92,12 +92,25 @@ export async function start(client: Client) {
   declare
     segment varchar;
     rec record;
+    obj_old json;
+    obj_new json;
+    pkeys varchar[];
   begin
     set timezone = 'UTC';
     select value into segment from __pgdifficult_state where key = 'segment';
     case TG_OP
       when 'UPDATE' then
-        insert into __pgdifficult_entries ("table", "schema", "segment", "old", "new", stamp) values (TG_TABLE_NAME, TG_TABLE_SCHEMA, segment, row_to_json(OLD), row_to_json(NEW), CURRENT_TIMESTAMP(3));
+        select array_agg(a.attname::varchar) into pkeys from pg_index i join pg_attribute a on i.indrelid = a.attrelid and a.attnum = any(i.indkey) where i.indrelid = TG_RELID and i.indisprimary;
+
+        case when pkeys is null then
+          insert into __pgdifficult_entries ("table", "schema", "segment", "old", "new", stamp) values (TG_TABLE_NAME, TG_TABLE_SCHEMA, segment, row_to_json(OLD), row_to_json(NEW), CURRENT_TIMESTAMP(3));
+        else
+          with obj1 as (select * from json_each(row_to_json(OLD))), obj2 as (select * from json_each(row_to_json(NEW))), diff as (select a.key, a.value from obj1 a join obj2 b on a.key = b.key where a.value is null and b.value is not null or b.value is null and a.value is not null or a.value::varchar <> b.value::varchar or a.key = any(pkeys))
+          select json_object_agg(key, value) into obj_old from diff;
+          with obj1 as (select * from json_each(row_to_json(NEW))), obj2 as (select * from json_each(row_to_json(OLD))), diff as (select a.key, a.value from obj1 a join obj2 b on a.key = b.key where a.value is null and b.value is not null or b.value is null and a.value is not null or a.value::varchar <> b.value::varchar or a.key = any(pkeys))
+          select json_object_agg(key, value) into obj_new from diff;
+          insert into __pgdifficult_entries ("table", "schema", "segment", "old", "new", stamp) values (TG_TABLE_NAME, TG_TABLE_SCHEMA, segment, obj_old, obj_new, CURRENT_TIMESTAMP(3));
+        end case;
         rec := NEW;
       when 'INSERT' then
         insert into __pgdifficult_entries ("table", "schema", "segment", "old", "new", stamp) values (TG_TABLE_NAME, TG_TABLE_SCHEMA, segment, null, row_to_json(NEW), CURRENT_TIMESTAMP(3));
