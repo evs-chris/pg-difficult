@@ -513,6 +513,7 @@ class Query extends Window {
     });
   }
   clicked(ev, col, rec) {
+    if (rec?.query === this.get('query')) return;
     const val = ev.ctrlKey ? rec : col;
     const msg = `Copied ${ev.ctrlKey ? 'record JSON' : 'column value'} to clipboard.`;
     const str = val && typeof val === 'object' ? JSON.stringify(val) : val;
@@ -547,7 +548,7 @@ Window.extendWith(Query, {
         if (order.length) {
           const cols = [];
           for (const k of order) {
-            cols.push({ label: [k], content: [{ t: 2, x: { r: [k], s: '_0&&typeof _0==="object"?JSON.stringify(_0):_0' } }], attrs: [{ t: 13, n: 'style', f: [`width: ${Math.ceil(Math.min(20, Math.max(4, k.length, `${first[k]}`.length)) / 1.4)}em;`]}, { t: 70, n: ['click'], f: { r: ['@this', '@event', k, '.'], s: '[_0.clicked(_1,_2,_3)]' } }] });
+            cols.push({ label: [k], content: [{ t: 2, x: { r: [k], s: '_0&&typeof _0==="object"?JSON.stringify(_0):_0' } }], attrs: [{ t: 13, n: 'style', f: [`width: ${Math.ceil(Math.min(20, Math.max(4, k.length, `${first[k]}`.length)) / 1.4)}em;`]}, { t: 70, n: ['click'], f: { r: ['@this', '@event', k, '.'], s: '[_0.clicked(_1,_2,_3)]' } }], id: k, sort: k });
           }
           this.table.replaceColumns(cols);
         } else {
