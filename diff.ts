@@ -184,7 +184,7 @@ export async function clear(client: Client) {
 
 export async function stop(client: Client): Promise<Segment> {
   const res = await dump(client);
-  client.begin(async t => {
+  await client.begin(async t => {
     await t`drop table if exists __pgdifficult_entries;`;
     await t`drop table if exists __pgdifficult_state;`;
     const tables: Table[] = await t.unsafe(tableQuery);
