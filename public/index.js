@@ -341,9 +341,9 @@ class ControlPanel extends Window {
     const res = await request({ action: 'start', config });
     if (res.action === 'resume') {
       const what = await app.choose('There is already a running diff in this database. Would you like to cancel, resume the diff that is already running from this instance, or restart start the diff and disconnect any other instances that are connected?', [
-        { label: 'Cancel', action() { this.close() }, where: 'left' },
-        { label: 'Restart', action() { this.close(false, 'restart') }, where: 'center' },
-        { label: 'Resume', action() { this.close(false, 'resume'); } }
+        { label: 'Cancel', action() { this.close(); }, where: 'left', title: 'Nevermind, don\'t do anything.' },
+        { label: 'Restart', action() { this.close(false, 'restart'); }, title: 'Stop the active diff and start a new one.', where: 'center' },
+        { label: 'Resume', action() { this.close(false, 'resume'); }, title: 'Join the active diff.' }
       ], 'Restart or resume diff?');
       if (what) request({ action: what, config });
     }
