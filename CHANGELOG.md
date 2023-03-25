@@ -1,3 +1,18 @@
+## 1.2.1
+
+2023-03-25
+
+### Bugs
+
+* Restarting a diff will no longer fail.
+* There are now fewer non-fatal errors logged in the console of both the server and client.
+
+### Features
+
+* Columns in the query output are now sortable using the column headers.
+* Change entries, as opposed to additions or deletions, will only record the fields that actually change, which shrinks diffs significantly.
+
+
 ## 1.2.0
 
 2023-03-16
