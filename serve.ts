@@ -120,12 +120,14 @@ router.get('/:path*', async ctx => {
     try {
       const f = await Deno.readFile(`./public/${path}`);
       ctx.response.type = path.slice(path.lastIndexOf('.') + 1);
+      console.info(`serving ${path} from local public dir...`)
       return ctx.response.body = f;
     } catch {
       if (!path || path[path.length - 1] === '/') {
         try {
           const f = await Deno.readFile(`./public/${path}index.html`);
           ctx.response.type = 'html';
+          console.info(`serving ${path}index.html from local public dir...`)
           return ctx.response.body = f;
         } catch { /* sure */ }
       }
