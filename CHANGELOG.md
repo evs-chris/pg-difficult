@@ -1,3 +1,12 @@
+## 1.2.2
+
+2023-03-31
+
+### Bugs(?)
+
+* The change entry view now renders using a virtual list that limits actually rendered entries to a minimum around the viewport. This helps keep the UI relatively snappy when there are more than a few entries in a set. Prior to this, a list of 100 entries would noticably slow the UI, and 2500 would cause the hung script warning to pop up a couple of times before the UI would even render. With a virtual list, 100 entries and 2500 entries have equivalent performance.
+
+
 ## 1.2.1
 
 2023-03-25
