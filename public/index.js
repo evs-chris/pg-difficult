@@ -3,7 +3,7 @@ const { Window } = RauiWindow;
 
 registerOperator({ type: 'value', names: ['log'], apply: (_name, args) => console.log.apply(console, args) });
 
-Ractive.use(RauiButton.plugin(), RauiForm.plugin({ includeStyle: true }), RauiShell.plugin(), RauiMenu.plugin(), RauiWindow.plugin(), RauiAppBar.plugin(), RauiTabs.plugin(), RauiTable.plugin({ includeGrid: true }));
+Ractive.use(RauiButton.plugin(), RauiForm.plugin({ includeStyle: true }), RauiShell.plugin(), RauiMenu.plugin(), RauiWindow.plugin(), RauiAppBar.plugin(), RauiTabs.plugin(), RauiTable.plugin({ includeGrid: true }), RauiVirtualList.plugin());
 
 function constr(config, extra) {
   if (typeof config === 'string') return config;
@@ -591,11 +591,10 @@ const EntryCSS = `
 .wrapper > .name, .diff.whole > .name { display: flex; justify-content: space-between; }
 .wrapper > .name > .src, .diff.whole > .name > .src { opacity: 0.4; }
 .wrapper, .diff.whole, .header { position: relative; }
-h2 { padding: 1em 0 0.5em 0; }
+h2 { padding: 1em 0 0.5em 0; margin: 0; }
 button.undo { position: absolute; top: 0.2em; right: 0; opacity: 0; transition: opacity 0.3s ease; }
 .header button.undo { top: 0.75em; }
 .header:hover button.undo, .wrapper:hover button.undo, .diff.whole:hover button.undo { opacity: 1; z-index: 20; }
-.header { position: sticky; top: -1em; background-color: #fff; z-index: 30; }
 `
 class Entries extends Window {
   constructor(source, opts) {
@@ -606,7 +605,7 @@ class Entries extends Window {
     const res = evaluate({ entry, schema: (this.get('schemas') || {})[entry.source], hideBlank: this.get('hideBlankFields'), hideDefault: this.get('hideDefaultFields') }, `
 set res = { table:entry.table segment:entry.segment }
 if entry.old and entry.new {
- let d = diff(entry.old entry.new)
+ let d = sort(diff(entry.old entry.new))
  if keys(d).length {
    set res.status = :changed
    set res.changed = ^d
@@ -629,6 +628,8 @@ if hideDefault then set res.record = filter(res.record |val idx key| => {
   elif col.nullable and val strict-is null then false
   else true
 });
+if res.record then set res.record = map(res.record =>[@key _] array:1)
+if res.changed then set res.changed = map(res.changed =>[@key _] array:1)
 res
 `);
     return res;
@@ -679,9 +680,13 @@ res
       .striped > * { overflow: hidden; text-overflow: ellipsis; }
 
       .content-wrapper { display: flex; flex-direction: column; overflow: auto; position: relative; padding: 0.5em; box-sizing: border-box; }
+      .header { position: sticky; top: -1em; background-color: #fff; z-index: 30; }
     `;
-    const el = this.find('.rwindow-content');
-    return [el.innerHTML, css];
+    const tmp = new Ractive({ template: '#entries-text', data: { entries: [], schemas: this.get('schemas'), hideBlankFields: this.get('hideBlankFields'), hideDefaultFields: this.get('hideDefaultFields') } });
+    tmp.source = this.source;
+    tmp.details = this.details;
+    tmp.set('entries', this.get('entries'));
+    return [tmp.toHtml(), css];
   }
   undoSingle(entry) {
     if (!this.source) return;
@@ -745,14 +750,14 @@ Window.extendWith(Entries, {
       });
       if (this.get('loaded')) this.link('loaded.schemas', 'schemas');
       else this.link(`schemas`, 'schemas', { instance: app });
-      this.scroller = this.find('.content-wrapper');
+      this.scroller = this.find('.rvlist');
     }
   },
   observe: {
     'entries.length'() {
       if (this.scroller) {
         const s = this.scroller;
-        if (s.scrollTop + s.clientHeight >= s.scrollHeight - 10) setTimeout(() => s.children[s.children.length - 1].scrollIntoView({ behavior: 'smooth', block: 'end' }), 100);
+        if (s.scrollTop + s.clientHeight >= s.scrollHeight - 10) setTimeout(() => s.scrollTo({ top: s.scrollHeight, behavior: 'smooth', block: 'end' }), 100);
       }
     }
   },
