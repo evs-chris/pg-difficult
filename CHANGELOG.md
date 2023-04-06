@@ -1,3 +1,16 @@
+## 1.3.0
+
+### Bugs
+
+* The server will now successfully connect over SSL by prefering an SSL connection to a plain connection.
+
+
+### Features
+
+* The listen address for the server can now be specified as an argument. It also now defaults to 127.0.0.1 rather than 0.0.0.0, so that live connections don't accidentally expose a database with a live diff or connection monitor to whoever happens by the right port.
+* There is now a help option that prints options and info an immediately exits.
+
+
 ## 1.2.3
 
 2023-04-06
