@@ -83,15 +83,24 @@ let request;
     const pr = new Promise((o, f) => (ok = o, fail = f));
     listeners[msg.id] = [ok, fail];
     notify(msg);
+    app.add('waiting', 1);
     return pr;
   };
   request.response = function response(id, msg) {
     const listener = listeners[id];
-    if (Array.isArray(listener) && typeof listener[0] === 'function') listener[0](msg);
+    if (Array.isArray(listener) && typeof listener[0] === 'function') {
+      app.subtract('waiting', 1);
+      delete listeners[id];
+      listener[0](msg);
+    }
   }
   request.error = function error(id, msg) {
     const listener = listeners[id];
-    if (Array.isArray(listener) && typeof listener[1] === 'function') listener[1](msg);
+    if (Array.isArray(listener) && typeof listener[1] === 'function') {
+      app.subtract('waiting', 1);
+      delete listeners[id];
+      listener[1](msg);
+    }
   }
 }
 
@@ -134,6 +143,7 @@ const app = globalThis.app = new Ractive({
   template: '#template',
   data: {
     config: { username: 'postgres', host: 'localhost', port: 5432, database: 'postgres' },
+    waiting: 0,
     entries: [],
     diffs: [],
   },
@@ -345,7 +355,7 @@ class ControlPanel extends Window {
         { label: 'Restart', action() { this.close(false, 'restart'); }, title: 'Stop the active diff and start a new one.', where: 'center' },
         { label: 'Resume', action() { this.close(false, 'resume'); }, title: 'Join the active diff.' }
       ], 'Restart or resume diff?');
-      if (what) request({ action: what, config });
+      if (what) await request({ action: what, config });
     }
   }
   stopDiff(config) {

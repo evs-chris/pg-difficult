@@ -56,9 +56,9 @@
     display: flex;
     flex-direction: column;
   }
-  #not-connected .loader {
-    width: 120px;
-    height: 120px;
+  .loader {
+    width: 100%;
+    height: 100%;
     transform: rotate(-90deg);
     stroke-linecap: round;
     stroke-width: 4;
@@ -66,28 +66,32 @@
     display: block;
     margin: 0 auto;
   }
+  .rappbar .loader {
+    stroke-width: 10;
+  }
   #not-connected .reconnecting {
     margin-top: 1em;
     text-align: center;
     font-weight: bold;
-    color: #222;
+    color: #fff;
     font-size: 1.2rem;
+    text-shadow: 0 0 1em #222;
   }
     
-  #not-connected .internal-circle,
-  #not-connected .external-circle {
-    stroke: #3c75bb;
+  .loader .internal-circle,
+  .loader .external-circle {
+    stroke: #fff;
     stroke-dashoffset: 0;
     transform-origin: center;
   }
   
-  #not-connected .internal-circle {
+  .loader .internal-circle {
     stroke-dasharray: 187;
     animation: internal-circle 1s ease-in-out infinite;
     opacity: .4;
   }
   
-  #not-connected .external-circle {
+  .loader .external-circle {
     stroke-dasharray: 312;
     animation: external-circle 1s linear infinite;
     opacity: .9;
@@ -176,6 +180,7 @@
     <center style="display: flex; flex-direction: column;">
       {{#if !@.host.data.currentMax}}
         <app-bar>
+          <left>{{#if waiting}}<div style="height: 1.5em;">{{>loader}}</div>{{/if}}</left>
           <right><div class=hamburger on-click="@.toggle('menu.hidden')" /></right>
         </app-bar>
       {{/if}}
@@ -183,6 +188,7 @@
         <host placement=smart on-init="@.set('@.host', $1)">
           <max-top>
             <app-bar>
+              <left>{{#if waiting}}<div style="height: 1.5em;">{{>loader}}</div>{{/if}}</left>
               <center>{{window.title}}</center>
               <right>{{>windowControls}}<div class=hamburger on-click="@.toggle('menu.hidden')" style="margin-left: 2em;" /></right>
             </app-bar>
@@ -193,14 +199,18 @@
   </shell>
   {{#unless ~/connected}}<div id="not-connected">
     <div class=wrapper>
-      <svg class="loader" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg">
-        <circle class="internal-circle" cx="60" cy="60" r="30"></circle>
-        <circle class="external-circle" cx="60" cy="60" r="50"></circle>
-      </svg>
+      {{>loader}}
       <div class=reconnecting>Reconnecting...</div>
     </div>
   </div>{{/unless}}
   <input type=file id=file />
+</script>
+
+<script type=text/ractive id=loader>
+  <svg class="loader" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg">
+    <circle class="internal-circle" cx="60" cy="60" r="30"></circle>
+    <circle class="external-circle" cx="60" cy="60" r="50"></circle>
+  </svg>
 </script>
 
 <script type=text/ractive id=control-panel>
