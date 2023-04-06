@@ -83,6 +83,7 @@ function prepareConfig(cfg: DatabaseConfig, extra?: Partial<DatabaseConfig> & { 
       parse: (v: string) => v,
     } },
     connection: { application_name: `pg-difficult:${config.port}${extra?.app ? `(${extra.app})` : ''}` },
+    ssl: 'prefer',
   }
   return Object.assign(base, cfg, { host: cfg.host || 'localhost', username: cfg.username || 'postgres', database: cfg.database || 'postgres', port: cfg.port || 5432 }, extra);
 }
