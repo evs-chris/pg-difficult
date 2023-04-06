@@ -47,6 +47,30 @@ for (let i = 0; i < Deno.args.length; i++) {
     case '--listen': case '-l':
       config.listen = Deno.args[++i] || '127.0.0.1';
       break;
+
+    case '--help': case '-h':
+      console.log(`Usage: pg-difficult [...options]
+
+Options:
+  --port     | -p  <number>   listen on the given port, defaults to 1999
+
+  --interval | -t  <number>   have the connection monitor poll at the given rate in ms
+                              defaults to 10000
+
+  --listen   | -l  <ip>       listen on the given address, defaults to 127.0.0.127
+                              to listen on all addresses, use 0.0.0.0
+
+  --help     | -h             display this message and exit
+
+Running pg-difficult will start an http server that will serve the client interface and
+handle connecting to requested databases. The server does not store any local state.
+Any configuration is only stored in browser local storage from the client, meaning any
+settings in the client will only apply to the specific url the browser accesses. So if
+you want seperate environments, you can use a different listening address or port to
+have a separate set of settings saved in the client.
+  `);
+      Deno.exit(0);
+      break;
   }
 }
 
