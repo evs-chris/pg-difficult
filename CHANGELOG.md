@@ -1,3 +1,13 @@
+## 1.2.3
+
+2023-04-06
+
+### (Tiny) Features / UI Bugs?
+
+* Changing the text in the segment name field will now automatically submit the change to the server 1.5s after typing has stopped because Andrew forgets to click the button.
+* Requests to the server will now show a spinner while in flight, since some connections are considerably slower than others, making schema retrieval and queries take a while. The feedback makes it less likely for you start to question whether you hit the button correctly or not.
+
+
 ## 1.2.2
 
 2023-03-31
