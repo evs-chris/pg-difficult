@@ -431,6 +431,9 @@ Window.extendWith(ControlPanel, {
     'status.segment'(v) {
       this.set('newSegment', v);
     },
+    newSegment(v) {
+      if (v && v !== this.get('status.segment')) this.next(v);
+    },
   },
 });
 

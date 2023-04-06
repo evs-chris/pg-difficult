@@ -251,8 +251,7 @@
     <tab title="Active Diffs">
       <div style="display: flex; justify-content: space-between; align-items: center;">
         <div>
-          <label as-field title="The segment name groups sets of changes together.">Segment<input value="{{~/newSegment}}" /></label>
-          <label as-field><button on-click="@.next(~/newSegment)" disabled="{{~/newSegment === ~/status.segment}}" title="Change the segment name and click here to begin recording changes in a new segment.">Change</button></label>
+          <label as-field title="The segment name groups sets of changes together. The segment will automatically be updated when you stop typing, and any new changes will get the new segment name.">Segment<input value="{{~/newSegment}}" lazy=1500 /></label>
         </div>
         <div>
           <button on-click="@.clear()" title="Remove all recorded changes.">Clear Entries</button>
