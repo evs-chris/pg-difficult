@@ -30,6 +30,7 @@ interface Connection {
 const config = {
   port: 1999,
   pollingInterval: 10000,
+  listen: '127.0.0.1',
 };
 
 // process args
@@ -41,6 +42,10 @@ for (let i = 0; i < Deno.args.length; i++) {
 
     case '--interval': case '-t':
       config.pollingInterval = +Deno.args[++i] || 10000;
+      break;
+
+    case '--listen': case '-l':
+      config.listen = Deno.args[++i] || '127.0.0.1';
       break;
   }
 }
@@ -516,4 +521,5 @@ pg_difficult stopped`);
 // start server
 await app.listen({
   port: config.port,
+  hostname: config.listen,
 });
