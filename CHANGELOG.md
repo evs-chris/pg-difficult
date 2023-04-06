@@ -1,5 +1,7 @@
 ## 1.3.0
 
+2023-04-06
+
 ### Bugs
 
 * The server will now successfully connect over SSL by prefering an SSL connection to a plain connection.
