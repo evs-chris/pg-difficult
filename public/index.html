@@ -414,7 +414,7 @@
       {{#unless (@.source && !~/loaded) && schemas}}
         <div />
       {{/unless}}
-      <label as-field title="Raport expression used to filter out entries. Available fields are id, new, old, schema, segment, source, stamp, and table. new and old are objects containing the fields that changed in the record. table, schema, source, and segment are strings.">Filter Expression<input value="{{expr}}" lazy=1000 /></label>
+      <label class=filter as-field title="Raport expression used to filter out entries. Available fields are id, new, old, schema, segment, source, stamp, and table. new and old are objects containing the fields that changed in the record. table, schema, source, and segment are strings.">Filter Expression<input value="{{expr}}" lazy=1000 /></label>
       {{#if ~/entries.length}}
         <button class=download on-click="@.download()" title="Download a file containing these entries. Hold the ctrl key while clicking to open a popup window of the HTML. Hold the shift key while clicking to download the HTML directly.">Download</button>
       {{else}}

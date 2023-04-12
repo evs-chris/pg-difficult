@@ -603,6 +603,8 @@ function reverseEntry(entry, schema) {
 
 const EntryCSS = `
 .controls { display: flex; justify-content: space-between; align-items: center; }
+.controls > * { margin: 0 0.5em; }
+.controls .filter { flex-grow: 1; }
 .diff { padding: 0.3em; display: flex; flex-wrap: wrap; }
 .diff .name, .diff .left, .diff .right { width: 33%; overflow: hidden; text-overflow: ellipsis; }
 .diff .name, .wrapper .name { font-weight: bold; }
