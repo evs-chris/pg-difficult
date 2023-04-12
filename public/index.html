@@ -156,20 +156,20 @@
 
   .version { opacity: 0.5; }
 </style>
-
+<!-- HEAD -->
 <script type=text/ractive id=template>
   <shell on-init="@.set('@.shell', $1)">
     <right hidden="{{menu.hidden}}" forced="{{menu.forced}}">
       <menu>
         <container>
           <div style="display: flex; align-items: center; justify-content: space-around; height: 3.4em; background-color: #325932;">
-            <span>pg-difficult <span class=version>- v{{~/status.VERSION}}</span></span>
+            <span>pg-difficult <span class=version>- v{{~/status.VERSION || '-client-only'}}</span></span>
           </div>
         </container>
         <item title="Control Panel" on-action="@.host.getWindow('control-panel').raise(true)" />
-        <section title="Active Diffs" bind-items="~/diffs" bind-hidden="(~/diffs || []).length < 1" />
-        <section title="Monitored Connections" bind-items="~/leaks" bind-hidden="(~/leaks || []).length < 1" />
-        <section title="Queries" bind-items="~/queries" bind-hidden="(~/queries || []).length < 1" />
+        <section title="Active Diffs" bind-items="~/diffs" bind-hidden="@global.clientOnly || (~/diffs || []).length < 1" />
+        <section title="Monitored Connections" bind-items="~/leaks" bind-hidden="@global.clientOnly || (~/leaks || []).length < 1" />
+        <section title="Queries" bind-items="~/queries" bind-hidden="@global.clientOnly || (~/queries || []).length < 1" />
         <section title="Tools" style="margin-top: 1em;">
           <item title="Reload Saved Entries" on-action="@.loadEntries()" />
           <item title="Reload Saved Schema" on-action="@.loadSchema()" />
@@ -215,7 +215,7 @@
 
 <script type=text/ractive id=control-panel>
   <tabs pad style="overflow: hidden;">
-    <tab title="Connections">
+    <tab title="Connections" hidden="@global.clientOnly">
       <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.3em;">
         <div>Connections are saved in browser storage and can be used to start diffs and run queries.</div>
         <button on-click="@.editConnection()" title="Add a saved connection for this browser at this url.">Add Connection</button>
@@ -258,7 +258,7 @@
         {{/each}}
       </div>
     </tab>
-    <tab title="Active Diffs">
+    <tab title="Active Diffs" hidden="@global.clientOnly">
       <div style="display: flex; justify-content: space-between; align-items: center;">
         <div>
           <label as-field title="The segment name groups sets of changes together. The segment will automatically be updated when you stop typing, and any new changes will get the new segment name.">Segment<input value="{{~/newSegment}}" lazy=1500 /></label>
@@ -285,7 +285,7 @@
         {{/each}}
       </div>
     </tab>
-    <tab title="Connection Monitor">
+    <tab title="Connection Monitor" hidden="@global.clientOnly">
       <div style="display: flex; justify-content: space-between; align-items: center;">
         <label as-field>Polling Interval<input type=number value="{{~/status.pollingInterval}}" on-change="@.poll()" lazy></label>
         <div style="flex-grow: 1;">
@@ -314,7 +314,7 @@
         {{/each}}
       </div>
     </tab>
-    <tab title="Saved Queries">
+    <tab title="Saved Queries" hidden="@global.clientOnly">
       <div style="padding: 0.3em;">Queries are saved in browser storage.</div>
       <div style="overflow: auto;">
         {{#each savedQueries}}
@@ -335,7 +335,7 @@
         {{/each}}
       </div>
     </tab>
-    <tab title="Reports">
+    <tab title="Reports" hidden="@global.clientOnly">
       <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.3em;">
         <div style="padding: 0.3em;">Reports are currently experimental and somewhat limited. Report definitions are saved in browser storage.</div>
         <div style="flex-shrink: 0;"><button title="Open a new report designer." on-click="@.report()">New Designer</button></div>

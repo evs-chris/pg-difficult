@@ -1154,7 +1154,11 @@ function load(ext, multi) {
   return res;
 }
 
-connect();
+if (!globalThis.clientOnly) connect();
+else {
+  app.set('connected', true);
+  app.findComponent('tabs').select(5);
+}
 
 Ractive.helpers.copyToClipboard = (function() {
   let clipEl;
