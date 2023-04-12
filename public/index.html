@@ -339,7 +339,7 @@
         {{/each}}
       </div>
     </tab>
-    <tab title="Reports" hidden="@global.clientOnly">
+    <tab title="Reports">
       <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.3em;">
         <div style="padding: 0.3em;">Reports are currently experimental and somewhat limited. Report definitions are saved in browser storage.</div>
         <div style="flex-shrink: 0;"><button title="Open a new report designer." on-click="@.report()">New Designer</button></div>
@@ -638,7 +638,8 @@
       <label as-field>Type<select value="{{source.type}}" on-change="@node.value === 'diff' ? @.set('source', { type: 'diff'}) : true">
         <option value="diff">Diff Entries</option>
         <option value="diff-schema">Diff Schema</option>
-        <option value="query">Query</option>
+        {{#if !@global.clientOnly}}<option value="query">Query</option>{{/if}}
+        <option value="json">JSON</option>
       </select></label>
     </div>
     {{#if source.type === 'query'}}
@@ -650,6 +651,8 @@
         <label as-field>Database<input value="{{source.config.database}}" /></label>
       </div>
       <label as-field>Query<textarea>{{source.query}}</textarea></label>
+    {{elseif source.type === 'json'}}
+      <label as-field>JSON<textarea>{{source.json}}</textarea></label>
     {{/if}}
   </div>
   <buttons>

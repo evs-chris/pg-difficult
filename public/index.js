@@ -71,7 +71,11 @@ Ractive.styleSet({
 }, { deep: true });
 
 function notify(msg) {
-  if (ws) ws.send(JSON.stringify(msg));
+  if (globalThis.ws) ws.send(JSON.stringify(msg));
+  else if (globalThis.clientOnly) {
+    app.host.toast('Server not available', { type: 'error' });
+    if ('id' in msg) request.error(msg.id, { error: 'Server not available' });
+  }
 }
 let request;
 {
@@ -1058,6 +1062,7 @@ class Report extends Window {
     const src = msg.source;
     if (src.type === 'diff') this.respond({ data: app.get('entries') }, msg);
     else if (src.type === 'diff-schema') this.respond({ data: app.get('schemas') }, msg);
+    else if (src.type === 'json') this.respond({ data: JSON.parse(src.json) }, msg);
     else {
       try {
         this.respond({ data: (await request({ action: 'query', query: [src.query], client: src.config })).result }, msg);
