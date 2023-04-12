@@ -360,9 +360,11 @@
     </tab>
     <tab title="Settings">
       <div style="display: flex; flex-direction: column;">
-        <label as-field class=inline><input type=checkbox bind-checked="~/settings.queryOrderColumns" /> Order query result columns alphabetically?</label>
-        <label as-field class=inline><input type=checkbox bind-checked="~/settings.allowUndoSegment" /> Enable undoing diff segments by default?</label>
-        <label as-field class=inline><input type=checkbox bind-checked="~/settings.allowUndoSingle" /> Enable undoing individual diff entries by default?</label>
+        {{#if !@global.clientOnly}}
+          <label as-field class=inline><input type=checkbox bind-checked="~/settings.queryOrderColumns" /> Order query result columns alphabetically?</label>
+          <label as-field class=inline><input type=checkbox bind-checked="~/settings.allowUndoSegment" /> Enable undoing diff segments by default?</label>
+          <label as-field class=inline><input type=checkbox bind-checked="~/settings.allowUndoSingle" /> Enable undoing individual diff entries by default?</label>
+        {{/if}}
         <label as-field class=inline><input type=checkbox bind-checked="~/settings.hideBlankFields" /> Hide empty string fields in diff records by default?</label>
         <label as-field class=inline><input type=checkbox bind-checked="~/settings.hideDefaultFields" /> Hide defaulted fields in diff records by default?</label>
       </div>
