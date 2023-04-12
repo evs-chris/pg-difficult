@@ -1060,9 +1060,27 @@ class Report extends Window {
 
   async fetchSource(msg) {
     const src = msg.source;
-    if (src.type === 'diff') this.respond({ data: app.get('entries') }, msg);
-    else if (src.type === 'diff-schema') this.respond({ data: app.get('schemas') }, msg);
-    else if (src.type === 'json') this.respond({ data: JSON.parse(src.json) }, msg);
+    if (src.type === 'diff') {
+      if (Object.keys(app.get('status.clients') || {}).length) {
+        this.respond({ data: app.get('entries') }, msg);
+      } else {
+        for (const id of app.host.windows) {
+          const wnd = app.host.getWindow(id);
+          if (wnd && wnd.get('loaded')) return this.respond({ data: wnd.get('loaded.entries') }, msg);
+        }
+        this.respond({ data: [] }, msg);
+      }
+    } else if (src.type === 'diff-schema') {
+      if (Object.keys(app.get('status.clients') || {}).length) {
+        this.respond({ data: app.get('schemas') }, msg);
+      } else {
+        for (const id of app.host.windows) {
+          const wnd = app.host.getWindow(id);
+          if (wnd && wnd.get('loaded')) return this.respond({ data: wnd.get('loaded.schemas') }, msg);
+        }
+        this.respond({ data: [] }, msg);
+      }
+    } else if (src.type === 'json') this.respond({ data: JSON.parse(src.json) }, msg);
     else {
       try {
         this.respond({ data: (await request({ action: 'query', query: [src.query], client: src.config })).result }, msg);
