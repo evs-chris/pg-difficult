@@ -424,7 +424,7 @@
     <virtual-list bind-items="~/entries" size=100>
       <header>
         {{#if .segment}}
-          <div class=header><h2>{{.segment}}</h2> {{#if ~/allowUndoSegment}}<button class=undo on-click="@.undoSegment(record)" title="Undo all changes in this segment by replaying the changes in reverse. This will also create a new segment named 'Undo {{.segment}}', unless you hold the ctrl key when clicking this button.">Undo</button>{{/if}}</div>
+          <div class=header><h2>{{.segment}}</h2> {{#if ~/allowUndoSegment}}<button class=undo on-click="@.undoSegment(.)" title="Undo all changes in this segment by replaying the changes in reverse. This will also create a new segment named 'Undo {{.segment}}', unless you hold the ctrl key when clicking this button.">Undo</button>{{/if}}</div>
         {{/if}}
       </header>
       {{#with . as record, @.details(.) as entry}}
