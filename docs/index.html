@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="en-US">
+  <head>
+    <title>pg-difficult</title>
+    <link rel="shortcut icon" href="./icon.png" />
+    <script src="./ractive@1.4.2.js"></script>
+    <script src="./raport@0.18.1.js"></script>
+    <script src="./raui@0.13.0/button.js"></script>
+    <script src="./raui@0.13.0/form.js"></script>
+    <script src="./raui@0.13.0/Window.js"></script>
+    <script src="./raui@0.13.0/AppBar.js"></script>
+    <script src="./raui@0.13.0/Shell.js"></script>
+    <script src="./raui@0.13.0/Menu.js"></script>
+    <script src="./raui@0.13.0/Tabs.js"></script>
+    <script src="./raui@0.13.0/Table.js"></script>
+    <script src="./raui@0.13.0/VirtualList.js"></script>
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    font-family: sans-serif;
+  }
+  h1, h2, h3 {
+    margin: 0;
+    padding: 0 0 0.5em 0;
+  }
+  .content {
+    display: flex;
+  }
+  .hamburger {
+    width: 2em;
+    height: 2em;
+  }
+  .hamburger:after {
+    width: 100%;
+    height: 100%;
+    font-weight: bold;
+    font-size: 1.5em;
+    content: '\002261';
+  }
+  #not-connected {
+    position: absolute;
+    background-color: rgba(0, 0, 0, 0.2);
+    width: 100%;
+    height: 100%;
+    top: 0;
+    left: 0;
+    position: absolute;
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
+    z-index: 100;
+    cursor: wait;
+  }
+  #not-connected .wrapper {
+    display: flex;
+    flex-direction: column;
+  }
+  .loader {
+    width: 100%;
+    height: 100%;
+    transform: rotate(-90deg);
+    stroke-linecap: round;
+    stroke-width: 4;
+    fill: none;
+    display: block;
+    margin: 0 auto;
+  }
+  .rappbar .loader {
+    stroke-width: 10;
+  }
+  #not-connected .reconnecting {
+    margin-top: 1em;
+    text-align: center;
+    font-weight: bold;
+    color: #fff;
+    font-size: 1.2rem;
+    text-shadow: 0 0 1em #222;
+  }
+    
+  .loader .internal-circle,
+  .loader .external-circle {
+    stroke: #fff;
+    stroke-dashoffset: 0;
+    transform-origin: center;
+  }
+  
+  .loader .internal-circle {
+    stroke-dasharray: 187;
+    animation: internal-circle 1s ease-in-out infinite;
+    opacity: .4;
+  }
+  
+  .loader .external-circle {
+    stroke-dasharray: 312;
+    animation: external-circle 1s linear infinite;
+    opacity: .9;
+  }
+
+  @keyframes internal-circle {
+    0% {
+      stroke-dashoffset: 187;
+    }
+    25% {
+      stroke-dashoffset: 80;
+    }
+    100% {
+      stroke-dashoffset: 187;
+      transform: rotate(360deg);
+    }
+  }
+
+  @keyframes external-circle {
+    0% {
+      stroke-dashoffset: 312;
+      transform: rotate(70deg);
+    }
+    60% {
+      stroke-dashoffset: -312;
+    }
+    100% {
+      stroke-dashoffset: -312;
+      transform: rotate(450deg);
+    }
+  }
+
+  .stretch-fields {
+    display: flex;
+  }
+  .stretch-fields > * {
+    flex-grow: 1;
+  }
+
+  .striped:nth-child(odd), .striped-odd {
+    background-color: #eee;
+    padding: 0.3em;
+    box-sizing: border-box;
+    border-radius: 0.3em;
+  }
+  .striped, .striped-even {
+    background-color: #fff;
+    padding: 0.3em;
+    box-sizing: border-box;
+    border-radius: 0.3em;
+  }
+  .striped > * {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .content-wrapper {
+    display: flex;
+    flex-direction: column;
+    flex-grow: 1;
+    overflow: auto;
+    position: relative;
+    padding: 0.5em;
+    box-sizing: border-box;
+  }
+
+  .version { opacity: 0.5; }
+</style>
+<script>clientOnly = true</script>
+<script type=text/ractive id=template>
+  <shell on-init="@.set('@.shell', $1)">
+    <right hidden="{{menu.hidden}}" forced="{{menu.forced}}">
+      <menu>
+        <container>
+          <div style="display: flex; align-items: center; justify-content: space-around; height: 3.4em; background-color: #325932;">
+            <span>pg-difficult <span class=version>- v{{~/status.VERSION || '-client-only'}}</span></span>
+          </div>
+        </container>
+        <item title="Control Panel" on-action="@.host.getWindow('control-panel').raise(true)" />
+        <section title="Active Diffs" bind-items="~/diffs" bind-hidden="@global.clientOnly || (~/diffs || []).length < 1" />
+        <section title="Monitored Connections" bind-items="~/leaks" bind-hidden="@global.clientOnly || (~/leaks || []).length < 1" />
+        <section title="Queries" bind-items="~/queries" bind-hidden="@global.clientOnly || (~/queries || []).length < 1" />
+        <section title="Tools" style="margin-top: 1em;">
+          <item title="Reload Saved Entries" on-action="@.loadEntries()" />
+          <item title="Reload Saved Schema" on-action="@.loadSchema()" />
+        </section>
+        <section title="Other Windows" style="margin-top: 1em;" bind-items="~/others" bind-hidden="(~/others || []).length < 1" />
+      </menu>
+    </right>
+    <center style="display: flex; flex-direction: column;">
+      {{#if !@.host.data.currentMax}}
+        <app-bar>
+          <left>{{#if waiting}}<div style="height: 1.5em;">{{>loader}}</div>{{/if}}</left>
+          <right><div class=hamburger on-click="@.toggle('menu.hidden')" /></right>
+        </app-bar>
+      {{/if}}
+      <div style="flex-grow: 1;">
+        <host placement=smart on-init="@.set('@.host', $1)">
+          <max-top>
+            <app-bar>
+              <left>{{#if waiting}}<div style="height: 1.5em;">{{>loader}}</div>{{/if}}</left>
+              <center>{{window.title}}</center>
+              <right>{{>windowControls}}<div class=hamburger on-click="@.toggle('menu.hidden')" style="margin-left: 2em;" /></right>
+            </app-bar>
+          </max-top>
+        </host>
+      </div>
+    </center>
+  </shell>
+  {{#unless ~/connected}}<div id="not-connected">
+    <div class=wrapper>
+      {{>loader}}
+      <div class=reconnecting>Reconnecting...</div>
+    </div>
+  </div>{{/unless}}
+  <input type=file id=file />
+</script>
+
+<script type=text/ractive id=loader>
+  <svg class="loader" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg">
+    <circle class="internal-circle" cx="60" cy="60" r="30"></circle>
+    <circle class="external-circle" cx="60" cy="60" r="50"></circle>
+  </svg>
+</script>
+
+<script type=text/ractive id=control-panel>
+  <tabs pad style="overflow: hidden;">
+    <tab title="Connections" hidden="@global.clientOnly">
+      <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.3em;">
+        <div>Connections are saved in browser storage and can be used to start diffs and run queries.</div>
+        <button on-click="@.editConnection()" title="Add a saved connection for this browser at this url.">Add Connection</button>
+      </div>
+      <div style="overflow: auto;">
+        {{#each connections}}
+          <div class="connection striped">
+            <div class="constr">
+              <div>{{constr(.)}}</div>
+              <div>
+                <button class=flat disabled="{{@index === 0}}" on-click="moveUp(@context)">Move Up</button>
+                <button class=flat disabled="{{@index === @last}}" on-click="moveDown(@context)">Move Down</button>
+              </div>
+              <div>
+                <button class=flat on-click="@.editConnection(@index)" {{#if @.hasDiff(.) || @.hasLeak(.)}}disabled title="Stop active watchers to modify this connection"{{else}}title="Edit this saved connection."{{/if}}>Edit</button>
+                <button class=flat on-click="@.splice('connections', @index, 1)" {{#if @.hasDiff(.) || @.hasLeak(.)}}disabled title="Stop active watchers to modify this connection"{{else}}title="Remove this saved connection."{{/if}}>Remove</button><br/>
+              </div>
+            </div>
+            <div class="actions">
+              {{#if !@.hasDiff(.)}}<button on-click="@.startDiff(.)" title="Begin recording changes to tables in this database.">Start Diff</button>
+              {{else}}
+                <div>
+                  <button on-click="@.stopDiff(.)" title="Cease recording changes to tables in this database.">Stop Diff</button>
+                  <button on-click="@.entries(.)" title="View recoded entries from this database">Entries</button>
+                </div>
+              {{/if}}
+              {{#if !@.hasLeak(.)}}<button on-click="@.startLeak(.)" title="Begin monitoring connections to this database.">Start Monitor</button>
+              {{else}}
+                <div>
+                  <button on-click="@.stopLeak(.)" title="Cease monitoring connections to this database.">Stop Monitor</button>
+                  <button on-click="@.leaks(.)" title="View monitored connecstions to this database">Connections</button>
+                </div>
+              {{/if}}
+              <button on-click="@.query(.)" title="Open a query window to run queries against this database.">Query</button>
+              <button on-click="@.schema(.)" title="View this database's schema.">Schema</button>
+            </div>
+          </div>
+        {{else}}
+          No connections have been saved.
+        {{/each}}
+      </div>
+    </tab>
+    <tab title="Active Diffs" hidden="@global.clientOnly">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div>
+          <label as-field title="The segment name groups sets of changes together. The segment will automatically be updated when you stop typing, and any new changes will get the new segment name.">Segment<input value="{{~/newSegment}}" lazy=1500 /></label>
+        </div>
+        <div>
+          <button on-click="@.clear()" title="Remove all recorded changes.">Clear Entries</button>
+          <button on-click="@.entries()" title="View all recorded entries in a single combined set.">Combined Entries</button>
+          <button on-click="@.addDiff()" title="Start recording changes to an ephemeral connection.">Add Connection</button>
+        </div>
+      </div>
+      <div style="overflow: auto;">
+        {{#each Object.values(~/status.clients || {})}}
+          <div class="record striped">
+            <div class="constr">{{.source}}</div>
+            <div class="actions">
+              <button on-click="@.query(.config)" title="Open a query widnow to run queries against this database.">Query</button>
+              <button on-click="@.schema(.config)" title="View this database's schema.">Schema</button>
+              <button on-click="@.entries(.id)" title="View recorded entries from this database.">Entries</button>
+              <button on-click="@.stopDiff(.config)" title="Cease recording changes to tables in this database.">Stop Diff</button>
+            </div>
+          </div>
+        {{else}}
+          There are no active diffs.
+        {{/each}}
+      </div>
+    </tab>
+    <tab title="Connection Monitor" hidden="@global.clientOnly">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <label as-field>Polling Interval<input type=number value="{{~/status.pollingInterval}}" on-change="@.poll()" lazy></label>
+        <div style="flex-grow: 1;">
+          The connection monitor polls the server for active connections at a set interval. Connections that appear after the initial connection is made are monitored.
+        </div>
+        <div style="text-align: right;">
+          <button on-click="@.leaks()" title="View monitored connections for all databases.">All Connections</button>
+          <button on-click="@.addLeak()" title="Start monitoring connections on an ephemeral connection.">Add Connection</button>
+        </div>
+      </div>
+      <div style="overflow: auto;">
+        {{#each Object.values(~/status.leaks || {})}}
+          {{#each .databases}}
+            <div class="record striped">
+              <div class="constr">{{constr(^^/config, { database: . })}}</div>
+              <div class=actions>
+                <button on-click="@.query(^^/config, .)" title="Open a query widnow to run queries against this database.">Query</button>
+                <button on-click="@.leaks(^^/id, .)" title="View monitored connections to this database.">Connections</button>
+                <button on-click="@.schema(^^/config, .)" title="View this database's schema.">Schema</button>
+                <button on-click="@.stopLeak(^^/config, .)">Stop Monitor</button>
+              </div>
+            </div>
+          {{/each}}
+        {{else}}
+          There are no active connection monitors.
+        {{/each}}
+      </div>
+    </tab>
+    <tab title="Saved Queries" hidden="@global.clientOnly">
+      <div style="padding: 0.3em;">Queries are saved in browser storage.</div>
+      <div style="overflow: auto;">
+        {{#each savedQueries}}
+          <div class="query striped">
+            <div class="name">{{.name}}</div>
+            <div class="sql">{{.sql}}</div>
+            <div class="actions">
+              {{#if ~/loadedQuery === .}}
+                <button on-click="@.set('loadedQuery', undefined)" title="Click to cancel waiting to load this query from a query window.">Cancel</button>
+              {{else}}
+                <button on-click="@.set('loadedQuery', .)" title="Set this query up to be loaded from a query window.">Load</button>
+              {{/if}}
+              <button on-click="@.splice('savedQueries', @index, 1)" title="Remove this query from browser storage.">Remove</button>
+            </div>
+          </div>
+        {{else}}
+          No queries have been saved.
+        {{/each}}
+      </div>
+    </tab>
+    <tab title="Reports">
+      <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.3em;">
+        <div style="padding: 0.3em;">Reports are currently experimental and somewhat limited. Report definitions are saved in browser storage.</div>
+        <div style="flex-shrink: 0;"><button title="Open a new report designer." on-click="@.report()">New Designer</button></div>
+        </div>
+      <div style="overflow: auto;">
+        {{#each savedReports}}
+          <div class="report striped">
+            <div class=name>{{.definition.name}}</div>
+            <div class=actions>
+              <button on-click="@.report(.)" title="Open this report in the designer.">Designer</button>
+              <button on-click="@.splice('savedReports', @index, 1)" title="Remove this report from browser storage.">Remove</button>
+            </div>
+          </div>
+        {{else}}
+          No reports have been saved.
+        {{/each}}
+      </div>
+    </tab>
+    <tab title="Settings">
+      <div style="display: flex; flex-direction: column;">
+        {{#if !@global.clientOnly}}
+          <label as-field class=inline><input type=checkbox bind-checked="~/settings.queryOrderColumns" /> Order query result columns alphabetically?</label>
+          <label as-field class=inline><input type=checkbox bind-checked="~/settings.allowUndoSegment" /> Enable undoing diff segments by default?</label>
+          <label as-field class=inline><input type=checkbox bind-checked="~/settings.allowUndoSingle" /> Enable undoing individual diff entries by default?</label>
+        {{/if}}
+        <label as-field class=inline><input type=checkbox bind-checked="~/settings.hideBlankFields" /> Hide empty string fields in diff records by default?</label>
+        <label as-field class=inline><input type=checkbox bind-checked="~/settings.hideDefaultFields" /> Hide defaulted fields in diff records by default?</label>
+      </div>
+    </tab>
+  </tabs>
+</script>
+
+<script type=text/ractive id=query>
+  <div style="border-bottom: 1px solid; display: flex; justify-content: space-between;">
+    <button on-click="@.run(.query)" title="Execute this query and return the result. (ctrl+Enter)">Run</button>
+    <label as-field class=inline><input type=checkbox bind-checked="settings.queryOrderColumns" /> Order query result columns alphabetically?</label>
+    {{#if ~/loadedQuery}}
+      <button on-click="@.load()" title="Load the selected saved query in this window.">Load Query</button>
+    {{elseif .query}}
+      <div>
+        <button on-click="@.save()">Save</button>
+        {{#if .name}}<button on-click="@.set('name', undefined)" title="This query is currently saved as {{.name}}. Click here to disconnect this query from that named query. When the query is disconnected, it may be saved with a different name.">Unload</button>{{/if}}
+      </div>
+    {{/if}}
+  </div>
+  <div class="query">
+    <div class="query-text"><textarea value="{{.query}}" on-keydown="@event.ctrlKey && @event.key === 'Enter' ? @.run(.query) : true" /></div>
+    <div class="result">
+      <data-table auto-titles no-wrap fixed-header allow-select=false on-init="@.set('@.table', $1)" items="{{.result}}">
+        <bottom>
+          <div style="display:flex; justify-content: space-between;">
+            <span>{{#if !.result.length && .affected != null}}{{.affected}} rows affected.{{/if}} {{#unless .error}}{{.result.length || 'No'}} rows{{#if .result.length}}, {{@.table.data.columns.length}} cols{{/if}}{{/unless}}</span>
+            <span>{{#if runtime != null}}Completed in {{runtime}}ms{{/if}}</span>
+          </div>
+        </bottom>
+      </data-table>
+    </div>
+  </div>
+</script>
+
+<script type=text/ractive id=entries>
+  <div class="content-wrapper">
+    <div class="controls">
+      {{#if @.source && !~/loaded}}
+        <label title="Check to enable undoing segments"><input type=checkbox bind-checked="~/allowUndoSegment" /> Undo segments?</label>
+        <label title="Check to enable undoing individual entries"><input type=checkbox bind-checked="~/allowUndoSingle" /> Undo single?</label>
+      {{/if}}
+      {{#if schemas}}
+        <label title="Check to hide empty string fields in entries"><input type=checkbox bind-checked="~/hideBlankFields" /> Hide blank?</label>
+        <label title="Check to hide fields with default values in entries"><input type=checkbox bind-checked="~/hideDefaultFields" /> Hide default?</label>
+      {{/if}}
+      {{#unless (@.source && !~/loaded) && schemas}}
+        <div />
+      {{/unless}}
+      <label class=filter as-field title="Raport expression used to filter out entries. Available fields are id, new, old, schema, segment, source, stamp, and table. new and old are objects containing the fields that changed in the record. table, schema, source, and segment are strings.">Filter Expression<input value="{{expr}}" lazy=1000 /></label>
+      {{#if ~/entries.length}}
+        <button class=download on-click="@.download()" title="Download a file containing these entries. Hold the ctrl key while clicking to open a popup window of the HTML. Hold the shift key while clicking to download the HTML directly.">Download</button>
+      {{else}}
+        <div />
+      {{/if}}
+    </div>
+    <virtual-list bind-items="~/entries" size=100>
+      <header>
+        {{#if .segment}}
+          <div class=header><h2>{{.segment}}</h2> {{#if ~/allowUndoSegment}}<button class=undo on-click="@.undoSegment(record)" title="Undo all changes in this segment by replaying the changes in reverse. This will also create a new segment named 'Undo {{.segment}}', unless you hold the ctrl key when clicking this button.">Undo</button>{{/if}}</div>
+        {{/if}}
+      </header>
+      {{#with . as record, @.details(.) as entry}}
+        {{#if entry.status}}
+          {{#if entry.changed}}
+            <div class="wrapper striped-{{index % 2 == 0 ? 'even' : 'odd'}}">
+              <div class=name><span>{{record.table}} {{entry.id || ''}} {{entry.status}}</span><span class=src>({{record.source}})</span></div>
+              {{#each entry.changed}}
+                <div class="diff">
+                  <div class="name">{{this.0}}</div>
+                  <div class="left">{{typeof this.1.0 === 'object' ? JSON.stringify(this.1.0) : this.1.0}}</div>
+                  <div class="right">{{typeof this.1.1 === 'object' ? JSON.stringify(this.1.1) : this.1.1}}</div>
+                </div>
+              {{/each}}
+
+              {{#if ~/allowUndoSingle}}<button class=undo on-click="@.undoSingle(record)" title="Undo this change by running the inverse of the statment that created the change.">Undo</button>{{/if}}
+            </div>
+          {{else}}
+            <div class="diff whole striped-{{index % 2 == 0 ? 'even' : 'odd'}}">
+              <div class=name><span>{{record.table}} {{entry.id || ''}} {{entry.status}}</span><span class=src>({{record.source}})</span></div>
+              {{#each entry.record}}
+                <div class="entry"><div class="key">{{this.0}}</div><div class="value">{{typeof this.1 === 'object' ? JSON.stringify(this.1) : this.1}}</div></div>
+              {{/each}}
+
+              {{#if ~/allowUndoSingle}}<button class=undo on-click="@.undoSingle(record)" title="Undo this change by running the inverse of the statment that created the change.">Undo</button>{{/if}}
+            </div>
+          {{/if}}
+        {{else}}
+          <div class="wrapper striped-{{index % 2 == 0 ? 'even' : 'odd'}}">
+            <div class=name><span>{{record.table}} {{entry.id || ''}} {{entry.status || '(empty changeset)'}}</span><span class=src>({{record.source}})</span></div>
+          </div>
+        {{/if}}
+      {{/with}}
+      {{#if ~/entries[index + 1] && ~/entries[index + 1].segment !== .segment}}
+        <div class=header><h2>{{~/entries[index + 1].segment}}</h2> {{#if ~/allowUndoSegment}}<button class=undo on-click="@.undoSegment(~/entries[index + 1])" title="Undo all changes in this segment by replaying the changes in reverse. This will also create a new segment named 'Undo {{~/entries[index + 1].segment}}', unless you hold the ctrl key when clicking this button.">Undo</button>{{/if}}</div>
+      {{/if}}
+      <else>
+        No change entries have been recorded.
+      </else>
+    </virtual-list>
+  </div>
+</script>
+
+<script type=text/ractive id=entries-text>
+  <div class=content-wrapper>
+  {{#each ~/entries as record}}{{#with @.details(record) as entry}}
+    {{#if @index === 0 || ~/entries[@index - 1].segment !== .segment}}<div class=header><h2>{{.segment}}</h2></div>{{/if}}
+    {{#if entry.status}}
+      {{#if entry.changed}}
+        <div class="wrapper striped">
+          <div class=name><span>{{record.table}} {{entry.id || ''}} {{entry.status}}</span><span class=src>({{record.source}})</span></div>
+          {{#each entry.changed}}
+            <div class="diff">
+              <div class="name">{{this.0}}</div>
+              <div class="left">{{typeof this.1.0 === 'object' ? JSON.stringify(this.1.0) : this.1.0}}</div>
+              <div class="right">{{typeof this.1.1 === 'object' ? JSON.stringify(this.1.1) : this.1.1}}</div>
+            </div>
+          {{/each}}
+        </div>
+      {{else}}
+        <div class="diff whole striped">
+          <div class=name><span>{{record.table}} {{entry.id || ''}} {{entry.status}}</span><span class=src>{{record.source}}</span></div>
+          {{#each entry.record}}
+            <div class="entry"><div class="key">{{this.0}}</div><div class="value">{{typeof this.1 === 'object' ? JSON.stringify(this.1) : this.1}}</div></div>
+          {{/each}}
+        </div>
+      {{/if}}
+    {{/if}}
+  {{/with}}{{else}}
+    No change entries have been recorded.
+  {{/each}}
+  </div>
+</script>
+
+<script type=text/ractive id=leaks>
+  {{#partial leak}}
+    <div>Updated {{age(~/status.lastUpdate)}}</div>
+    <div class="leak header">
+      <div class=user>User</div>
+      <div class=application>Application</div>
+      <div class=client>Client</div>
+      <div class=state>State</div>
+      <div class=started>Started</div>
+      <div class=constr>Connection</div>
+      <div class=pid>Process ID</div>
+    </div>
+    {{#each leaks}}
+      <div class="leak striped">
+        <div class=user>{{.user}}</div>
+        <div class=application>{{.application}}</div>
+        <div class=client>{{.client}}</div>
+        <div class=state>{{.state}}</div>
+        <div class=started title="{{.started}}">{{age(.started)}}</div>
+        <div class=constr>{{.source}}</div>
+        <div class=pid>{{.pid}}</div>
+      </div>
+    {{else}}
+      No connections.
+    {{/each}}
+  {{/partial}}
+  <tabs style="overflow: hidden;" no-pad>
+    <tab title="Added">
+      <div class=content-wrapper>{{>leak leaks as leaks}}</div>
+    </tab>
+    <tab title="Current" defer>
+      <div class=content-wrapper>{{>leak current as leaks}}</div>
+    </tab>
+    <tab title="Initial" defer>
+      <div class=content-wrapper>{{>leak initial as leaks}}</div>
+    </tab>
+  </tabs>
+</script>
+
+<script type=text/ractive id=schema>
+  <div class=content-wrapper>
+    <virtual-list bind-items="~/entries" size=34 style="flex-grow: 1;">
+      <header>
+        <div style="border-bottom: 1px solid;">
+          <div class="stretch-fields">
+            <label as-field>Search<input value="{{~/filter}}" lazy=500 /></label>
+            <label as-field title="Available fields are column.{name, default, enum, type, pgtype, nullable, length, precision, pkey, schema, table}">Expression<input value="{{~/expr}}" lazy=500 /></label>
+            {{#if !~/compareSchema || ~/compareSchema.schema !== ~/schema}}
+              <label as-field style="flex-grow: 0;"><button on-click="@.compareSchema()" title="Compare this schema to another database's schema.">Compare</button></label>
+            {{else}}
+              <label as-field style="flex-grow: 0;"><button on-click="@.set('compareSchema', undefined)" title="Cancel eaiting for another schema to be selected to compare to this schema.">Cancel</button></label>
+            {{/if}}
+            <label as-field style="flex-grow: 0;"><button on-click="@.download()" title="Download a file containing this schema.">Download</button></label>
+          </div>
+          <div class="schema-row" style="font-weight: bold;">
+            <div class="name">Name</div>
+            <div class="nullable">Null</div>
+            <div class="default">Default</div>
+            <div class="type">Type</div>
+            <div class="size">Size</div>
+          </div>
+        </div>
+        {{#if index}}
+          <div class="schema-row table" style="padding: 0.5em;" on-click="@.toggle('expanded.' + escapeKey(.table || .name))">
+            <div class="name">{{.table || .name}}</div>
+            <div class="details">({{@.colsFor(.table || .name)}} cols{{#if ~/filter || ~/expr}}, {{~/matches[.table || .name].length}} match{{/if}})</div>
+          </div>
+        {{/if}}
+      </header>
+      <item class="striped-{{index % 2 ? 'odd' : 'even'}}">
+        {{#if !.table}}
+          <div class="schema-row table" on-click="@.toggle('expanded.' + escapeKey(.name))">
+            <div class="name">{{.name}}</div>
+            <div class="details">({{.columns.length}} cols{{#if ~/filter || ~/expr}}, {{matches[.name].length}} match{{/if}})</div>
+          </div>
+        {{else}}
+          <div class="schema-row column">
+            <div class="name {{#if .pkey}}pkey{{/if}}" {{#if .default}}title="Default: {{.default}}"{{/if}}>
+              <div class=expand-indicator class-expanded class-matched />
+              {{.name}}
+            </div>
+            <div class="nullable">{{.nullable ? 'Y' : 'N'}}</div>
+            <div class="default" {{#if .default}}title="{{.default}}"{{/if}}>{{.default ? 'Y' : 'N'}}</div>
+            <div class="type" {{#if .enum}}title="Values: {{.enum.join(', ')}}"{{/if}}>{{.pgtype}}</div>
+            <div class="size">{{#if .length != null}}{{.length}}{{elseif .precision != null}}{{.precision}}{{/if}}</div>
+          </div>
+        {{/if}}
+      </item>
+      <else>
+        <div class="schema-row">
+          No {{#if ~/filter || ~/expr}}matching{{/if}} tables or columns.
+        </div>
+      </else>
+    </virtual-list>
+    <div style="padding: 0.5em; border-top: 1px solid;">
+      {{~/schema.length}} tables, {{~/colCount}} columns{{#if ~/filter || ~/expr}}, {{~/matchCount}} match{{/if}}
+    </div>
+  </div>
+</script>
+
+<script type=text/ractive id=schema-compare>
+  <div class=content-wrapper>
+    {{#each diff as pair}}
+      {{#if pair[0] != null && pair[1] != null}}
+        <div class="schema-diff striped">
+          <div class="name" title="{{@key}}">{{@key}}</div>
+          <div class="left" title="{{pair[0]}}">{{pair[0]}}</div>
+          <div class="right" title="{{pair[1]}}">{{pair[1]}}</div>
+        </div>
+      {{else}}
+        <div class="schema-diff whole striped">
+          <div class="name">{{#if pair[0] == null}}Added{{else}}Removed{{/if}} {{@key}}</div>
+          {{#each pair[0] || pair[1]}}
+            <div class="entry"><div class="key">{{@key}}</div><div class="value">{{.}}</div></div>
+          {{/each}}
+        </div>
+      {{/if}}
+    {{else}}
+      No differences.
+    {{/each}}
+  </div>
+</script>
+
+<script type=text/ractive id=report>
+  <iframe src="/report.html"></iframe>
+  {{#unless ~/control.topmost}}<div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0;" />{{/unless}}
+  <buttons>
+    <button left on-click="@.close()">Cancel</button>
+    <button on-click="@.save()">Save</button>
+  </buttons>
+</script>
+
+<script type=text/ractive id=source-edit>
+  <div class=content-wrapper>
+    <div>
+      <label as-field>Name<input value="{{source.name}}" /></label>
+      <label as-field>Type<select value="{{source.type}}" on-change="@node.value === 'diff' ? @.set('source', { type: 'diff'}) : true">
+        <option value="diff">Diff Entries</option>
+        <option value="diff-schema">Diff Schema</option>
+        {{#if !@global.clientOnly}}<option value="query">Query</option>{{/if}}
+        <option value="json">JSON</option>
+      </select></label>
+    </div>
+    {{#if source.type === 'query'}}
+      <div>
+        <label as-field>Host<input value="{{source.config.host}}" /></label>
+        <label as-field>Port<input type=number value="{{source.config.port}}" /></label>
+        <label as-field>User<input value="{{source.config.username}}" /></label>
+        <label as-field>Password<input type=password value="{{source.config.password}}" /></label>
+        <label as-field>Database<input value="{{source.config.database}}" /></label>
+      </div>
+      <label as-field>Query<textarea>{{source.query}}</textarea></label>
+    {{elseif source.type === 'json'}}
+      <label as-field>JSON<textarea>{{source.json}}</textarea></label>
+    {{/if}}
+  </div>
+  <buttons>
+    <button left on-click="@.close()">Cancel</button>
+    <button on-click="@.close(false, source)">Done</button>
+  </buttons>
+</script>
+
+<script type=text/ractive id=connect>
+  <div class="connect">
+    <label as-field>Host<input value="{{~/config.host}}" /></label>
+    <label as-field>Port<input type=number value="{{~/config.port}}" /></label>
+    <label as-field>User<input value="{{~/config.username}}" /></label>
+    <label as-field>Password<input type=password value="{{~/config.password}}" /></label>
+    <label as-field>Database<input value="{{~/config.database}}" /></label>
+  </div>
+  <buttons>
+    <button left class=flat on-click="@.cancel()">Cancel</button>
+    <button on-click="@.accept()">Done</button>
+  </buttons>
+</script>
+
+<script type=text/ractive id=ask>
+  <div class=content-wrapper>
+    <div class="message" style="max-width: 36em;">{{.message}}</div>
+    <label as-field class=inline><input value="{{.value}}" /></label>
+  </div>
+  <buttons>
+    <button left class=flat on-click="@.close()">Cancel</button>
+    <button on-click="@.close(true, ~/value)">Done</button>
+  </buttons>
+</script>
+
+<script type=text/ractive id=choose>
+  <div class=content-wrapper>
+    <div class="message" style="max-width: 36em;">{{.message}}</div>
+  </div>
+</script>
+
+  </head>
+  <body>
+<div id=target />
+
+<script src="./index.js"></script>
+  </body>
+</html>
