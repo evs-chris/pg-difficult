@@ -1719,6 +1719,17 @@
     }
     const parse$1 = parser(alt(map(rep1(content), args => concat(args)), map(ws, () => ({ v: '' }))), { trim: true });
 
+    function toDataSet(value) {
+        if (Array.isArray(value))
+            return { value };
+        if (value && typeof value === 'object') {
+            for (const k in value)
+                if (k !== 'schema' && k !== 'value')
+                    return { value };
+            return value;
+        }
+        return { value };
+    }
     // eval
     function getKeypath(ref) {
         if (typeof ref.r === 'object')
@@ -2249,7 +2260,7 @@
             root: context.root,
             path: opts.path || '',
             value: 'value' in opts ? opts.value : context.value,
-            special: opts.special || {},
+            special: opts.fork ? Object.assign({}, context.special, { pipe: undefined }, opts.special) : (opts.special || {}),
             parser: opts.parser,
             locals: opts.locals,
         };
@@ -3032,8 +3043,8 @@
         for (const source of sources) {
             let base = map[source.source || source.name] || { value: [] };
             if (source.base)
-                base = { value: evaluate(extend$1(context, { value: base.value, special: { source: base } }), source.base) };
-            srcs[source.name || source.source] = base;
+                base = evaluate(extend$1(context, { value: base.value, special: { source: base } }), source.base);
+            srcs[source.name || source.source] = toDataSet(base);
         }
         for (const source of sources) {
             if (source.filter || source.sort || source.group)
@@ -3047,7 +3058,7 @@
         if (source.filter || source.sort || source.group)
             context.sources[source.name || source.source] = filter(base, source.filter, source.sort, source.group, context);
         else
-            context.sources[source.name || source.source] = base;
+            context.sources[source.name || source.source] = toDataSet(base);
     }
     function runDelimited(report, context) {
         const source = context.root.sources[report.source ? report.source : (report.sources[0].name || report.sources[0].source)];
@@ -3360,50 +3371,63 @@
             let usedX = 0;
             let usedY = 0;
             let initY = y;
-            for (let i = (state && state.state && state.state.current) || 0; i < arr.length; i++) {
-                const c = group && group.grouped ?
-                    extend(rctx, { value: arr[i], special: { index: i, values: {} } }) :
-                    extend(rctx, { value: arr[i], special: { index: i } });
-                if (group && group.grouped) {
-                    const s = (state && state.child) || { offset: 0, state: { current: 0, src: arr[i], part: 'group' } };
-                    r = renderWidget(w, c, { x: 0, y, availableX: availableX - usedX, availableY, maxX: placement.maxX, maxY: placement.maxY }, s);
-                }
-                else
-                    r = renderWidget(w.row, c, { x: usedX, y, availableX: availableX - usedX, maxX: placement.maxX, availableY, maxY: placement.maxY }, state ? state.child : undefined);
-                if (state)
-                    state.child = null;
-                if (r.width && r.width <= availableX - usedX && r.width !== availableX) {
-                    usedX += r.width;
-                    if (r.height > usedY)
-                        usedY = r.height;
-                }
-                else if (r.width && usedX && r.width > availableX - usedX) {
-                    y += usedY;
-                    initY = y;
-                    availableY -= usedY;
-                    usedY = 0;
-                    usedX = 0;
-                    i--;
-                    continue;
-                }
-                if (r.height > availableY || r.cancel) {
-                    if (initY === y && usedY)
-                        y += usedY;
-                    if (commit)
-                        return { output: `<div${styleClass(ctx, ['container', 'repeat'], style(w, placement, ctx, { computedHeight: y, container: true }))}>\n${html}</div>`, height: y, continue: { offset: y, state: { part: 'body', src, current: i, context: rctx }, child: r.continue } };
+            if (!arr.length && w.alternate) {
+                if (w.alternate) {
+                    r = renderWidget(w.alternate, rctx, { x: usedX, y, availableX: availableX - usedX, maxX: placement.maxX, availableY, maxY: placement.maxY }, state ? state.child : undefined);
+                    if (r.height > availableY)
+                        return { output: html, height: 0, continue: { offset: 0, state: { part: 'body', src, current: 0 } } };
                     else
-                        return { output: '', height: y, continue: { offset: y, state: { part: state && state.state && state.state.part || 'body', src, current: i, context: rctx }, child: r.continue } };
-                }
-                if (!usedY) {
+                        availableY -= r.height;
+                    html += r.output;
                     y += r.height;
-                    availableY -= r.height;
                 }
-                html += r.output;
-                commit = true;
-                if (r.continue) {
-                    if (initY === y && usedY)
+            }
+            else {
+                for (let i = (state && state.state && state.state.current) || 0; i < arr.length; i++) {
+                    const c = group && group.grouped ?
+                        extend(rctx, { value: arr[i], special: { index: i, values: {} } }) :
+                        extend(rctx, { value: arr[i], special: { index: i } });
+                    if (group && group.grouped) {
+                        const s = (state && state.child) || { offset: 0, state: { current: 0, src: arr[i], part: 'group' } };
+                        r = renderWidget(w, c, { x: 0, y, availableX: availableX - usedX, availableY, maxX: placement.maxX, maxY: placement.maxY }, s);
+                    }
+                    else
+                        r = renderWidget(w.row, c, { x: usedX, y, availableX: availableX - usedX, maxX: placement.maxX, availableY, maxY: placement.maxY }, state ? state.child : undefined);
+                    if (state)
+                        state.child = null;
+                    if (r.width && r.width <= availableX - usedX && r.width !== availableX) {
+                        usedX += r.width;
+                        if (r.height > usedY)
+                            usedY = r.height;
+                    }
+                    else if (r.width && usedX && r.width > availableX - usedX) {
                         y += usedY;
-                    return { output: `<div${styleClass(ctx, ['container', 'repeat'], style(w, placement, ctx, { computedHeight: y, container: true }))}>\n${html}</div>`, height: y, continue: { offset: y, state: { part: 'body', src, current: i, context: rctx }, child: r.continue } };
+                        initY = y;
+                        availableY -= usedY;
+                        usedY = 0;
+                        usedX = 0;
+                        i--;
+                        continue;
+                    }
+                    if (r.height > availableY || r.cancel) {
+                        if (initY === y && usedY)
+                            y += usedY;
+                        if (commit)
+                            return { output: `<div${styleClass(ctx, ['container', 'repeat'], style(w, placement, ctx, { computedHeight: y, container: true }))}>\n${html}</div>`, height: y, continue: { offset: y, state: { part: 'body', src, current: i, context: rctx }, child: r.continue } };
+                        else
+                            return { output: '', height: y, continue: { offset: y, state: { part: state && state.state && state.state.part || 'body', src, current: i, context: rctx }, child: r.continue } };
+                    }
+                    if (!usedY) {
+                        y += r.height;
+                        availableY -= r.height;
+                    }
+                    html += r.output;
+                    commit = true;
+                    if (r.continue) {
+                        if (initY === y && usedY)
+                            y += usedY;
+                        return { output: `<div${styleClass(ctx, ['container', 'repeat'], style(w, placement, ctx, { computedHeight: y, container: true }))}>\n${html}</div>`, height: y, continue: { offset: y, state: { part: 'body', src, current: i, context: rctx }, child: r.continue } };
+                    }
                 }
             }
             if (initY === y && usedY)
@@ -5242,7 +5266,7 @@
         return filter({ value: arr }, flt, sorts, groups, ctx).value;
     }), simple(['source'], (_name, values, _opts, ctx) => {
         const [val, app] = values;
-        let source = typeof val === 'object' && val && 'value' in val ? val : { value: val };
+        let source = toDataSet(val);
         if (isApplication(app))
             return evalApply(ctx, app, [], { source });
         return source;
@@ -6071,6 +6095,37 @@
         }
     }, {
         type: 'aggregate',
+        names: ['index'],
+        apply(_name, arr, args, opts, ctx) {
+            if (!args[0])
+                return {};
+            const many = opts && opts.many;
+            return arr.reduce((a, c, i) => {
+                const pair = evalApply(ctx, args[0], [c, i], { index: i, all: a });
+                let k, v = c;
+                if (Array.isArray(pair)) {
+                    if (pair.length === 0)
+                        return a;
+                    else if (pair.length === 1)
+                        k = pair[0];
+                    else
+                        (k = pair[0], v = pair[1]);
+                }
+                else
+                    k = pair;
+                if (many) {
+                    if (k in a)
+                        a[k].push(v);
+                    else
+                        a[k] = [v];
+                }
+                else
+                    a[k] = v;
+                return a;
+            }, {});
+        },
+    }, {
+        type: 'aggregate',
         names: ['reduce'],
         apply(_name, arr, args, _opts, ctx) {
             if (!args[0])
@@ -6096,8 +6151,14 @@
         type: 'aggregate',
         names: ['join'],
         apply(_name, arr, args, _opts, ctx) {
-            if (args.length > 1)
-                return arr.map(e => evalApply(ctx, args[0], [e])).join(evalParse(ctx, args[1]));
+            if (isApplication(args[0])) {
+                arr = arr.map(e => evalApply(ctx, args[0], [e]));
+                args = args.slice(1);
+            }
+            if (args.length > 1 && arr.length > 2)
+                return [arr.slice(0, -1).join(evalParse(ctx, args[0])), arr[arr.length - 1]].join(evalParse(ctx, args[1]));
+            else if (args.length > 2 && arr.length === 2)
+                return arr.join(evalParse(ctx, args[2]));
             return arr.join(evalParse(ctx, args[0]));
         }
     }, {
@@ -6294,6 +6355,7 @@
     exports.similarity = similarity;
     exports.stringify = stringify;
     exports.template = template;
+    exports.toDataSet = toDataSet;
     exports.unparseSchema = stringifySchema;
     exports.unregisterFormat = unregisterFormat;
     exports.unregisterOperator = unregisterOperator;
