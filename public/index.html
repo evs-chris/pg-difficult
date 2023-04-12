@@ -553,13 +553,14 @@
       </div>
     </div>
     <div class="schema">
-      {{#each ~/schema}}
-        {{#if @.matches(., null)}}
+      {{#each ~/schema}}{{#with @.matches(., null) as matched}}
+        {{#if matched}}
           <div class="table schema-row striped" on-click="@.toggle('expanded.' + .name)">
             <div class="name">{{.name}}</div>
+            <div class="details">({{.columns.length}} cols{{#if ~/filter || ~/expr}}, {{matched.length}} match{{/if}})</div>
           </div>
         {{/if}}
-        {{#if ~/expanded[.name] || (~/filter || ~/expr) && @.matches(., null)}}
+        {{#if ~/expanded[.name] || (~/filter || ~/expr) && matched}}
           {{#each .columns}}
             {{#with ~/expanded[../../name] as expanded, @.matches(../../, .) as matched}}
               {{#if expanded || matched}}
@@ -577,7 +578,7 @@
             {{/with}}
           {{/each}}
         {{/if}}
-      {{/each}}
+      {{/with}}{{/each}}
     </div>
   </div>
 </script>

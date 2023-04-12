@@ -866,10 +866,11 @@ class Schema extends Window {
     let str = '';
     if (column) {
       if (filter) str += `([column.name] ilike '%{filter}%')`;
-      if (expr) str += `${str ? ' and ' : ''}${expr}`;
+      if (expr) str += `${str ? ' and ' : ''}with(column =>${expr})`;
     } else {
-      if (filter) str += `([table.name] + map(table.columns =>name) ilike '%{filter}%')`;
-      if (expr) str += `${str ? ' and ' : ''}find(table.columns |column| => (${expr}))`;
+      if (filter && !expr) str += `(if [table.name] + map(table.columns =>name) ilike '%{filter}%' then filter(table.columns =>name ilike '%{~filter}%') else false)`;
+      else if (expr && !filter) str += `${str ? ' and ' : ''}filter(table.columns |column| => (${expr}))`;
+      else if (filter && expr) str += `(if [table.name] + map(table.columns =>name) ilike '%{filter}%' and find(table.columns |column| => (${expr})) then filter(table.columns |column| => (${expr}) and column.name ilike '%{~filter}%') else false)`;
     }
     return evaluate({ table, column, filter }, str);
   }
@@ -901,6 +902,9 @@ Window.extendWith(Schema, {
 .column .name { padding-left: 1.7em; box-sizing: border-box; }
 .schema-row > * { overflow: hidden; text-overflow: ellipsis; }
 .schema-row .name { width: 55%; }
+.schema-row.table { display: flex; }
+.schema-row.table .name { width: auto; flex-grow: 1; }
+.schema-row.table .details { opacity: 0.5; }
 .schema-row .name.pkey { font-weight: bold; }
 .schema-row .type { width: 20%; }
 .schema-row .nullable { width: 7%; text-align: center; }
