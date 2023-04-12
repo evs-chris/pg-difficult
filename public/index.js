@@ -211,7 +211,7 @@ const app = globalThis.app = new Ractive({
             const wins = v.get('windows');
             const list = [];
             for (const k in wins) {
-              if (!/query-|leaks-|entries-|control-/.test(k)) list.push({ title: wins[k].title, action() { v.raise(k, true); } });
+              if (!/query-|leaks-|entries-|control-/.test(k)) list.push({ title: wins[k].title, marquee: true, action() { v.raise(k, true); } });
             }
             this.set('others', list);
           };
