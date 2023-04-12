@@ -1,3 +1,16 @@
+## 1.4.0
+
+2023-04-14
+
+### Features
+
+* Schemas can now be reloaded from saved diffs.
+* There is now more information given in the schema viewer, and it is rendered virtually so that large schemas don't get laggy.
+* Diff entries can now be filtered with a raport expression. This is expression is saved when the data is exported and reloaded when it is imported.
+* The web client can now be used as a standalone app that can load saved data and run reports against it.
+* Menu entries for other windows with longs titles will now marquee on hover.
+
+
 ## 1.3.0
 
 2023-04-06
