@@ -310,9 +310,17 @@ const app = globalThis.app = new Ractive({
     app.host.addWindow(win, { title: `Loaded entries from ${file.name}` });
   },
   async loadSchema() {
-    const file = await load('.pgds');
-    const win = new Schema(undefined, { data: { schema: JSON.parse(file.text) } });
-    app.host.addWindow(win, { title: `Loaded schema from ${file.name}` });
+    const file = await load('.pgds,.pgdd');
+    const data = JSON.parse(file.text);
+    if ('schemas' in data) {
+      for (const [id, schema] of Object.entries(data.schemas)) {
+        const win = new Schema(undefined, { data: { schema } });
+        app.host.addWindow(win, { title: `Loaded diff schema ${id} from ${file.name}` });
+      }
+    } else {
+      const win = new Schema(undefined, { data: { schema: data } });
+      app.host.addWindow(win, { title: `Loaded schema from ${file.name}` });
+    }
   },
 });
 
