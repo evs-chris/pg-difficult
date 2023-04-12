@@ -751,14 +751,19 @@ Window.extendWith(Entries, {
     entries() {
       const source = this.get('@.source');
       const loaded = this.get('loaded');
+      const expr = this.get('expr');
+      let res;
       if (loaded) {
-        if (Array.isArray(loaded)) return loaded;
-        else if (loaded && typeof loaded === 'object' && 'entries' in loaded) return loaded.entries;
-        else return [];
+        if (Array.isArray(loaded)) res = loaded;
+        else if (loaded && typeof loaded === 'object' && 'entries' in loaded) res = loaded.entries;
+        else res = [];
+      } else {
+        const entries = app.get('entries');
+        if (source != null) res = entries.filter(e => e.source === this.source);
+        else res = entries;
       }
-      const entries = app.get('entries');
-      if (source != null) return entries.filter(e => e.source === this.source);
-      return entries;
+      if (expr) res = evaluate({ list: res }, `filter(list =>(${expr}))`);
+      return res;
     }
   },
   on: {
