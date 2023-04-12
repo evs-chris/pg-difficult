@@ -671,6 +671,7 @@ res
       const out = { entries: this.get('entries') };
       if (this.source) out.schemas = { [this.source]: (this.get('schemas') || {})[this.source] };
       else out.schemas = this.get('schemas');
+      if (this.get('expr')) out.expr = this.get('expr');
       text = JSON.stringify(out);
     }
     download(`${name}.${ext}`, text, ext === 'html' ? 'text/html' : 'application/pg-difficult-diff');
@@ -787,7 +788,10 @@ Window.extendWith(Entries, {
         const s = this.scroller;
         if (s.scrollTop + s.clientHeight >= s.scrollHeight - 10) setTimeout(() => s.scrollTo({ top: s.scrollHeight, behavior: 'smooth', block: 'end' }), 100);
       }
-    }
+    },
+    'loaded.expr'(v) {
+      if (v) this.set('expr', v);
+    },
   },
 });
 
