@@ -864,21 +864,6 @@ class Schema extends Window {
     super(opts);
     this.config = config;
   }
-  matches(table, column) {
-    const filter = this.get('filter');
-    const expr = this.get('expr');
-    if (!filter && !expr) return true;
-    let str = '';
-    if (column) {
-      if (filter) str += `([column.name] ilike '%{filter}%')`;
-      if (expr) str += `${str ? ' and ' : ''}with(column =>${expr})`;
-    } else {
-      if (filter && !expr) str += `(if [table.name] + map(table.columns =>name) ilike '%{filter}%' then filter(table.columns =>name ilike '%{~filter}%') else false)`;
-      else if (expr && !filter) str += `${str ? ' and ' : ''}filter(table.columns |column| => (${expr}))`;
-      else if (filter && expr) str += `(if [table.name] + map(table.columns =>name) ilike '%{filter}%' and find(table.columns |column| => (${expr})) then filter(table.columns |column| => (${expr}) and column.name ilike '%{~filter}%') else false)`;
-    }
-    return evaluate({ table, column, filter }, str);
-  }
   compareSchema() {
     const target = this.get('compareSchema');
     const local = this.get('schema');
@@ -892,6 +877,11 @@ class Schema extends Window {
       this.set('compareSchema', { config: this.config || 'Local File', schema: local });
       this.host.toast('Click Compare on another schema to compare', { type: 'info', timeout: 4000 });
     }
+  }
+  colsFor(name) {
+    const schema = this.get('schema');
+    for (const t of schema) if (t.name === name) return t.columns.length;
+    return 0;
   }
   download() {
     const db = this.config ? `${this.config.host || 'localhost'}-${this.config.database || 'postgres'}` : `Local File`;
@@ -918,6 +908,45 @@ Window.extendWith(Schema, {
 `,
   options: { flex: true, resizable: true, width: '50em', height: '35em' },
   data() { return { expanded: {} }; },
+  helpers: {
+    escapeKey: Ractive.escapeKey,
+  },
+  computed: {
+    entries() {
+      const res = [];
+      let tables = this.get('schema');
+      const filter = this.get('filter');
+      const expr = this.get('expr');
+      const expanded = this.get('expanded');
+
+      if (filter) tables = evaluate({ tables, filter }, `filter(tables =>[name] + map(columns =>name) ilike '%{~filter}%')`);
+      if (expr) tables = evaluate({ tables }, `filter(tables =>find(columns |column| => (${expr})))`);
+
+      const matches = {};
+
+      for (const t of tables) {
+        let cols;
+        if (filter) cols = evaluate({ cols: t.columns, filter }, `filter(cols =>name ilike '%{~filter}%')`);
+        if (expr) cols = evaluate({ cols: cols || t.columns }, `filter(cols |column| => (${expr}))`);
+        matches[t.name] = cols;
+        res.push(t);
+        if (expanded[t.name]) cols = t.columns;
+        if (cols) for (const c of cols) res.push(c);
+      }
+
+      setTimeout(() => this.set('matches', matches));
+
+      return res;
+    },
+    colCount() {
+      const tables = this.get('schema');
+      return tables.reduce((a, c) => a + c.columns.length, 0);
+    },
+    matchCount() {
+      const matches = this.get('matches');
+      return Object.values(matches || {}).reduce((a, c) => a + (c?.length || 0), 0);
+    },
+  },
   on: {
     init() {
       this.link('compareSchema', 'compareSchema', { instance: app });

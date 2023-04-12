@@ -133,6 +133,9 @@
 
   .striped:nth-child(odd), .striped-odd {
     background-color: #eee;
+    padding: 0.3em;
+    box-sizing: border-box;
+    border-radius: 0.3em;
   }
   .striped, .striped-even {
     background-color: #fff;
@@ -148,6 +151,7 @@
   .content-wrapper {
     display: flex;
     flex-direction: column;
+    flex-grow: 1;
     overflow: auto;
     position: relative;
     padding: 0.5em;
@@ -534,52 +538,61 @@
 
 <script type=text/ractive id=schema>
   <div class=content-wrapper>
-    <div style="border-bottom: 1px solid;">
-      <div class="stretch-fields">
-        <label as-field>Search<input value="{{filter}}" lazy=500 /></label>
-        <label as-field title="Available fields are column.{name, default, enum, type, pgtype, nullable, length, precision, pkey, schema, table}">Expression<input value="{{expr}}" lazy=500 /></label>
-        {{#if !~/compareSchema || ~/compareSchema.schema !== ~/schema}}
-          <label as-field style="flex-grow: 0;"><button on-click="@.compareSchema()" title="Compare this schema to another database's schema.">Compare</button></label>
-        {{else}}
-          <label as-field style="flex-grow: 0;"><button on-click="@.set('compareSchema', undefined)" title="Cancel eaiting for another schema to be selected to compare to this schema.">Cancel</button></label>
-        {{/if}}
-        <label as-field style="flex-grow: 0;"><button on-click="@.download()" title="Download a file containing this schema.">Download</button></label>
-      </div>
-      <div class="schema-row" style="font-weight: bold;">
-        <div class="name">Name</div>
-        <div class="nullable">Null</div>
-        <div class="default">Default</div>
-        <div class="type">Type</div>
-        <div class="size">Size</div>
-      </div>
-    </div>
-    <div class="schema">
-      {{#each ~/schema}}{{#with @.matches(., null) as matched}}
-        {{#if matched}}
-          <div class="table schema-row striped" on-click="@.toggle('expanded.' + .name)">
-            <div class="name">{{.name}}</div>
-            <div class="details">({{.columns.length}} cols{{#if ~/filter || ~/expr}}, {{matched.length}} match{{/if}})</div>
+    <virtual-list bind-items="~/entries" size=34 style="flex-grow: 1;">
+      <header>
+        <div style="border-bottom: 1px solid;">
+          <div class="stretch-fields">
+            <label as-field>Search<input value="{{~/filter}}" lazy=500 /></label>
+            <label as-field title="Available fields are column.{name, default, enum, type, pgtype, nullable, length, precision, pkey, schema, table}">Expression<input value="{{~/expr}}" lazy=500 /></label>
+            {{#if !~/compareSchema || ~/compareSchema.schema !== ~/schema}}
+              <label as-field style="flex-grow: 0;"><button on-click="@.compareSchema()" title="Compare this schema to another database's schema.">Compare</button></label>
+            {{else}}
+              <label as-field style="flex-grow: 0;"><button on-click="@.set('compareSchema', undefined)" title="Cancel eaiting for another schema to be selected to compare to this schema.">Cancel</button></label>
+            {{/if}}
+            <label as-field style="flex-grow: 0;"><button on-click="@.download()" title="Download a file containing this schema.">Download</button></label>
+          </div>
+          <div class="schema-row" style="font-weight: bold;">
+            <div class="name">Name</div>
+            <div class="nullable">Null</div>
+            <div class="default">Default</div>
+            <div class="type">Type</div>
+            <div class="size">Size</div>
+          </div>
+        </div>
+        {{#if index}}
+          <div class="schema-row table" style="padding: 0.5em;" on-click="@.toggle('expanded.' + escapeKey(.table || .name))">
+            <div class="name">{{.table || .name}}</div>
+            <div class="details">({{@.colsFor(.table || .name)}} cols{{#if ~/filter || ~/expr}}, {{~/matches[.table || .name].length}} match{{/if}})</div>
           </div>
         {{/if}}
-        {{#if ~/expanded[.name] || (~/filter || ~/expr) && matched}}
-          {{#each .columns}}
-            {{#with ~/expanded[../../name] as expanded, @.matches(../../, .) as matched}}
-              {{#if expanded || matched}}
-                <div class="column schema-row striped">
-                  <div class="name {{#if .pkey}}pkey{{/if}}" {{#if .default}}title="Default: {{.default}}"{{/if}}>
-                    <div class=expand-indicator class-expanded class-matched />
-                    {{.name}}
-                  </div>
-                  <div class="nullable">{{.nullable ? 'Y' : 'N'}}</div>
-                  <div class="default" {{#if .default}}title="{{.default}}"{{/if}}>{{.default ? 'Y' : 'N'}}</div>
-                  <div class="type" {{#if .enum}}title="Values: {{.enum.join(', ')}}"{{/if}}>{{.pgtype}}</div>
-                  <div class="size">{{#if .length != null}}{{.length}}{{elseif .precision != null}}{{.precision}}{{/if}}</div>
-                </div>
-              {{/if}}
-            {{/with}}
-          {{/each}}
+      </header>
+      <item class="striped-{{index % 2 ? 'odd' : 'even'}}">
+        {{#if !.table}}
+          <div class="schema-row table" on-click="@.toggle('expanded.' + escapeKey(.name))">
+            <div class="name">{{.name}}</div>
+            <div class="details">({{.columns.length}} cols{{#if ~/filter || ~/expr}}, {{matches[.name].length}} match{{/if}})</div>
+          </div>
+        {{else}}
+          <div class="schema-row column">
+            <div class="name {{#if .pkey}}pkey{{/if}}" {{#if .default}}title="Default: {{.default}}"{{/if}}>
+              <div class=expand-indicator class-expanded class-matched />
+              {{.name}}
+            </div>
+            <div class="nullable">{{.nullable ? 'Y' : 'N'}}</div>
+            <div class="default" {{#if .default}}title="{{.default}}"{{/if}}>{{.default ? 'Y' : 'N'}}</div>
+            <div class="type" {{#if .enum}}title="Values: {{.enum.join(', ')}}"{{/if}}>{{.pgtype}}</div>
+            <div class="size">{{#if .length != null}}{{.length}}{{elseif .precision != null}}{{.precision}}{{/if}}</div>
+          </div>
         {{/if}}
-      {{/with}}{{/each}}
+      </item>
+      <else>
+        <div class="schema-row">
+          No {{#if ~/filter || ~/expr}}matching{{/if}} tables or columns.
+        </div>
+      </else>
+    </virtual-list>
+    <div style="padding: 0.5em; border-top: 1px solid;">
+      {{~/schema.length}} tables, {{~/colCount}} columns{{#if ~/filter || ~/expr}}, {{~/matchCount}} match{{/if}}
     </div>
   </div>
 </script>
