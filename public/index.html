@@ -404,12 +404,12 @@
   <div class="content-wrapper">
     <div class="controls">
       {{#if @.source && !~/loaded}}
-        <label title="Check to enable undoing segments"><input type=checkbox bind-checked="~/allowUndoSegment" /> Undo segments?</label>
-        <label title="Check to enable undoing individual entries"><input type=checkbox bind-checked="~/allowUndoSingle" /> Undo single?</label>
+        <label class=check title="Check to enable undoing segments"><input type=checkbox bind-checked="~/allowUndoSegment" /> Undo<br/>segments?</label>
+        <label class=check title="Check to enable undoing individual entries"><input type=checkbox bind-checked="~/allowUndoSingle" /> Undo<br/>single?</label>
       {{/if}}
       {{#if schemas}}
-        <label title="Check to hide empty string fields in entries"><input type=checkbox bind-checked="~/hideBlankFields" /> Hide blank?</label>
-        <label title="Check to hide fields with default values in entries"><input type=checkbox bind-checked="~/hideDefaultFields" /> Hide default?</label>
+        <label class=check title="Check to hide empty string fields in entries"><input type=checkbox bind-checked="~/hideBlankFields" /> Hide<br/>blank?</label>
+        <label class=check title="Check to hide fields with default values in entries"><input type=checkbox bind-checked="~/hideDefaultFields" /> Hide<br/>default?</label>
       {{/if}}
       {{#unless (@.source && !~/loaded) && schemas}}
         <div />
