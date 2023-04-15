@@ -611,6 +611,7 @@ const EntryCSS = `
 .controls .filter { flex-grow: 1; min-width: 5em; }
 .controls button, .controls label.check { flex-shrink: 0; }
 .diff { padding: 0.3em; display: flex; flex-wrap: wrap; }
+.diff .left, .diff .right, .diff .value { white-space: pre-wrap; }
 .diff .name, .diff .left, .diff .right { width: 33%; overflow: hidden; text-overflow: ellipsis; }
 .diff .name, .wrapper .name { font-weight: bold; }
 .diff.whole .name { width: 100%; }
