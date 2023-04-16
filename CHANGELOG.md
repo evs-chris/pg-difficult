@@ -1,3 +1,13 @@
+## 1.4.2
+
+2023-04-18
+
+### Bugs(?)
+
+* Diff entry values are now rendered with pre-wrap so you can see whitespace differences.
+* There is now an autoarrange button available when the UI is in windowed mode.
+
+
 ## 1.4.1
 
 2023-04-14
