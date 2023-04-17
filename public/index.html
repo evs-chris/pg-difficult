@@ -268,8 +268,8 @@
     </tab>
     <tab title="Active Diffs" hidden="@global.clientOnly">
       <div style="display: flex; justify-content: space-between; align-items: center;">
-        <div>
-          <label as-field title="The segment name groups sets of changes together. The segment will automatically be updated when you stop typing, and any new changes will get the new segment name.">Segment<input value="{{~/newSegment}}" lazy=1500 /></label>
+        <div style="flex-grow: 1; display: flex;">
+          <label as-field style="flex-grow: 1;" title="The segment name groups sets of changes together. The segment will automatically be updated when you stop typing, and any new changes will get the new segment name.">Segment<input value="{{~/newSegment}}" lazy=1500 /></label>
         </div>
         <div>
           <button on-click="@.clear()" title="Remove all recorded changes.">Clear Entries</button>
