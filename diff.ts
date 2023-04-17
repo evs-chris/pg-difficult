@@ -3,7 +3,7 @@ import postgres from 'https://deno.land/x/postgresjs@v3.3.4/mod.js';
 type Client = postgres.Sql<Record<string, unknown>>;
 
 export const tableQuery = `select table_name as name, table_schema as schema from information_schema.tables where table_type = 'BASE TABLE' and table_schema not like 'pg_%' and table_schema <> 'information_schema' order by table_schema asc, table_name asc;`;
-export const columnQuery = `select ts.table_schema as schema, ts.table_name as table, cs.column_name as name, cs.is_nullable = 'YES' as nullable, (select keys.constraint_name from information_schema.key_column_usage keys join information_schema.table_constraints tc on keys.constraint_name = tc.constraint_name and keys.constraint_schema = tc.constraint_schema and tc.table_name = keys.table_name where keys.table_schema = cs.table_schema and keys.table_name = cs.table_name and keys.column_name = cs.column_name and tc.constraint_type = 'PRIMARY KEY') is not null as pkey, cs.udt_name as pgtype, cs.column_default as default, cs.character_maximum_length as length, case when cs.udt_name = 'numeric' and cs.numeric_precision > 0 and cs.numeric_scale > 0 then array[cs.numeric_precision::integer, cs.numeric_scale::integer] else null end as precision from information_schema.columns cs join information_schema.tables ts on ts.table_name = cs.table_name and ts.table_schema = cs.table_schema where ts.table_schema <> 'pg_catalog' and ts.table_schema <> 'information_schema' order by cs.column_name asc;`;
+export const columnQuery = `select ts.table_schema as schema, ts.table_name as table, cs.column_name as name, cs.ordinal_position as position, cs.is_nullable = 'YES' as nullable, (select keys.constraint_name from information_schema.key_column_usage keys join information_schema.table_constraints tc on keys.constraint_name = tc.constraint_name and keys.constraint_schema = tc.constraint_schema and tc.table_name = keys.table_name where keys.table_schema = cs.table_schema and keys.table_name = cs.table_name and keys.column_name = cs.column_name and tc.constraint_type = 'PRIMARY KEY') is not null as pkey, cs.udt_name as pgtype, cs.column_default as default, cs.character_maximum_length as length, case when cs.udt_name = 'numeric' and cs.numeric_precision > 0 and cs.numeric_scale > 0 then array[cs.numeric_precision::integer, cs.numeric_scale::integer] else null end as precision from information_schema.columns cs join information_schema.tables ts on ts.table_name = cs.table_name and ts.table_schema = cs.table_schema where ts.table_schema <> 'pg_catalog' and ts.table_schema <> 'information_schema' order by cs.column_name asc;`;
 export const enumQuery = (type: string) => `select enum_range(null::${type})::varchar[] as values;`;
 
 export type TSType = 'Date' | 'number' | 'string' | 'any' | 'boolean' | 'Date[]' | 'number[]' | 'string[]' | 'any[]' | 'boolean[]' | 'any' | 'any[]' | 'UInt8Array';
@@ -58,6 +58,7 @@ export interface Column {
   schema: string;
   table: string;
   name: string;
+  position: number,
   nullable: boolean;
   pkey: boolean;
   pgtype: string;

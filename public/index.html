@@ -558,7 +558,7 @@
             <label as-field style="flex-grow: 0;"><button on-click="@.download()" title="Download a file containing this schema.">Download</button></label>
           </div>
           <div class="schema-row" style="font-weight: bold;">
-            <div class="name">Name</div>
+            <div class="name" style="cursor: pointer;" title="Click to sort columns by {{~/sort === 'position' ? 'name' : 'position'}}" on-click="@.set('sort', ~/sort === 'position' ? 'name' : 'position')">Name ({{~/sort === 'position' ? '#' : 'A'}})</div>
             <div class="nullable">Null</div>
             <div class="default">Default</div>
             <div class="type">Type</div>
