@@ -268,8 +268,8 @@
     </tab>
     <tab title="Active Diffs" hidden="@global.clientOnly">
       <div style="display: flex; justify-content: space-between; align-items: center;">
-        <div>
-          <label as-field title="The segment name groups sets of changes together. The segment will automatically be updated when you stop typing, and any new changes will get the new segment name.">Segment<input value="{{~/newSegment}}" lazy=1500 /></label>
+        <div style="flex-grow: 1; display: flex;">
+          <label as-field style="flex-grow: 1;" title="The segment name groups sets of changes together. The segment will automatically be updated when you stop typing, and any new changes will get the new segment name.">Segment<input value="{{~/newSegment}}" lazy=1500 /></label>
         </div>
         <div>
           <button on-click="@.clear()" title="Remove all recorded changes.">Clear Entries</button>
@@ -425,7 +425,7 @@
         <div />
       {{/if}}
     </div>
-    <virtual-list bind-items="~/entries" size=100>
+    <virtual-list bind-items="~/entries" size=75>
       <header>
         {{#if .segment}}
           <div class=header><h2>{{.segment}}</h2> {{#if ~/allowUndoSegment}}<button class=undo on-click="@.undoSegment(.)" title="Undo all changes in this segment by replaying the changes in reverse. This will also create a new segment named 'Undo {{.segment}}', unless you hold the ctrl key when clicking this button.">Undo</button>{{/if}}</div>
@@ -558,7 +558,7 @@
             <label as-field style="flex-grow: 0;"><button on-click="@.download()" title="Download a file containing this schema.">Download</button></label>
           </div>
           <div class="schema-row" style="font-weight: bold;">
-            <div class="name">Name</div>
+            <div class="name" style="cursor: pointer;" title="Click to sort columns by {{~/sort === 'position' ? 'name' : 'position'}}" on-click="@.set('sort', ~/sort === 'position' ? 'name' : 'position')">Name ({{~/sort === 'position' ? '#' : 'A'}})</div>
             <div class="nullable">Null</div>
             <div class="default">Default</div>
             <div class="type">Type</div>

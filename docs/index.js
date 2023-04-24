@@ -930,6 +930,7 @@ Window.extendWith(Schema, {
       const filter = this.get('filter');
       const expr = this.get('expr');
       const expanded = this.get('expanded');
+      const sort = this.get('sort');
 
       if (filter) tables = evaluate({ tables, filter }, `filter(tables =>[name] + map(columns =>name) ilike '%{~filter}%')`);
       if (expr) tables = evaluate({ tables }, `filter(tables =>find(columns |column| => (${expr})))`);
@@ -943,6 +944,7 @@ Window.extendWith(Schema, {
         matches[t.name] = cols;
         res.push(t);
         if (expanded[t.name]) cols = t.columns;
+        if (cols && sort === 'position') cols = evaluate({ cols: cols.slice() }, 'sort(cols =>position)');
         if (cols) for (const c of cols) res.push(c);
       }
 

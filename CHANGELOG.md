@@ -1,3 +1,17 @@
+## 1.5.0
+
+2023-04-24
+
+### Bugs
+
+* Scrolling with a few really large entries before a bunch of really small entries at the end of a diff set is less likely to get stuck in a scroll loop.
+
+### Features
+
+* The segment name field will now fill available space.
+* Schema columns now include their position in the table, so they can be shown in table order by clicking the name column header.
+
+
 ## 1.4.2
 
 2023-04-18
