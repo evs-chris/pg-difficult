@@ -11,6 +11,7 @@
     <script src="./raui@0.13.3/AppBar.js"></script>
     <script src="./raui@0.13.3/Shell.js"></script>
     <script src="./raui@0.13.3/Menu.js"></script>
+    <script src="./raui@0.13.3/Popover.js"></script>
     <script src="./raui@0.13.3/Tabs.js"></script>
     <script src="./raui@0.13.3/Table.js"></script>
     <script src="./raui@0.13.3/VirtualList.js"></script>
@@ -167,7 +168,7 @@
     <right hidden="{{menu.hidden}}" forced="{{menu.forced}}">
       <menu>
         <container>
-          <div style="display: flex; align-items: center; justify-content: space-around; height: 3.4em; background-color: #325932;">
+          <div style="display: flex; align-items: center; justify-content: space-around; height: 3.6em; background-color: #325932;">
             <span>pg-difficult <span class=version>- v{{~/status.VERSION || '-client-only'}}</span></span>
           </div>
         </container>
@@ -408,27 +409,15 @@
   <div class="content-wrapper">
     <div class="controls">
       {{#if @.source && !~/loaded}}
-        <label class=check title="Check to enable undoing segments"><input type=checkbox bind-checked="~/allowUndoSegment" /> Undo<br/>segments?</label>
-        <label class=check title="Check to enable undoing individual entries"><input type=checkbox bind-checked="~/allowUndoSingle" /> Undo<br/>single?</label>
+        <label as-field title="The segment name groups sets of changes together. The segment will automatically be updated when you stop typing, and any new changes will get the new segment name.">Segment<input value="{{~/newSegment}}" lazy=1500 /></label>
       {{/if}}
-      {{#if schemas}}
-        <label class=check title="Check to hide empty string fields in entries"><input type=checkbox bind-checked="~/hideBlankFields" /> Hide<br/>blank?</label>
-        <label class=check title="Check to hide fields with default values in entries"><input type=checkbox bind-checked="~/hideDefaultFields" /> Hide<br/>default?</label>
-      {{/if}}
-      {{#unless (@.source && !~/loaded) && schemas}}
-        <div />
-      {{/unless}}
       <label class=filter as-field title="Raport expression used to filter out entries. Available fields are id, new, old, schema, segment, source, stamp, and table. new and old are objects containing the fields that changed in the record. table, schema, source, and segment are strings.">Filter Expression<input value="{{expr}}" lazy=1000 /></label>
-      {{#if ~/entries.length}}
-        <button class=download on-click="@.download()" title="Download a file containing these entries. Hold the ctrl key while clicking to open a popup window of the HTML. Hold the shift key while clicking to download the HTML directly.">Download</button>
-      {{else}}
-        <div />
-      {{/if}}
+      <button as-pop=`~/showSettings`>&#9881;</button>
     </div>
     <virtual-list bind-items="~/entries" size=75>
       <header>
         {{#if .segment}}
-          <div class=header><h2>{{.segment}}</h2> {{#if ~/allowUndoSegment}}<button class=undo on-click="@.undoSegment(.)" title="Undo all changes in this segment by replaying the changes in reverse. This will also create a new segment named 'Undo {{.segment}}', unless you hold the ctrl key when clicking this button.">Undo</button>{{/if}}</div>
+          <div class=header><h2 title="Double click to rename segment" on-dblclick="@.renameSegment(.)">{{.segment}}</h2> <div class=buttons style="padding-top: 0.9em;">{{#if ~/allowUndoSegment}}<button class=undo on-click="@.undoSegment(.)" title="Undo all changes in this segment by replaying the changes in reverse. This will also create a new segment named 'Undo {{.segment}}', unless you hold the ctrl key when clicking this button.">Undo</button>{{/if}}</div></div>
         {{/if}}
       </header>
       {{#with . as record, @.details(.) as entry}}
@@ -444,7 +433,10 @@
                 </div>
               {{/each}}
 
-              {{#if ~/allowUndoSingle}}<button class=undo on-click="@.undoSingle(record)" title="Undo this change by running the inverse of the statment that created the change.">Undo</button>{{/if}}
+              <div class=buttons>
+                {{#if ~/allowUndoSingle}}<button class=undo on-click="@.undoSingle(record)" title="Undo this change by running the inverse of the statment that created the change.">Undo</button>{{/if}}
+                <button title="Split segment above" on-click="@.renameSegment(record, 'above')">&#9650;</button> <button title="Split segment below" on-click="@.renameSegment(record, 'below')">&#9660;</button>
+              </div>
             </div>
           {{else}}
             <div class="diff whole striped-{{index % 2 == 0 ? 'even' : 'odd'}}">
@@ -453,23 +445,56 @@
                 <div class="entry"><div class="key">{{this.0}}</div><div class="value">{{typeof this.1 === 'object' ? JSON.stringify(this.1) : this.1}}</div></div>
               {{/each}}
 
-              {{#if ~/allowUndoSingle}}<button class=undo on-click="@.undoSingle(record)" title="Undo this change by running the inverse of the statment that created the change.">Undo</button>{{/if}}
+              <div class=buttons>
+                {{#if ~/allowUndoSingle}}<button class=undo on-click="@.undoSingle(record)" title="Undo this change by running the inverse of the statment that created the change.">Undo</button>{{/if}}
+                <button title="Split segment above" on-click="@.renameSegment(record, 'above')">&#9650;</button> <button title="Split segment below" on-click="@.renameSegment(record, 'below')">&#9660;</button>
+              </div>
             </div>
           {{/if}}
         {{else}}
           <div class="wrapper striped-{{index % 2 == 0 ? 'even' : 'odd'}}">
             <div class=name><span>{{record.table}} {{entry.id || ''}} {{entry.status || '(empty changeset)'}}</span><span class=src>({{record.source}})</span></div>
           </div>
+          <div class=buttons>
+            <button title="Split segment above" on-click="@.renameSegment(record, 'above')">&#9650;</button> <button title="Split segment below" on-click="@.renameSegment(record, 'below')">&#9660;</button>
+          </div>
         {{/if}}
       {{/with}}
-      {{#if ~/entries[index + 1] && ~/entries[index + 1].segment !== .segment}}
-        <div class=header><h2>{{~/entries[index + 1].segment}}</h2> {{#if ~/allowUndoSegment}}<button class=undo on-click="@.undoSegment(~/entries[index + 1])" title="Undo all changes in this segment by replaying the changes in reverse. This will also create a new segment named 'Undo {{~/entries[index + 1].segment}}', unless you hold the ctrl key when clicking this button.">Undo</button>{{/if}}</div>
-      {{/if}}
+      {{#if ~/entries[index + 1] && ~/entries[index + 1].segment !== .segment}}{{#with ~/entries[index + 1]}}
+        <div class=header><h2 title="Double click to rename segment" on-dblclick="@.renameSegment(.)">{{.segment}}</h2> <div class=buttons style="padding-top: 0.9em;">{{#if ~/allowUndoSegment}}<button class=undo on-click="@.undoSegment(.)" title="Undo all changes in this segment by replaying the changes in reverse. This will also create a new segment named 'Undo {{.segment}}', unless you hold the ctrl key when clicking this button.">Undo</button>{{/if}}</div></div>
+      {{/with}}{{/if}}
       <else>
         No change entries have been recorded.
       </else>
     </virtual-list>
   </div>
+  <pop bind-popped="~/showSettings" where="below" align="end" tail>
+    <div style="width: 26em; display: flex; flex-direction: column;">
+      {{#if @.source && !~/loaded}}
+        <label class=inline as-field title="Check to enable undoing segments"><input type=checkbox bind-checked="~/allowUndoSegment" /> Undo segments?</label>
+        <label class=inline as-field title="Check to enable undoing individual entries"><input type=checkbox bind-checked="~/allowUndoSingle" /> Undo single?</label>
+      {{/if}}
+      {{#if schemas}}
+        <label class=inline as-field title="Check to hide empty string fields in entries"><input type=checkbox bind-checked="~/hideBlankFields" /> Hide blank?</label>
+        <label class=inline as-field title="Check to hide fields with default values in entries"><input type=checkbox bind-checked="~/hideDefaultFields" /> Hide default?</label>
+      {{/if}}
+      {{#unless (@.source && !~/loaded) && schemas}}
+        <div />
+      {{/unless}}
+    </div>
+    <div style="display: flex; justify-content: space-between;">
+      {{#if ~/entries.length}}
+        <button class=reject on-click="@.clearEntries()" title="Remove recorded entries {{#if !~/loaded && !@.source}}for all diffs{{else}}for only this diff. Hold the ctrl key and click to clear all diff entries.{{/if}}.">Clear Entries</button>
+      {{else}}
+        <div />
+      {{/if}}
+      {{#if ~/entries.length}}
+        <button class=download on-click="@.download()" title="Download a file containing these entries. Hold the ctrl key while clicking to open a popup window of the HTML. Hold the shift key while clicking to download the HTML directly.">Download</button>
+      {{else}}
+        <div />
+      {{/if}}
+    </div>
+  </pop>
 </script>
 
 <script type=text/ractive id=entries-text>
@@ -638,7 +663,7 @@
 <script type=text/ractive id=source-edit>
   <div class=content-wrapper>
     <div>
-      <label as-field>Name<input value="{{source.name}}" /></label>
+      <label as-field as-autofocus>Name<input value="{{source.name}}" /></label>
       <label as-field>Type<select value="{{source.type}}" on-change="@node.value === 'diff' ? @.set('source', { type: 'diff'}) : true">
         <option value="diff">Diff Entries</option>
         <option value="diff-schema">Diff Schema</option>
@@ -667,7 +692,7 @@
 
 <script type=text/ractive id=connect>
   <div class="connect">
-    <label as-field>Host<input value="{{~/config.host}}" /></label>
+    <label as-field as-autofocus>Host<input value="{{~/config.host}}" /></label>
     <label as-field>Port<input type=number value="{{~/config.port}}" /></label>
     <label as-field>User<input value="{{~/config.username}}" /></label>
     <label as-field>Password<input type=password value="{{~/config.password}}" /></label>
@@ -682,7 +707,7 @@
 <script type=text/ractive id=ask>
   <div class=content-wrapper>
     <div class="message" style="max-width: 36em;">{{.message}}</div>
-    <label as-field class=inline><input value="{{.value}}" /></label>
+    <label as-field class=inline><input as-autofocus value="{{.value}}" on-keydown="@event.key === 'Escape' ? @.close() : @event.key === 'Enter' ? @.close(true, ~/value) : true" /></label>
   </div>
   <buttons>
     <button left class=flat on-click="@.close()">Cancel</button>

@@ -1,7 +1,7 @@
-import * as oak from 'https://deno.land/x/oak@v11.1.0/mod.ts';
-import postgres from 'https://deno.land/x/postgresjs@v3.3.4/mod.js';
+import * as oak from 'https://deno.land/x/oak@v12.5.0/mod.ts';
+import postgres from 'https://deno.land/x/postgresjs@v3.3.5/mod.js';
 import * as diff from './diff.ts';
-import { decode } from 'https://deno.land/std@0.177.0/encoding/base64url.ts'
+import { decode } from 'https://deno.land/std@0.190.0/encoding/base64url.ts'
 import { fs } from './client.ts';
 
 type JSONValue = postgres.JSONValue;
@@ -103,6 +103,11 @@ function source(config: DatabaseConfig): string {
   return `${config.username || 'postgres'}@${config.host || 'localhost'}:${config.port || 5432}/${config.database || 'postgres'}`;
 }
 
+function clientForSource(src: number|string): number|undefined {
+  if (typeof src === 'number') return src;
+  for (const k in state.diffs) if (src === source(state.diffs[k].config)) return state.diffs[k].id;
+}
+
 function prepareConfig(cfg: DatabaseConfig, extra?: Partial<DatabaseConfig> & { app?: string }): DatabaseConfig {
   const base = {
     onnotice() {},
@@ -184,16 +189,16 @@ interface Ping { action: 'ping' }
 interface Start { action: 'start'; id: number; config: DatabaseConfig }
 interface Restart { action: 'restart'; id: number; config: DatabaseConfig }
 interface Resume { action: 'resume'; id: number; config: DatabaseConfig }
-interface Stop { action: 'stop', id: number, save?: true }
-interface Status { action: 'status' }
-interface Clear { action: 'clear' }
-interface Segment { action: 'segment'; segment: string, id?: string }
-interface Check { action: 'check'; since?: string, id: string }
-interface Schema { action: 'schema'; client?: number|DatabaseConfig; id?: string }
-interface Query { action: 'query'; client: number|DatabaseConfig; query: string[]; params?: unknown[][]; id: string }
+interface Stop { action: 'stop', id: number; save?: true }
+interface Status { action: 'status'; id: string }
+interface Clear { action: 'clear'; source?: string|number }
+interface Segment { action: 'segment'; segment: string; id?: string }
+interface Check { action: 'check'; client: string|number; since?: string; id: string; }
+interface Schema { action: 'schema'; client?: string|number|DatabaseConfig; id?: string }
+interface Query { action: 'query'; client: string|number|DatabaseConfig; query: string[]; params?: unknown[][]; id: string }
 interface Leak { action: 'leak'; config: DatabaseConfig }
-interface Unleak { action: 'unleak', config: DatabaseConfig }
-interface Interval { action: 'interval', time: number }
+interface Unleak { action: 'unleak'; config: DatabaseConfig }
+interface Interval { action: 'interval'; time: number }
 type Message = Ping|Start|Restart|Resume|Stop|Status|Clear|Segment|Check|Schema|Query|Leak|Unleak|Interval;
 
 async function message(this: WebSocket, msg: Message) {
@@ -203,11 +208,11 @@ async function message(this: WebSocket, msg: Message) {
       case 'resume': await start(msg.config, msg.id, this, 'resume'); break;
       case 'restart': await start(msg.config, msg.id, this, 'restart'); break;
       case 'stop': await stop(msg.id, msg.save); break;
-      case 'status': status(); break;
-      case 'clear': await clear(); break;
+      case 'status': status(msg.id, this); break;
+      case 'clear': await clear(msg.source ? clientForSource(msg.source) : undefined); break;
       case 'segment': await next(msg.segment, this, msg.id); break;
       case 'ping': this.send(JSON.stringify({ action: 'pong' })); break;
-      case 'check': check(this, msg.id, msg.since); break;
+      case 'check': check(this, msg.client, msg.id, msg.since); break;
       case 'schema': schema(this, msg.client, msg.id); break;
       case 'query': query(msg.client, msg.query, msg.params || [], msg.id, this); break;
       case 'leak': leak(msg.config); break;
@@ -315,14 +320,19 @@ async function start(config: DatabaseConfig, id: number, ws: WebSocket, start?: 
 async function stop(id: number, save?: true) {
   const client = state.diffs[id];
   if (!client) return error('Cannot stop what is not started.');
-  if (save || save !== false && Object.keys(state.diffs).length > 1) state.saved.push.apply(state.saved, await diff.entries(client.client));
+  if (save || save !== false && Object.keys(state.diffs).length > 1) {
+    const entries = await diff.entries(client.client);
+    const src = source(client.config);
+    for (const e of entries) e.source = src;
+    state.saved.push.apply(state.saved, entries);
+  }
   await diff.stop(client.client);
   await client.client.end();
   delete state.diffs[id];
   status();
 }
 
-function status() {
+function status(id?: string, ws?: WebSocket) {
   const status = {
     segment: state.segment,
     clients: {} as { [k: number]: { id: number; config: DatabaseConfig; source: string } },
@@ -336,7 +346,7 @@ function status() {
   for (const k in state.leaks) {
     status.leaks[k] = { id: +k, config: Object.assign({}, state.leaks[k].client.config, { types: undefined, connection: undefined }), databases: state.leaks[k].databases, initial: state.leaks[k].initial, current: state.leaks[k].current };
   }
-  notify({ action: 'status', status });
+  notify({ action: 'status', status, id }, ws);
 }
 
 async function next(segment: string, ws: WebSocket, id?: string) {
@@ -351,30 +361,39 @@ async function next(segment: string, ws: WebSocket, id?: string) {
   if (id) notify({ action: 'segment-change', id }, ws);
 }
 
-async function clear() {
-  state.saved = [];
-  for (const k in state.diffs) {
-    await diff.clear(state.diffs[k].client);
+async function clear(client?: number) {
+  if (!client) state.saved = [];
+
+  if (client) {
+    if (client in state.diffs) await diff.clear(state.diffs[client].client);
+  } else {
+    for (const k in state.diffs) {
+      await diff.clear(state.diffs[k].client);
+    }
   }
-  notify({ action: 'clear' });
+
+  const cfg = state.diffs[(client || -1)]?.config;
+  notify({ action: 'clear', source: cfg ? source(cfg) : undefined });
 }
 
-async function check(ws: WebSocket, id: string, since?: string) {
-  const entries: diff.Entry[] = ([] as diff.Entry[]).concat(state.saved);
+async function check(ws: WebSocket, client: string|number, id: string, since?: string) {
+  const entries: diff.Entry[] = since ? [] : ([] as diff.Entry[]).concat(state.saved);
   for (const k in state.diffs) {
-    const client = state.diffs[k];
-    const src = source(client.config);
-    const res = await diff.entries(client.client, since);
-    for (const e of res) e.source = src;
-    entries.push.apply(entries, res);
+    if (+client === +k) {
+      const client = state.diffs[k];
+      const src = source(client.config);
+      const res = await diff.entries(client.client, since);
+      for (const e of res) e.source = src;
+      entries.push.apply(entries, res);
+    }
   }
   notify({ action: 'entries', entries, id }, ws);
 }
 
-async function schema(ws: WebSocket, client?: number|DatabaseConfig, id?: string) {
+async function schema(ws: WebSocket, client?: string|number|DatabaseConfig, id?: string) {
   const res: { [id: number]: diff.Table[] } = {};
-  if (typeof client === 'number') {
-    const c = state.diffs[client];
+  if (typeof client === 'number' || typeof client === 'string') {
+    const c = state.diffs[+client];
     if (!c) return error(`Cannot retrieve schema for unknown client ${client}.`, ws, { id });
     res[c.id] = await diff.schema(c.client);
   } else if (client) {
@@ -401,9 +420,9 @@ async function schema(ws: WebSocket, client?: number|DatabaseConfig, id?: string
   notify({ action: 'schema', schema: res, id }, ws);
 }
 
-async function query(client: DatabaseConfig|number, query: string[], params: unknown[][], id: string, ws: WebSocket) {
-  if (typeof client === 'number') {
-    const c = state.diffs[client];
+async function query(client: DatabaseConfig|number|string, query: string[], params: unknown[][], id: string, ws: WebSocket) {
+  if (typeof client === 'number' || typeof client === 'string') {
+    const c = state.diffs[+client];
     if (!c) return error(`Could not query unknown client ${client}.`, ws, { id });
 
     try {

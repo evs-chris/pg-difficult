@@ -1,5 +1,5 @@
 import { readLines } from 'https://deno.land/std@0.177.0/io/mod.ts';
-import postgres from 'https://deno.land/x/postgresjs@v3.3.4/mod.js';
+import postgres from 'https://deno.land/x/postgresjs@v3.3.5/mod.js';
 
 import { start, next, dump, schema, clear, stop } from './diff.ts';
 

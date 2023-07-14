@@ -27,6 +27,17 @@ Ractive.helpers.age = function(ts) {
   return evaluate({ d }, `d#date,'HH:mm EEE'`);
 }
 
+Ractive.decorators.autofocus = function autofocus(node) {
+  if (node) {
+    if (typeof node.focus === 'function') node.focus();
+    if ('selectionStart' in node) {
+      node.selectionStart = 0;
+      node.selectionEnd = -1;
+    }
+  }
+  return { teardown() {} };
+}
+
 setInterval(() => {
   Ractive.sharedSet('now', new Date());
 }, 5000);
@@ -152,10 +163,6 @@ const app = globalThis.app = new Ractive({
     diffs: [],
   },
   observe: {
-    entries(v) {
-     if (v && v.length) this.set('last', v.reduce((a, c) => c.id > a ? c.id : a, 0));
-     else this.set('last', undefined);
-    },
     'status.clients': {
       handler(v) {
         const active = Object.values(v || {}).map(v => {
@@ -274,8 +281,10 @@ const app = globalThis.app = new Ractive({
       this.host.addWindow(win, { id: wid, title: `Entries for ${constr(con)}` });
     } else {
       win = new Entries();
+      win.combined = true;
       this.host.addWindow(win, { id: wid, title: `All Entries` });
     }
+    win.link('newSegment', 'newSegment', { instance: this });
   },
   openLeak(id, database) {
     const wid = `leaks-${id ?? 'all'}-${database || 'all'}`;
@@ -298,8 +307,8 @@ const app = globalThis.app = new Ractive({
     win = new Report({ data: { reportId } }, report);
     this.host.addWindow(win, { id: wid, title: `Loading report...` });
   },
-  ask(question, title) {
-    const w = new Ask({ data: { message: question } });
+  ask(question, title, value) {
+    const w = new Ask({ data: { message: question, value: value || '' } });
     this.host.addWindow(w, { title, block: true, top: 'center', left: 'center' });
     return w.result;
   },
@@ -447,6 +456,7 @@ Window.extendWith(ControlPanel, {
       this.link('savedQueries', 'savedQueries', { instance: app });
       this.link('savedReports', 'savedReports', { instance: app });
       this.link('loadedQuery', 'loadedQuery', { instance: app });
+      this.link('newSegment', 'newSegment', { instance: app });
     },
   },
   observe: {
@@ -605,6 +615,22 @@ function reverseEntry(entry, schema) {
   }
 }
 
+function adjacentEntries(entry, entries, by) {
+  let idx = entries.indexOf(entry);
+  const segment = entry.segment;
+  if (!~idx) return [];
+  const res = [];
+  if (by === 'segment') {
+    for (; idx >= 0; idx--) if (entries[idx].segment !== segment) break;
+    idx++; // start on the topmost matching entry
+    by = 'below';
+  }
+
+  for (; entries[idx]?.segment === segment && entries[idx]; by === 'above' ? idx-- : idx++) res.push(entries[idx]);
+
+  return res;
+}
+
 const EntryCSS = `
 .controls { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; }
 .controls > * { margin: 0 0.5em; }
@@ -620,10 +646,15 @@ const EntryCSS = `
 .wrapper > .name, .diff.whole > .name { display: flex; justify-content: space-between; }
 .wrapper > .name > .src, .diff.whole > .name > .src { opacity: 0.4; }
 .wrapper, .diff.whole, .header { position: relative; }
+.wrapper { min-height: 3em; }
 h2 { padding: 1em 0 0.5em 0; margin: 0; }
-button.undo { position: absolute; top: 0.2em; right: 0; opacity: 0; transition: opacity 0.3s ease; }
-.header button.undo { top: 0.75em; }
-.header:hover button.undo, .wrapper:hover button.undo, .diff.whole:hover button.undo { opacity: 1; z-index: 20; }
+.header { display: flex; justify-content: space-between; }
+.header h2 { flex-shrink: 1; user-select: none; }
+.header > .buttons, .wrapper > .buttons { opacity: 0; transition: opacity 0.3s ease; }
+.header:hover .buttons, .wrapper:hover > .buttons, .diff.whole:hover button { opacity: 1; z-index: 20; }
+.wrapper > .buttons { position: absolute; right: 0.2em; top: 0.2em; }
+.rvlitem { position: relative; }
+.rvlitem .buttons { position: absolute; top: 0; right: 0; opacity: 0; transition: opacity 0.2s ease-in-out; }
 `
 class Entries extends Window {
   constructor(source, opts) {
@@ -733,13 +764,20 @@ res
     const base = app.get('entries') || [];
     const entries = [];
 
-    for (let i = 0; i < base.length; i++) {
-      if (!entries.length) {
-        if (entry.id === base[i].id) entries.unshift(base[i]);
-        continue;
-      }
+    const idx = base.findIndex(e => entry.id === e.id);
+
+    if (!~idx) return this.host.toast('Unable to find base entry for reversal', { type: 'error', timeout: 3000 });
+
+    for (let i = idx; i >= 0; i--) {
       if (base[i].segment !== entry.segment) break;
-      else entries.unshift(base[i]);
+      if (base[i].source !== entry.source) continue;
+      entries.push(base[i]);
+    }
+
+    for (let i = idx + 1; i < base.length; i++) {
+      if (base[i].segment !== entry.segment) break;
+      if (base[i].source !== entry.source) continue;
+      entries.unshift(base[i]);
     }
 
     if (!entries.length) return this.host.toast('Nothing to undo', { type: 'info', timeout: 3000 });
@@ -751,10 +789,49 @@ res
 
     request({ action: 'query', query: reverse.map(p => p[0]), params: reverse.map(p => p[1]), client: Object.values(app.get('status.clients') || {}).find(c => c.source === this.source).config });
   }
+
+  async renameSegment(entry, by) {
+    const all = (this.source || this.combined) ? app.get('entries') : this.get('entries') || [];
+    const name = await app.ask('What would you like the new segment name to be?', `${by ? 'Split' : 'Rename'} ${entry.segment}`, entry.segment);
+    if (!name) return;
+
+    let targets;
+    if (by === 'above') targets = adjacentEntries(entry, all, 'above');
+    else if (by === 'below') targets = adjacentEntries(entry, all, 'below');
+    else targets = adjacentEntries(entry, all, 'segment');
+
+    if (!~targets.indexOf(entry)) targets.push(entry);
+
+    if (this.source || this.combined) {
+      const srcs = [];
+      for (const t of targets) if (!srcs.includes(t.source)) srcs.push(t.source);
+      const configs = app.get('status.clients');
+      const srcConfig = {};
+      for (const s of srcs) {
+        for (const id in configs) if (configs[id].source === s) srcConfig[s] = id;
+        if (!srcConfig[s]) return;
+      }
+
+      for (const s of srcs) {
+        const ts = targets.filter(t => t.source === s);
+        await request({ action: 'query', query: ['update __pgdifficult_entries set segment = $1 where id = any($2)'], params: [[name, ts.map(t => t.id)]], client: srcConfig[s] });
+      }
+    }
+
+    for (const t of targets) t.segment = name;
+
+    (this.source ? app : this).update('entries');
+  }
+
+  clearEntries() {
+    if (this.event?.event?.ctrlKey || !this.source) notify({ action: 'clear' });
+    else notify({ action: 'clear', source: this.source });
+  }
 }
 Window.extendWith(Entries, {
   template: '#entries',
   options: { flex: true, resizable: true, width: '50em', height: '40em' },
+  use: [RauiPopover.default({ name: 'pop' })],
   css: EntryCSS,
   computed: {
     entries() {
@@ -1152,8 +1229,9 @@ function connect() {
   ws.addEventListener('open', () => {
     app.set('connected', true);
     app.set('entries', []);
-    notify({ action: 'status' });
-    gate('check', () => ({ action: 'check' }));
+    request({ action: 'status' }).then(() => {
+      message({ action: 'check' });
+    });
   });
   ws.addEventListener('error', () => {
     ws.close();
@@ -1167,35 +1245,50 @@ function connect() {
   });
   ws.addEventListener('message', ev => {
     const msg = JSON.parse(ev.data);
-    switch (msg.action) {
-      case 'status': app.set('status', Object.assign(msg.status, { lastUpdate: new Date() })); break;
-      case 'clear': app.set('entries', []); break;
-      case 'error':
-        app.host.toast(msg.error || '(unknown error)', { type: 'error' });
-        if ('id' in msg) request.error(msg.id, msg);
-        break;
+    message(msg);
+  });
+}
 
-      case 'check':
-        if (msg.reset) app.set('entries', []);
-        gate('check', () => ({ action: 'check', since: app.get('last') }));
-        break;
+function message(msg) {
+  switch (msg.action) {
+    case 'status': app.set('status', Object.assign(msg.status, { lastUpdate: new Date() })); break;
+    case 'clear':
+      if (msg.source) app.set('entries', (app.get('entries') || []).filter(e => e.source !== msg.source));
+      else app.set('entries', []);
+      break;
 
-      case 'entries': { 
-        const current = app.get('entries');
-        const add = (msg.entries || []).filter(e => !current.find(o => o.source === e.source && o.id === e.id));
-        add.unshift('entries');
-        app.push.apply(app, add);
-        break;
+    case 'error':
+      app.host.toast(msg.error || '(unknown error)', { type: 'error' });
+      if ('id' in msg) request.error(msg.id, msg);
+      break;
+
+    case 'check': {
+      if (msg.reset) app.set('entries', []);
+      const entries = app.get('entries');
+      const clients = app.get('status.clients');
+      for (const k in clients) {
+        const client = clients[k];
+        const since = evaluate({ entries, source: client.source }, 'max(filter(~entries =>source == ~source) =>id)') || undefined;
+        gate('check', () => ({ action: 'check', client: client.id, since }));
       }
-
-      case 'leaks':
-        for (const k in msg.map) app.set(`status.leaks.${k}.current`, msg.map[k]);
-        app.set('status.lastUpdate', new Date());
-        break;
+      break;
     }
 
-    if ('id' in msg) request.response(msg.id, msg);
-  });
+    case 'entries': { 
+      const current = app.get('entries');
+      const add = (msg.entries || []).filter(e => !current.find(o => o.source === e.source && o.id === e.id));
+      add.unshift('entries');
+      app.push.apply(app, add);
+      break;
+    }
+
+    case 'leaks':
+      for (const k in msg.map) app.set(`status.leaks.${k}.current`, msg.map[k]);
+      app.set('status.lastUpdate', new Date());
+      break;
+  }
+
+  if ('id' in msg) request.response(msg.id, msg);
 }
 
 function reconnect() {
