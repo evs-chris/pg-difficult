@@ -1,3 +1,19 @@
+## 1.6.0
+
+2023-07-16
+
+### Bugs
+
+* Mulitple diffs will no longer clobber each other when their id ranges overlap.
+* Undoing a segment from a sticky header will now get all the entries rather than just the ones from the start of visible data.
+
+### Features
+
+* Segments can now be renamed.
+* Segments can now be split into multiple segments.
+* Entries for individual diffs can now be cleared.
+
+
 ## 1.5.0
 
 2023-04-24
