@@ -136,6 +136,7 @@ export async function start(client: Client) {
 
 export async function next(client: Client, segment: string) {
   await client`update __pgdifficult_state set value = ${segment} where key = 'segment';`;
+  await client.unsafe(`notify __pg_difficult, '${JSON.stringify({ action: 'segment', segment }).replace(/\'/g, '\\\'')}'`);
 }
 
 export async function schema(client: Client) {
@@ -181,6 +182,7 @@ export async function entries(client: Client, since?: string): Promise<Entry[]> 
 
 export async function clear(client: Client) {
   await client`delete from __pgdifficult_entries;`;
+  await client`notify __pg_difficult, 'clear'`;
 }
 
 export async function stop(client: Client): Promise<Segment> {

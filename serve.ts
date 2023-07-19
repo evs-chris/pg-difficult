@@ -6,7 +6,7 @@ import { fs } from './client.ts';
 
 type JSONValue = postgres.JSONValue;
 
-const VERSION = '1.6.0';
+const VERSION = '1.6.1';
 
 interface DatabaseConfig {
   host: string;
@@ -78,6 +78,7 @@ interface Client {
   id: number;
   config: DatabaseConfig;
   client: postgres.Sql<Record<string, unknown>>;
+  lock?: boolean;
 }
 
 interface State {
@@ -263,7 +264,8 @@ async function start(config: DatabaseConfig, id: number, ws: WebSocket, start?: 
   const client = postgres(config);
 
   const did = state.diffId++;
-  state.diffs[did] = { client, config, id: did };
+  const rec = { client, config, id: did, lock: false };
+  state.diffs[did] = rec;
 
   try {
     await client`select 1 as x`;
@@ -296,15 +298,7 @@ async function start(config: DatabaseConfig, id: number, ws: WebSocket, start?: 
       notify({ id, action: 'started' }, ws);
     }
 
-    await client.listen('__pg_difficult', async v => {
-      if (v === 'stopped') {
-        await client.end();
-        delete state.diffs[id];
-        status();
-      } else if (!v || v === 'record') {
-        throttleCheck();
-      }
-    });
+    await connectedDiff(rec);
   } catch (e) {
     delete state.diffs[did];
     try {
@@ -315,6 +309,45 @@ async function start(config: DatabaseConfig, id: number, ws: WebSocket, start?: 
 
   status();
   notify({ action: 'check', reset: true });
+}
+
+async function reconnectDiff(client: Client) {
+  try {
+    await client.client.end();
+  } catch { /* probably already dead */ }
+  client.client = postgres(client.config);
+  await connectedDiff(client);
+}
+
+async function connectedDiff(rec: Client) {
+  await rec.client.listen('__pg_difficult', async v => {
+    if (rec.lock) return;
+    let req: any;
+    if (v[0] === '{') {
+      req = JSON.parse(v);
+      v = req.action;
+    }
+    if (v === 'stopped') {
+      console.log('stopping remotely stopped diff');
+      delete state.diffs[rec.id];
+      try {
+        await rec.client.end();
+      } catch {
+        console.log(`Failed to disconnected listener for stopped diff ${source(rec.config)}.`);
+
+      }
+      console.log('notifying about remotely stopped diff');
+      delete state.diffs[rec.id];
+      status();
+    } else if (v === 'clear') {
+      notify({ action: 'clear', source: source(rec.config) });
+    } else if (v === 'segment') {
+      if (req && req.segment) state.segment = req.segment;
+      status();
+    } else if (!v || v === 'record') {
+      throttleCheck();
+    }
+  });
 }
 
 async function stop(id: number, save?: true) {
@@ -353,7 +386,9 @@ async function next(segment: string, ws: WebSocket, id?: string) {
   if (!segment) return error('Segment is required.');
   state.segment = segment;
   for (const k in state.diffs) {
+    state.diffs[k].lock = true;
     await diff.next(state.diffs[k].client, segment);
+    state.diffs[k].lock = false;
   }
 
   status();
@@ -368,7 +403,9 @@ async function clear(client?: number) {
     if (client in state.diffs) await diff.clear(state.diffs[client].client);
   } else {
     for (const k in state.diffs) {
+      state.diffs[k].lock = true;
       await diff.clear(state.diffs[k].client);
+      state.diffs[k].lock = false;
     }
   }
 
@@ -382,7 +419,13 @@ async function check(ws: WebSocket, client: string|number, id: string, since?: s
     if (+client === +k) {
       const client = state.diffs[k];
       const src = source(client.config);
-      const res = await diff.entries(client.client, since);
+      let res: diff.Entry[];
+      try {
+        res = await diff.entries(client.client, since);
+      } catch {
+        await reconnectDiff(client);
+        res = await diff.entries(client.client, since);
+      }
       for (const e of res) e.source = src;
       entries.push.apply(entries, res);
     }
@@ -559,6 +602,10 @@ Deno.addSignalListener('SIGINT', async () => {
   console.log(`
 pg_difficult stopped`);
   Deno.exit(0);
+});
+
+app.addEventListener('error', ev => {
+  console.error(`Caught an application error: ${ev.message}`);
 });
 
 // start server
