@@ -651,7 +651,7 @@ h2 { padding: 1em 0 0.5em 0; margin: 0; }
 .header { display: flex; justify-content: space-between; }
 .header h2 { flex-shrink: 1; user-select: none; }
 .header > .buttons, .wrapper > .buttons { opacity: 0; transition: opacity 0.3s ease; }
-.header:hover .buttons, .wrapper:hover > .buttons, .diff.whole:hover button { opacity: 1; z-index: 20; }
+.header:hover .buttons, .wrapper:hover > .buttons, .diff.whole:hover .buttons { opacity: 1; z-index: 20; }
 .wrapper > .buttons { position: absolute; right: 0.2em; top: 0.2em; }
 .rvlitem { position: relative; }
 .rvlitem .buttons { position: absolute; top: 0; right: 0; opacity: 0; transition: opacity 0.2s ease-in-out; }
