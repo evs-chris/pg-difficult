@@ -1227,7 +1227,10 @@ class SourceEdit extends Window {
   constructor(opts) { super(opts); }
 }
 Window.extendWith(SourceEdit, {
-  template: '#source-edit',
+  template: '#source-edit', css: `
+.field.textarea { flex-grow: 1; min-height: 5em; }
+.field.textarea textarea { height: calc(100% - 1.6em); }
+  `,
   options: { close: false, flex: true, resizable: true, maximize: false, minimize: false, width: '40em', height: '30em' },
 });
 
