@@ -1112,7 +1112,7 @@ class Report extends Window {
 
     switch (ev.data.action) {
       case 'ready':
-        wnd.postMessage({ action: 'set', set: { showProjects: false, report: this.get('report.definition') || {}, sources: this.get('report.sources') || [] } });
+        wnd.postMessage({ action: 'set', set: { 'settings.theme': 'light', showProjects: false, report: this.get('report.definition') || {}, sources: this.get('report.sources') || [] } });
         break;
 
       case 'new-source': case 'edit-source':
