@@ -25,6 +25,13 @@
     margin: 0;
     padding: 0 0 0.5em 0;
   }
+  code {
+    display: inline-block;
+    border: 1px solid rgba(0, 0, 0, 0.2);
+    line-height: 1.4em;
+    padding: 0.1em;
+    vertical-align: text-bottom;
+  }
   .content {
     display: flex;
   }
@@ -161,6 +168,10 @@
   }
 
   .version { opacity: 0.5; }
+
+  .field.error {
+    color: red !important;
+  }
 </style>
 <!-- HEAD -->
 <script type=text/ractive id=template>
@@ -411,7 +422,7 @@
       {{#if @.source && !~/loaded}}
         <label as-field title="The segment name groups sets of changes together. The segment will automatically be updated when you stop typing, and any new changes will get the new segment name.">Segment<input value="{{~/newSegment}}" lazy=1500 /></label>
       {{/if}}
-      <label class=filter as-field title="Raport expression used to filter out entries. Available fields are id, new, old, schema, segment, source, stamp, and table. new and old are objects containing the fields that changed in the record. table, schema, source, and segment are strings.">Filter Expression<input value="{{expr}}" lazy=1000 /></label>
+      <label class=filter class-error="~/exprError" as-field title="Raport expression used to filter out entries. Available fields are id, new, old, schema, segment, source, stamp, and table. new and old are objects containing the fields that changed in the record. table, schema, source, and segment are strings.{{#if ~/exprError}}{{'\n\nError: ' + ~/exprError.message + '\n' + ~/exprError.marked}}{{/if}}">Filter Expression<input value="{{expr}}" lazy=1000 /></label>
       <button as-pop=`~/showSettings`>&#9881;</button>
     </div>
     <virtual-list bind-items="~/entries" size=75>
@@ -464,7 +475,7 @@
         <div class=header><h2 title="Double click to rename segment" on-dblclick="@.renameSegment(.)">{{.segment}}</h2> <div class=buttons style="padding-top: 0.9em;">{{#if ~/allowUndoSegment}}<button class=undo on-click="@.undoSegment(.)" title="Undo all changes in this segment by replaying the changes in reverse. This will also create a new segment named 'Undo {{.segment}}', unless you hold the ctrl key when clicking this button.">Undo</button>{{/if}}</div></div>
       {{/with}}{{/if}}
       <else>
-        No change entries have been recorded.
+        {{#if ~/exprError}}<code>{{~/expr}}</code> is an invalid filter.<br /><br /><pre>Error: {{~/exprError.message + '\n\n'}}{{~/exprError.marked}}</pre>{{else}}No change entries have been recorded.{{/if}}
       </else>
     </virtual-list>
   </div>

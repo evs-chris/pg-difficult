@@ -1,4 +1,4 @@
-const { evaluate, registerOperator } = Raport;
+const { evaluate, registerOperator, parse } = Raport;
 const { Window } = RauiWindow;
 
 registerOperator({ type: 'value', names: ['log'], apply: (_name, args) => console.log.apply(console, args) });
@@ -851,6 +851,14 @@ Window.extendWith(Entries, {
       if (expr) res = evaluate({ list: res }, `filter(list =>(${expr}))`);
       return res;
     }
+    },
+    exprError() {
+      const expr = this.get('expr');
+      if (expr) {
+        const out = parse(expr, { trim: true, consumeAll: true });
+        if (out && typeof out === 'object' && 'message' in out) return out;
+      }
+    },
   },
   on: {
     complete() {
