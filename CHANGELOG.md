@@ -1,3 +1,18 @@
+## 1.6.1
+
+2023-08-15
+
+### Bugs
+
+* The server will now try to avoid known crashing errors caused by connection loss. This makes putting a laptop running a diff on a remote machine to sleep a little more reliable.
+* Multiple clients accessing a server and multiple servers diffing the same database will now try to avoid allowing the clients to get out of sync.
+* Hover buttons for new/removed diff records will now display correctly.
+* Downloading a diff from a window with a filter expression applied will no longer leave the filtered out values out of the downloaded file.
+* Errors in filter expressions are now indicated in the UI.
+* The report designer now properly defaults to a matching light theme.
+* Providing sources for a report will no longer require expanding the window to input a query or JSON into a textarea.
+
+
 ## 1.6.0
 
 2023-07-16

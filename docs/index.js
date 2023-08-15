@@ -1,4 +1,4 @@
-const { evaluate, registerOperator } = Raport;
+const { evaluate, registerOperator, parse } = Raport;
 const { Window } = RauiWindow;
 
 registerOperator({ type: 'value', names: ['log'], apply: (_name, args) => console.log.apply(console, args) });
@@ -651,7 +651,7 @@ h2 { padding: 1em 0 0.5em 0; margin: 0; }
 .header { display: flex; justify-content: space-between; }
 .header h2 { flex-shrink: 1; user-select: none; }
 .header > .buttons, .wrapper > .buttons { opacity: 0; transition: opacity 0.3s ease; }
-.header:hover .buttons, .wrapper:hover > .buttons, .diff.whole:hover button { opacity: 1; z-index: 20; }
+.header:hover .buttons, .wrapper:hover > .buttons, .diff.whole:hover .buttons { opacity: 1; z-index: 20; }
 .wrapper > .buttons { position: absolute; right: 0.2em; top: 0.2em; }
 .rvlitem { position: relative; }
 .rvlitem .buttons { position: absolute; top: 0; right: 0; opacity: 0; transition: opacity 0.2s ease-in-out; }
@@ -705,7 +705,7 @@ res
       [html, css] = this.getHtml();
       text = `<html><head><title>${name}</title><style>${css}</style></head><body>${html}</body></html>`
     } else {
-      const out = { entries: this.get('entries') };
+      const out = { entries: this.get('allEntries') };
       if (this.source) out.schemas = { [this.source]: (this.get('schemas') || {})[this.source] };
       else out.schemas = this.get('schemas');
       if (this.get('expr')) out.expr = this.get('expr');
@@ -834,10 +834,9 @@ Window.extendWith(Entries, {
   use: [RauiPopover.default({ name: 'pop' })],
   css: EntryCSS,
   computed: {
-    entries() {
+    allEntries() {
       const source = this.get('@.source');
       const loaded = this.get('loaded');
-      const expr = this.get('expr');
       let res;
       if (loaded) {
         if (Array.isArray(loaded)) res = loaded;
@@ -848,9 +847,21 @@ Window.extendWith(Entries, {
         if (source != null) res = entries.filter(e => e.source === this.source);
         else res = entries;
       }
+      return res;
+    },
+    entries() {
+      let res = this.get('allEntries');
+      const expr = this.get('expr');
       if (expr) res = evaluate({ list: res }, `filter(list =>(${expr}))`);
       return res;
-    }
+    },
+    exprError() {
+      const expr = this.get('expr');
+      if (expr) {
+        const out = parse(expr, { trim: true, consumeAll: true });
+        if (out && typeof out === 'object' && 'message' in out) return out;
+      }
+    },
   },
   on: {
     complete() {
@@ -1101,7 +1112,7 @@ class Report extends Window {
 
     switch (ev.data.action) {
       case 'ready':
-        wnd.postMessage({ action: 'set', set: { showProjects: false, report: this.get('report.definition') || {}, sources: this.get('report.sources') || [] } });
+        wnd.postMessage({ action: 'set', set: { 'settings.theme': 'light', showProjects: false, report: this.get('report.definition') || {}, sources: this.get('report.sources') || [] } });
         break;
 
       case 'new-source': case 'edit-source':
@@ -1216,7 +1227,10 @@ class SourceEdit extends Window {
   constructor(opts) { super(opts); }
 }
 Window.extendWith(SourceEdit, {
-  template: '#source-edit',
+  template: '#source-edit', css: `
+.field.textarea { flex-grow: 1; min-height: 5em; }
+.field.textarea textarea { height: calc(100% - 1.6em); }
+  `,
   options: { close: false, flex: true, resizable: true, maximize: false, minimize: false, width: '40em', height: '30em' },
 });
 
