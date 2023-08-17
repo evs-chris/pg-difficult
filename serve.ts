@@ -2,6 +2,7 @@ import * as oak from 'https://deno.land/x/oak@v12.5.0/mod.ts';
 import postgres from 'https://deno.land/x/postgresjs@v3.3.5/mod.js';
 import * as diff from './diff.ts';
 import { decode } from 'https://deno.land/std@0.190.0/encoding/base64url.ts'
+import { open } from 'https://deno.land/x/deno_open@v0.0.6/index.ts';
 import { fs } from './client.ts';
 
 type JSONValue = postgres.JSONValue;
@@ -31,6 +32,7 @@ const config = {
   port: 1999,
   pollingInterval: 10000,
   listen: '127.0.0.1',
+  noui: false,
 };
 
 // process args
@@ -48,6 +50,10 @@ for (let i = 0; i < Deno.args.length; i++) {
       config.listen = Deno.args[++i] || '127.0.0.1';
       break;
 
+    case '--noui':
+      config.noui = true;
+      break;
+
     case '--help': case '-h':
       console.log(`Usage: pg-difficult [...options]
 
@@ -57,8 +63,11 @@ Options:
   --interval | -t  <number>   have the connection monitor poll at the given rate in ms
                               defaults to 10000
 
-  --listen   | -l  <ip>       listen on the given address, defaults to 127.0.0.127
+  --listen   | -l  <ip>       listen on the given address, defaults to 127.0.0.1
                               to listen on all addresses, use 0.0.0.0
+
+  --noui                      don't attempt to open the pg-difficult page for the
+                              started instance
 
   --help     | -h             display this message and exit
 
@@ -200,7 +209,8 @@ interface Query { action: 'query'; client: string|number|DatabaseConfig; query: 
 interface Leak { action: 'leak'; config: DatabaseConfig }
 interface Unleak { action: 'unleak'; config: DatabaseConfig }
 interface Interval { action: 'interval'; time: number }
-type Message = Ping|Start|Restart|Resume|Stop|Status|Clear|Segment|Check|Schema|Query|Leak|Unleak|Interval;
+interface Halt { action: 'halt' }
+type Message = Ping|Start|Restart|Resume|Stop|Status|Clear|Segment|Check|Schema|Query|Leak|Unleak|Interval|Halt;
 
 async function message(this: WebSocket, msg: Message) {
   try {
@@ -222,6 +232,7 @@ async function message(this: WebSocket, msg: Message) {
         config.pollingInterval = msg.time >= 1000 ? msg.time : 10000;
         status();
         break;
+      case 'halt': halt(); break;
     }
   } catch (e) {
     if ('id' in msg) error(e.message, this, { id: msg.id });
@@ -581,10 +592,13 @@ async function poll(out: boolean) {
 
 app.addEventListener('listen', ({ secure, hostname, port }) => {
   console.info(`pg-difficult server v${VERSION} is available at ${secure ? 'https://' : 'http://'}${hostname}:${port}/`);
+  if (!config.noui) {
+    console.info(`Attempting to open http${secure ? 's' : ''}://127.0.0.1:${port} in your browser.`);
+    open(`http${secure ? 's' : ''}://127.0.0.1:${port}/`, { wait: false });
+  }
 });
 
-// make sure interrupt stops the diff
-Deno.addSignalListener('SIGINT', async () => {
+async function halt() {
   for (const k in state.diffs) {
     const client = state.diffs[k];
     try {
@@ -602,7 +616,10 @@ Deno.addSignalListener('SIGINT', async () => {
   console.log(`
 pg_difficult stopped`);
   Deno.exit(0);
-});
+}
+
+// make sure interrupt stops the diff
+Deno.addSignalListener('SIGINT', halt);
 
 app.addEventListener('error', ev => {
   console.error(`Caught an application error: ${ev.message}`);
