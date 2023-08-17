@@ -172,58 +172,72 @@
   .field.error {
     color: red !important;
   }
+
+  button.reject {
+    color: #fff;
+    background-color: #ca3c3c;
+  }
 </style>
 <script>clientOnly = true</script>
 <script type=text/ractive id=template>
-  <shell on-init="@.set('@.shell', $1)">
-    <right hidden="{{menu.hidden}}" forced="{{menu.forced}}">
-      <menu>
-        <container>
-          <div style="display: flex; align-items: center; justify-content: space-around; height: 3.6em; background-color: #325932;">
-            <span>pg-difficult <span class=version>- v{{~/status.VERSION || '-client-only'}}</span></span>
-          </div>
-        </container>
-        <item title="Control Panel" on-action="@.host.getWindow('control-panel').raise(true)" />
-        <section title="Active Diffs" bind-items="~/diffs" bind-hidden="@global.clientOnly || (~/diffs || []).length < 1" />
-        <section title="Monitored Connections" bind-items="~/leaks" bind-hidden="@global.clientOnly || (~/leaks || []).length < 1" />
-        <section title="Queries" bind-items="~/queries" bind-hidden="@global.clientOnly || (~/queries || []).length < 1" />
-        <section title="Tools" style="margin-top: 1em;">
-          <item title="Reload Saved Entries" on-action="@.loadEntries()" />
-          <item title="Reload Saved Schema" on-action="@.loadSchema()" />
-        </section>
-        <section title="Other Windows" style="margin-top: 1em;" bind-items="~/others" bind-hidden="(~/others || []).length < 1" />
-      </menu>
-    </right>
-    <center style="display: flex; flex-direction: column;">
-      {{#if !@.host.data.currentMax}}
-        <app-bar>
-          <left>
-            <div style="height: 1.5em; font-size: 1.5em; cursor: pointer; user-select: none; margin-right: 1em;" title="Auto arrange windows" on-click="@.host.placeAll()">&#9638;</div>
-            {{#if waiting}}<div style="height: 1.5em;">{{>loader}}</div>{{/if}}
-          </left>
-          <right><div class=hamburger title="Toggle menu" on-click="@.toggle('menu.hidden')" /></right>
-        </app-bar>
-      {{/if}}
-      <div style="flex-grow: 1;">
-        <host placement=smart on-init="@.set('@.host', $1)">
-          <max-top>
-            <app-bar>
-              <left>{{#if waiting}}<div style="height: 1.5em;">{{>loader}}</div>{{/if}}</left>
-              <center>{{window.title}}</center>
-              <right>{{>windowControls}}<div class=hamburger title="Toggle menu" on-click="@.toggle('menu.hidden')" style="margin-left: 2em;" /></right>
-            </app-bar>
-          </max-top>
-        </host>
+  {{#if !~/halted || ~/connected}}
+    <shell on-init="@.set('@.shell', $1)">
+      <right hidden="{{menu.hidden}}" forced="{{menu.forced}}">
+        <menu>
+          <container>
+            <div style="display: flex; align-items: center; justify-content: space-around; height: 3.6em; background-color: #325932;">
+              <span>pg-difficult <span class=version>- v{{~/status.VERSION || '-client-only'}}</span></span>
+            </div>
+          </container>
+          <item title="Control Panel" on-action="@.host.getWindow('control-panel').raise(true)" />
+          <section title="Active Diffs" bind-items="~/diffs" bind-hidden="@global.clientOnly || (~/diffs || []).length < 1" />
+          <section title="Monitored Connections" bind-items="~/leaks" bind-hidden="@global.clientOnly || (~/leaks || []).length < 1" />
+          <section title="Queries" bind-items="~/queries" bind-hidden="@global.clientOnly || (~/queries || []).length < 1" />
+          <section title="Tools" style="margin-top: 1em;">
+            <item title="Reload Saved Entries" on-action="@.loadEntries()" />
+            <item title="Reload Saved Schema" on-action="@.loadSchema()" />
+          </section>
+          <section title="Other Windows" style="margin-top: 1em;" bind-items="~/others" bind-hidden="(~/others || []).length < 1" />
+        </menu>
+      </right>
+      <center style="display: flex; flex-direction: column;">
+        {{#if !@.host.data.currentMax}}
+          <app-bar>
+            <left>
+              <div style="height: 1.5em; font-size: 1.5em; cursor: pointer; user-select: none; margin-right: 1em;" title="Auto arrange windows" on-click="@.host.placeAll()">&#9638;</div>
+              {{#if waiting}}<div style="height: 1.5em;">{{>loader}}</div>{{/if}}
+            </left>
+            <right><div class=hamburger title="Toggle menu" on-click="@.toggle('menu.hidden')" /></right>
+          </app-bar>
+        {{/if}}
+        <div style="flex-grow: 1;">
+          <host placement=smart on-init="@.set('@.host', $1)">
+            <max-top>
+              <app-bar>
+                <left>{{#if waiting}}<div style="height: 1.5em;">{{>loader}}</div>{{/if}}</left>
+                <center>{{window.title}}</center>
+                <right>{{>windowControls}}<div class=hamburger title="Toggle menu" on-click="@.toggle('menu.hidden')" style="margin-left: 2em;" /></right>
+              </app-bar>
+            </max-top>
+          </host>
+        </div>
+      </center>
+    </shell>
+    {{#unless ~/connected}}<div id="not-connected">
+      <div class=wrapper>
+        {{>loader}}
+        <div class=reconnecting>Reconnecting...</div>
       </div>
-    </center>
-  </shell>
-  {{#unless ~/connected}}<div id="not-connected">
-    <div class=wrapper>
-      {{>loader}}
-      <div class=reconnecting>Reconnecting...</div>
+    </div>{{/unless}}
+    <input type=file id=file />
+  {{else}}
+    <div style="width: 100vw; height: 100vh; display: flex; align-items: center; justify-content: center;">
+      <h2 style="text-align: center;">
+        pg-difficult stopped.<br />
+        Please close this window/tab.
+      </h2>
     </div>
-  </div>{{/unless}}
-  <input type=file id=file />
+  {{/if}}
 </script>
 
 <script type=text/ractive id=loader>
@@ -386,6 +400,9 @@
       </div>
     </tab>
   </tabs>
+  <buttons>
+    <button class=reject on-click="@.halt()">Stop pg-difficult</button>
+  </buttons>
 </script>
 
 <script type=text/ractive id=query>

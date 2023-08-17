@@ -1,3 +1,14 @@
+## 1.7.0
+
+2023-08-17
+
+### Features
+
+* Starting the server will now also try to launch the client in the platform default browser. This can be disabled with the `--noui` cli argument.
+* There is now a button at the bottom of the control panel that will stop the server. Navigating away in the client will attempt to warn about leaving the server running and offer to stop the server.
+* There is now a non-binary distribution that can be run with standalone `deno`.
+
+
 ## 1.6.1
 
 2023-08-15

@@ -431,6 +431,10 @@ class ControlPanel extends Window {
   report(rep) {
     app.openReport(rep);
   }
+  halt() {
+    app.set('halted', true);
+    app.notify({ action: 'halt' });
+  }
 }
 Window.extendWith(ControlPanel, {
   template: '#control-panel',
@@ -1306,6 +1310,7 @@ function message(msg) {
 }
 
 function reconnect() {
+  if (app.get('halted')) return;
   if (!app.get('connected')) setTimeout(() => connect(), 10000);
 }
 
@@ -1371,6 +1376,41 @@ Ractive.helpers.copyToClipboard = (function() {
     }
   }
 })();
+
+let unloadTm;
+function unload(ev) {
+  ev.preventDefault();
+  ev.returnValue = '';
+  app.set('unloading', true);
+  setTimeout(() => {
+    unloadTm = setTimeout(async () => {
+      const what = await app.choose('Leaving this page will not stop the pg-difficult server to which this client is currently connected. If you are refreshing, connected elsewhere, or intend to leave the server running, you will not be stopped from leaving this page again for the next 10 seconds.', [
+        { label: 'Leave', action() { this.close(false, 'leave'); }, where: 'left', title: 'Leave the server running and leave the page.' },
+        { label: 'Stop Server', action() { this.close(false, 'halt'); }, title: 'Stop the server now and leave the page.', where: 'center', class: 'reject' },
+        { label: 'Cancel', action() { this.close(false, 'cancel'); }, title: 'Don\'t leave the page.' },
+      ], 'Leave server running?');
+
+      if (what === 'leave') {
+        window.removeEventListener('beforeunload', unload);
+        setTimeout(() => {
+          app.set('unloading', false);
+          window.addEventListener('beforeunload', unload);
+        }, 10000);
+      } else if (what === 'halt') {
+        app.set('halted', true);
+        app.notify({ action: 'halt' });
+      }
+    }, 500);
+
+  });
+}
+
+function unloading() {
+  clearTimeout(unloadTm);
+}
+
+window.addEventListener('beforeunload', unload);
+window.addEventListener('unload', unloading);
 
 // Set up debug helper
 let el;
