@@ -401,7 +401,7 @@
     </tab>
   </tabs>
   <buttons>
-    <button class=reject on-click="@.halt()">Stop pg-difficult</button>
+    {{#unless @global.clientOnly}}<button class=reject on-click="@.halt()">Stop pg-difficult</button>{{/unless}}
   </buttons>
 </script>
 
