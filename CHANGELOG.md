@@ -1,3 +1,17 @@
+## 1.7.1
+
+2023-08-18
+
+### Bugs
+
+* The client will no longer attempt to warn about leaving if the client also stopped the server.
+
+### Other
+
+* There are now warnings in the server help and on the initial client view about what will happen when a diff is started.
+* There is now a Nix derivation available in the nix directory. You should be able to get a shell with pg-difficult available to try with `nix-shell -E 'with import <nixpkgs> {}; let pgdiff = import (builtins.fetchTarball { url = "https://github.com/evs-chris/pg-difficult/releases/downloads/v1.7.1/nix.tar.gz"; }) {}; in runCommand "pgdiff" { buildInputs = [ pgdiff.pg-difficult ]; } ""'`.
+
+
 ## 1.7.0
 
 2023-08-17

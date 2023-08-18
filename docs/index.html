@@ -251,8 +251,8 @@
   <tabs pad style="overflow: hidden;">
     <tab title="Connections" hidden="@global.clientOnly">
       <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.3em;">
-        <div>Connections are saved in browser storage and can be used to start diffs and run queries.</div>
-        <button on-click="@.editConnection()" title="Add a saved connection for this browser at this url.">Add Connection</button>
+        <div>Connections are saved in browser storage and can be used to start diffs and run queries.<br/><br/><span style="color: #ca3c3c; font-weight: bold;">WARNING:</span> Starting a diff on a database will create two tables, create a function, and a then set the function as a trigger for each existing table in the database.</div>
+        <button style="flex-shrink: 0;" on-click="@.editConnection()" title="Add a saved connection for this browser at this url.">Add Connection</button>
       </div>
       <div style="overflow: auto;">
         {{#each connections}}

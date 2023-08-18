@@ -17,6 +17,9 @@ cd build
 zip -r pg-difficult_deno.zip app
 cd ../
 
+# try to make it easier for nix?
+tar -czf build/nix.tar.gz nix
+
 # compile binaries
 deno compile -A --unsafely-ignore-certificate-errors --target x86_64-unknown-linux-gnu -o build/pg-difficult_linux-x64 ./serve.ts
 deno compile -A --unsafely-ignore-certificate-errors --target x86_64-pc-windows-msvc --no-terminal -o build/pg-difficult_windows-x64 ./serve.ts
