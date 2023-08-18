@@ -77,6 +77,15 @@ Any configuration is only stored in browser local storage from the client, meani
 settings in the client will only apply to the specific url the browser accesses. So if
 you want seperate environments, you can use a different listening address or port to
 have a separate set of settings saved in the client.
+
+WARNING: Starting a diff in a database will create two new tables in that database that
+pg-difficult will use to track changes made to any records in any other table in the
+database. It will also add a function and install it as a trigger on every table in the
+database. These tables are world readable and writable, so if there is any sensitive
+information in the database that is guarded by access controls, it will be possible for
+any user to view it as it changes through the diff tables.
+
+Stopping the diff will remove the triggers, function, and tables from the database.
   `);
       Deno.exit(0);
       break;
