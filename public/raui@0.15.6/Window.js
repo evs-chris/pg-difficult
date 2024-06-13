@@ -75,7 +75,8 @@
 
   var DEFAULTS = {
     timeout: 6000,
-    top: true
+    top: true,
+    stack: false,
   };
 
   function plugin$1(opts) {
@@ -83,9 +84,9 @@
 
     var style = function(data) { return [(function(data) {
      var primary = Object.assign({}, data('raui.primary'), data('raui.toast.primary'));
-     return ("\n   .rtoast {\n     position: absolute;\n     display: flex;\n     flex-wrap: wrap;\n     justify-content: center;\n     left: 1em;\n     right: 1em;\n     top: 1em;\n     bottom: auto;\n     z-index: 5;\n     pointer-events: none;\n     overflow: hidden;\n     max-height: 80%;\n   }\n   .rtoast-message {\n     flex-grow: 2;\n     display: flex;\n     align-items: center;\n   }\n   .rtoast-string {\n     white-space: pre-wrap;\n     line-height: 1.3em;\n     padding-top: 0.3em;\n   }\n   .rtoast-upper .rtoast-string {\n     \n   }\n   .rtoast-expand .rtoast-string {\n     padding-top: 0.5em;\n   }\n   .rtoast-buttons {\n     display: flex;\n     padding-left: 0.5em;\n     flex-shrink: 1;\n     align-items: center;\n     max-height: max-content;\n     margin-left: auto;\n   }\n   .rtoast-buttons button {\n     cursor: pointer;\n   }\n   .rtoast-button {\n     background-color: transparent;\n     border: none;\n     color: inherit;\n     padding: 0.5em 0.75em;\n     margin: 0 0 0 0.5em;\n     line-height: 1em;\n     box-shadow: none;\n   }\n   .rtoast-more {\n     cursor: pointer;\n     width: 2em;\n     position: relative;\n     flex-shrink: 2;\n     background-color: transparent;\n     border: none;\n     color: inherit;\n     margin: 0 0 0 0.5em;\n     height: 2em;\n   }\n   .rtoast-more:after {\n     content: ' ';\n     position: absolute;\n     display: block;\n     width: 0.6em;\n     height: 0.6em;\n     top: calc(50% - 0.55em);\n     left: calc(50% - 0.3em);\n     border-bottom: 0.125em solid;\n     border-right: 0.125em solid;\n     transform: rotate(45deg);\n     transition: transform 0.2s ease-in-out, top 0.2s ease-in-out;\n     pointer-events: none;\n   }\n   .rtoast-expanded .rtoast-more:after {\n     transform: rotate(225deg);\n     top: calc(50% - 0.1em);\n   }\n   .rtoast-bottom {\n     bottom: 1em;\n     top: auto;\n   }\n   .rtoast-left {\n     justify-content: flex-start;\n   }\n   .rtoast-right {\n     justify-content: flex-end;\n   }\n   .rtoast-body {\n     border-radius: 0.2em;\n     padding: 1em;\n     color: " + (primary.bg || '#fff') + ";\n     background-color: " + (primary.fg || '#222') + ";\n     box-shadow: 0 2px 2px 0 rgba(0, 0, 0, 0.14), 0 1px 5px 0 rgba(0, 0, 0, 0.12), 0 3px 1px -2px rgba(0, 0, 0, 0.2);\n     opacity: 0.95;\n     pointer-events: all;\n     transition: color 0.5s ease-in-out, background 0.5s ease-in-out;\n     flex-shrink: 1;\n     display: flex;\n     flex-direction: column;\n   }\n   .rtoast-upper {\n     display: flex;\n     flex-shrink: 2;\n     flex-wrap: wrap;\n     justify-content: space-between;\n   }\n \n   .rtoast-expand {\n     margin-top: 1em;\n     border-radius: 0.2em;\n     background-color: " + (primary.bg || '#fff') + ";\n     color: " + (primary.fg || '#222') + ";\n     overflow: auto;\n   }\n \n   .rtoast-success {\n     color: " + (data('raui.toast.success.fg') || '#f9f9f9') + ";\n     background-color: " + (data('raui.toast.success.bg') || '#4caf50') + ";\n   }\n   .rtoast-info {\n     color: " + (data('raui.toast.info.fg') || '#f9f9f9') + ";\n     background-color: " + (data('raui.toast.info.bg') || '#07e') + ";\n   }\n   .rtoast-warn {\n     color: " + (data('raui.toast.warn.fg') || '#222') + ";\n     background-color: " + (data('raui.warn.success.bg') || '#ffc107') + ";\n   }\n   .rtoast-error {\n     color: " + (data('raui.toast.error.fg') || '#f9f9f9') + ";\n     background-color: " + (data('raui.toast.error.bg') || '#ff5252') + ";\n   }\n   ");
+     return ("\n   .rtoast-wrapper {\n     position: absolute;\n     display: flex;\n     flex-direction: column;\n     flex-wrap: no-wrap;\n     align-items: center;\n     overflow: hidden;\n     top: 0.8em;\n     left: 0.8em;\n     right: 0.8em;\n     bottom: auto;\n     z-index: 5;\n     pointer-events: none;\n     overflow: auto;\n     max-height: 80%;\n   }\n   .rtoast {\n     display: flex;\n     flex-wrap: wrap;\n     justify-content: center;\n     margin: 0.2em;\n   }\n   .rtoast-message {\n     flex-grow: 2;\n     display: flex;\n     align-items: center;\n   }\n   .rtoast-string {\n     white-space: pre-wrap;\n     line-height: 1.3em;\n     padding-top: 0.3em;\n   }\n   .rtoast-upper .rtoast-string {\n     \n   }\n   .rtoast-expand .rtoast-string {\n     padding-top: 0.5em;\n   }\n   .rtoast-buttons {\n     display: flex;\n     padding-left: 0.5em;\n     flex-shrink: 1;\n     align-items: center;\n     max-height: max-content;\n     margin-left: auto;\n   }\n   .rtoast-buttons button {\n     cursor: pointer;\n   }\n   .rtoast-button {\n     background-color: transparent;\n     border: none;\n     color: inherit;\n     padding: 0.5em 0.75em;\n     margin: 0 0 0 0.5em;\n     line-height: 1em;\n     box-shadow: none;\n   }\n   .rtoast-more {\n     cursor: pointer;\n     width: 2em;\n     position: relative;\n     flex-shrink: 2;\n     background-color: transparent;\n     border: none;\n     color: inherit;\n     margin: 0 0 0 0.5em;\n     height: 2em;\n   }\n   .rtoast-more:after {\n     content: ' ';\n     position: absolute;\n     display: block;\n     width: 0.6em;\n     height: 0.6em;\n     top: calc(50% - 0.55em);\n     left: calc(50% - 0.3em);\n     border-bottom: 0.125em solid;\n     border-right: 0.125em solid;\n     transform: rotate(45deg);\n     transition: transform 0.2s ease-in-out, top 0.2s ease-in-out;\n     pointer-events: none;\n   }\n   .rtoast-expanded .rtoast-more:after {\n     transform: rotate(225deg);\n     top: calc(50% - 0.1em);\n   }\n   .rtoast-bottom {\n     bottom: 0.8em;\n     top: auto;\n   }\n   .rtoast-left {\n     align-items: flex-start;\n   }\n   .rtoast-right {\n     align-items: flex-end;\n   }\n   .rtoast-body {\n     border-radius: 0.2em;\n     padding: 1em;\n     color: " + (primary.bg || '#fff') + ";\n     background-color: " + (primary.fg || '#222') + ";\n     box-shadow: 0 2px 2px 0 rgba(0, 0, 0, 0.14), 0 1px 5px 0 rgba(0, 0, 0, 0.12), 0 3px 1px -2px rgba(0, 0, 0, 0.2);\n     opacity: 0.95;\n     pointer-events: all;\n     transition: color 0.5s ease-in-out, background 0.5s ease-in-out;\n     flex-shrink: 1;\n     display: flex;\n     flex-direction: column;\n   }\n   .rtoast-upper {\n     display: flex;\n     flex-shrink: 2;\n     flex-wrap: nowrap;\n     justify-content: space-between;\n   }\n \n   .rtoast-expand {\n     padding-top: 1em;\n   }\n   \n   .rtoast-expand .rtoast-string {\n     max-height: 15em;\n     overflow: auto;\n     border-radius: 0.2em;\n     padding: 0.5em;\n     background-color: " + (primary.bg || '#fff') + ";\n     color: " + (primary.fg || '#222') + ";\n     overflow: auto;\n   }\n \n   .rtoast-success {\n     color: " + (data('raui.toast.success.fg') || '#f9f9f9') + ";\n     background-color: " + (data('raui.toast.success.bg') || '#4caf50') + ";\n   }\n   .rtoast-info {\n     color: " + (data('raui.toast.info.fg') || '#f9f9f9') + ";\n     background-color: " + (data('raui.toast.info.bg') || '#07e') + ";\n   }\n   .rtoast-warn {\n     color: " + (data('raui.toast.warn.fg') || '#222') + ";\n     background-color: " + (data('raui.warn.success.bg') || '#ffc107') + ";\n   }\n   .rtoast-error {\n     color: " + (data('raui.toast.error.fg') || '#f9f9f9') + ";\n     background-color: " + (data('raui.toast.error.bg') || '#ff5252') + ";\n   }\n   ");
   }).call(this, data)].join(' '); };
-    var template = {v:4,t:[{t:4,f:[{t:4,f:[{t:7,e:"div",m:[{t:13,n:"class",f:"rtoast",g:1},{n:"class-rtoast-expanded",t:13,f:[{t:2,r:".showMore"}]},{n:"class-rtoast-bottom",t:13,f:[{t:2,r:".bottom"}]},{n:"class-rtoast-left",t:13,f:[{t:2,r:".left"}]},{n:"class-rtoast-right",t:13,f:[{t:2,r:".right"}]}],f:[{t:7,e:"div",m:[{n:"toast",t:72,v:"t0"},{n:"class",f:["rtoast-body",{t:4,f:[" rtoast-",{t:2,r:".type"}],n:50,r:".type"},{t:4,f:[{t:2,r:".class"}],n:50,r:".class"}],t:13},{t:4,f:[{n:["click"],t:70,f:{r:["."],s:"[_0.close()]"}}],n:50,x:{r:[".dismissable"],s:"_0!==false"}}],f:[{t:7,e:"div",m:[{t:13,n:"class",f:"rtoast-upper",g:1}],f:[{t:7,e:"div",m:[{t:13,n:"class",f:"rtoast-message",g:1}],f:[{t:4,f:[{t:4,f:[{t:8,r:".message",c:{r:".context"}}],n:50,x:{r:[".context"],s:"!!_0"}},{t:4,f:[{t:8,r:".message"}],n:51,l:1}],n:50,x:{r:[".message"],s:"Array.isArray(_0)"}},{t:4,f:[{t:7,e:"div",m:[{t:13,n:"class",f:"rtoast-string",g:1}],f:[{t:2,r:".message"}]}],n:51,l:1}]}," ",{t:4,f:[{t:7,e:"div",m:[{t:13,n:"class",f:"rtoast-buttons",g:1}],f:[{t:4,f:[{t:7,e:"button",m:[{n:"class",f:["rtoast-button",{t:4,f:[" ",{t:2,r:".class"}],n:50,r:".class"}],t:13},{t:4,f:[{n:["click"],t:70,f:{r:["."],s:"[_0.action()]"}}],n:50,x:{r:[".action"],s:"typeof _0===\"function\""}}],f:[{t:2,r:".label"}]}],n:52,r:".buttons"},{t:4,f:[{t:7,e:"button",m:[{t:13,n:"class",f:"rtoast-button",g:1}],f:["Close"]}],n:50,x:{r:[".dismissable",".closeButton"],s:"_0!==false&&_1!==false"},l:1}," ",{t:4,f:[{t:7,e:"div",m:[{t:13,n:"class",f:"rtoast-more",g:1},{n:"title",f:"Toggle more",t:13,g:1},{n:["click"],t:70,f:{r:[".","@context"],s:"[_0.expand(),(_1).toggle(\".showMore\"),false]"}}]}],n:50,r:".more"}]}],n:50,x:{r:[".dismissable",".closeButton",".buttons.length",".more"],s:"(_0!==false&&_1!==false)||_2||_3"}}]}," ",{t:4,f:[{t:7,e:"div",m:[{t:13,n:"class",f:"rtoast-expand",g:1},{n:"toast-expand",t:72,v:"t0"},{n:["click"],t:70,f:{r:[],s:"[false,false]"}}],f:[{t:4,f:[{t:4,f:[{t:8,r:".more",c:{r:".context"}}],n:50,x:{r:[".context"],s:"!!_0"}},{t:4,f:[{t:8,r:".more"}],n:51,l:1}],n:50,x:{r:[".more"],s:"Array.isArray(_0)"}},{t:4,f:[{t:7,e:"div",m:[{t:13,n:"class",f:"rtoast-string",g:1}],f:[{t:2,r:".more"}]}],n:51,l:1}]}],n:50,x:{r:[".more",".showMore"],s:"_0&&_1"}}]}]}],n:54,r:"~/_toast"}],n:50,r:"~/_toast"}],e:{"[_0.close()]":function (_0){return([_0.close()]);},"_0!==false":function (_0){return(_0!==false);},"!!_0":function (_0){return(!!_0);},"Array.isArray(_0)":function (_0){return(Array.isArray(_0));},"[_0.action()]":function (_0){return([_0.action()]);},"typeof _0===\"function\"":function (_0){return(typeof _0==="function");},"_0!==false&&_1!==false":function (_0,_1){return(_0!==false&&_1!==false);},"[_0.expand(),(_1).toggle(\".showMore\"),false]":function (_0,_1){return([_0.expand(),(_1).toggle(".showMore"),false]);},"(_0!==false&&_1!==false)||_2||_3":function (_0,_1,_2,_3){return((_0!==false&&_1!==false)||_2||_3);},"[false,false]":function (){return([false,false]);},"_0&&_1":function (_0,_1){return(_0&&_1);}}};
+    var template = {v:4,t:[{t:4,f:[{t:7,e:"div",m:[{t:13,n:"class",f:"rtoast-wrapper",g:1},{n:"class-rtoast-bottom",t:13,f:[{t:2,r:"@this.toastDefaults.bottom"}]},{n:"class-rtoast-left",t:13,f:[{t:2,r:"@this.toastDefaults.left"}]},{n:"class-rtoast-right",t:13,f:[{t:2,r:"@this.toastDefaults.right"}]}],f:[{t:4,f:[{t:7,e:"div",m:[{t:13,n:"class",f:"rtoast",g:1},{n:"class-rtoast-expanded",t:13,f:[{t:2,r:".showMore"}]}],f:[{t:7,e:"div",m:[{n:"toast",t:72,v:"t0"},{n:"class",f:["rtoast-body",{t:4,f:[" rtoast-",{t:2,r:".type"}],n:50,r:".type"},{t:4,f:[{t:2,r:".class"}],n:50,r:".class"}],t:13},{t:4,f:[{n:["click"],t:70,f:{r:["."],s:"[_0.close()]"}}],n:50,x:{r:[".dismissable"],s:"_0!==false"}}],f:[{t:7,e:"div",m:[{t:13,n:"class",f:"rtoast-upper",g:1}],f:[{t:7,e:"div",m:[{t:13,n:"class",f:"rtoast-message",g:1}],f:[{t:4,f:[{t:4,f:[{t:8,r:".message",c:{r:".context"}}],n:50,x:{r:[".context"],s:"!!_0"}},{t:4,f:[{t:8,r:".message"}],n:51,l:1}],n:50,x:{r:[".message"],s:"Array.isArray(_0)"}},{t:4,f:[{t:7,e:"div",m:[{t:13,n:"class",f:"rtoast-string",g:1}],f:[{t:2,r:".message"}]}],n:51,l:1}]}," ",{t:4,f:[{t:7,e:"div",m:[{t:13,n:"class",f:"rtoast-buttons",g:1}],f:[{t:4,f:[{t:7,e:"button",m:[{n:"class",f:["rtoast-button",{t:4,f:[" ",{t:2,r:".class"}],n:50,r:".class"}],t:13},{t:4,f:[{n:["click"],t:70,f:{r:["."],s:"[_0.action()]"}}],n:50,x:{r:[".action"],s:"typeof _0===\"function\""}}],f:[{t:2,r:".label"}]}],n:52,r:".buttons"},{t:4,f:[{t:7,e:"button",m:[{t:13,n:"class",f:"rtoast-button",g:1}],f:["Close"]}],n:50,x:{r:[".dismissable",".closeButton"],s:"_0!==false&&_1!==false"},l:1}," ",{t:4,f:[{t:7,e:"div",m:[{t:13,n:"class",f:"rtoast-more",g:1},{n:"title",f:"Toggle more",t:13,g:1},{n:["click"],t:70,f:{r:[".","@context"],s:"[_0.expand(),(_1).toggle(\".showMore\"),false]"}}]}],n:50,r:".more"}]}],n:50,x:{r:[".dismissable",".closeButton",".buttons.length",".more"],s:"(_0!==false&&_1!==false)||_2||_3"}}]}," ",{t:4,f:[{t:7,e:"div",m:[{t:13,n:"class",f:"rtoast-expand",g:1},{n:"toast-expand",t:72,v:"t0"},{n:["click"],t:70,f:{r:[],s:"[false,false]"}}],f:[{t:4,f:[{t:4,f:[{t:8,r:".more",c:{r:".context"}}],n:50,x:{r:[".context"],s:"!!_0"}},{t:4,f:[{t:8,r:".more"}],n:51,l:1}],n:50,x:{r:[".more"],s:"Array.isArray(_0)"}},{t:4,f:[{t:7,e:"div",m:[{t:13,n:"class",f:"rtoast-string",g:1}],f:[{t:2,r:".more"}]}],n:51,l:1}]}],n:50,x:{r:[".more",".showMore"],s:"_0&&_1"}}]}]}],n:52,z:[{n:"shuffle",x:{x:{r:[],s:"true"}}}],r:"~/_toast"}]}],n:50,r:"~/_toast"}],e:{"[_0.close()]":function (_0){return([_0.close()]);},"_0!==false":function (_0){return(_0!==false);},"!!_0":function (_0){return(!!_0);},"Array.isArray(_0)":function (_0){return(Array.isArray(_0));},"[_0.action()]":function (_0){return([_0.action()]);},"typeof _0===\"function\"":function (_0){return(typeof _0==="function");},"_0!==false&&_1!==false":function (_0,_1){return(_0!==false&&_1!==false);},"[_0.expand(),(_1).toggle(\".showMore\"),false]":function (_0,_1){return([_0.expand(),(_1).toggle(".showMore"),false]);},"(_0!==false&&_1!==false)||_2||_3":function (_0,_1,_2,_3){return((_0!==false&&_1!==false)||_2||_3);},"[false,false]":function (){return([false,false]);},"_0&&_1":function (_0,_1){return(_0&&_1);},"true":function (){return(true);}}};
 
     return function(ref) {
       var Ractive = ref.Ractive;
@@ -102,16 +103,17 @@
       Object.defineProperty(proto, 'toastDefaults', {
         value: defaults,
         writable: false,
-        configurable: true
+        configurable: true,
       });
 
       proto.toast = function toast(message, options) {
         var this$1 = this;
 
+        delete options.top, delete options.bottom, delete options.left, delete options.right;
         var opts = Object.assign({ message: message, instance: this }, defaults, this.toastDefaults, options);
         opts.close = function () { return closeToast(opts, this$1); };
         opts.expand = function () {
-          if (holder.active !== opts) { return; }
+          if (!opts.stack && holder.active !== opts) { return; }
           if (holder.tm) {
             clearTimeout(holder.tm);
             holder.tm = null;
@@ -125,33 +127,45 @@
           }
         };
         toasts.push(opts);
-        if (!active) { showToast(); }
+        if (!active || opts.stack) { showToast(opts.stack); }
         return new Handle(holder, opts);
       };
 
       function closeToast(which, instance) {
+        var o = Object.assign(opts, instance.toastDefaults);
+
         if (active !== which) {
-          toasts.splice(toasts.indexOf(opts), 1);
-          if (typeof which.onclose === 'function') { which.onclose(); }
+          toasts.splice(toasts.indexOf(which), 1);
+          instance.set('_toast', active ? (o.stack ? [active].concat(toasts) : [active]) : null).then(function () {
+            if (typeof which.onclose === 'function') { which.onclose(); }
+          });
         } else {
           if (holder.tm) {
             clearTimeout(holder.tm);
             holder.tm = null;
           }
 
-          active.instance.set('_toast', null).then(function () {
-            holder.active = active = null;
-            if (typeof which.onclose === 'function') { which.onclose(); }
-            if (toasts.length) { showToast(); }
+          var next = toasts.shift();
+          instance.shift('_toast').then(function () {
+            instance.set('_toast', next ? (o.stack ? [next].concat(toasts) : [next]) : null).then(function () {
+              instance && instance.fire('toasted', null, which);
+              if (typeof which.onclose === 'function') { which.onclose(); }
+              holder.active = active = next;
+              if (active && active.timeout && !active.showMore) {
+                if (holder.tm) { clearTimeout(holder.tm); }
+                holder.tm = setTimeout(function () {
+                  active.close();
+                  holder.tm = null;
+                }, active.timeout);
+              }
+            });
           });
         }
-
-        instance && instance.fire('toasted', null, which);
       }
-      function showToast() {
-        holder.active = active = toasts.shift();
-        active.instance.set('_toast', active).then(function () {
-          if (active.timeout) {
+      function showToast(stack) {
+        if (!active) { holder.active = active = toasts.shift(); }
+        active.instance.set('_toast', stack ? [active].concat(toasts) : [active]).then(function () {
+          if (active.timeout && !active.showMore) {
             if (holder.tm) { clearTimeout(holder.tm); }
             holder.tm = setTimeout(function () {
               active.close();
@@ -234,7 +248,7 @@
     this.data = data;
   };
 
-  var prototypeAccessors = { message: { configurable: true },more: { configurable: true },showMore: { configurable: true },left: { configurable: true },right: { configurable: true },top: { configurable: true },bottom: { configurable: true },center: { configurable: true },context: { configurable: true },type: { configurable: true },class: { configurable: true },dismissable: { configurable: true },closeButton: { configurable: true },buttons: { configurable: true },live: { configurable: true },closed: { configurable: true } };
+  var prototypeAccessors = { message: { configurable: true },more: { configurable: true },showMore: { configurable: true },left: { configurable: true },context: { configurable: true },type: { configurable: true },class: { configurable: true },dismissable: { configurable: true },closeButton: { configurable: true },buttons: { configurable: true },live: { configurable: true },closed: { configurable: true } };
 
   Handle.prototype.close = function close (timeout) {
       var this$1 = this;
@@ -266,63 +280,49 @@
     }
   };
 
-  Handle.prototype.updateButtons = function updateButtons () { this.data === this.holder.active && this.data.instance.update('_toast.buttons'); };
+  Handle.prototype.updateButtons = function updateButtons () { this.data.instance.update('_toast'); };
 
   Handle.prototype.set = function set (key, value) {
     if (typeof key === 'object') {
       for (var k in key) {
         this.data[k] = key[k];
       }
-      if (this.data === this.holder.active) { return this.data.instance.update('_toast'); }
-      else { return Promise.resolve(); }
+      return this.data.instance.update('_toast');
     } else {
       this.data[key] = value;
-      if (this.data === this.holder.active) { return this.data.instance.update(("_toast." + (Ractive$1.Ractive.escapeKey(key)))); }
-      else { return Promise.resolve(); }
+      return this.data.instance.update("_toast");
     }
   };
 
   prototypeAccessors.message.get = function () { return this.data.message; };
-  prototypeAccessors.message.set = function (v) { this.data.message = v; this.data === this.holder.active && this.data.instance.update('_toast.message'); };
+  prototypeAccessors.message.set = function (v) { this.data.message = v; this.data.instance.update('_toast'); };
 
   prototypeAccessors.more.get = function () { return this.data.more; };
-  prototypeAccessors.more.set = function (v) { this.data.more = v; this.data === this.holder.active && this.data.instance.update('_toast.more'); };
+  prototypeAccessors.more.set = function (v) { this.data.more = v; this.data.instance.update('_toast'); };
 
   prototypeAccessors.showMore.get = function () { return this.data.showMore; };
-  prototypeAccessors.showMore.set = function (v) { this.data.showMore = v; this.data === this.holder.active && this.data.instance.update('_toast.showMore'); };
+  prototypeAccessors.showMore.set = function (v) { this.data.showMore = v; this.data.instance.update('_toast'); };
 
   prototypeAccessors.left.get = function () { return this.data.left; };
-  prototypeAccessors.left.set = function (v) { this.data.left = v; this.data.right = false; this.data === this.holder.active && this.data.instance.update('_toast.left') && this.data.instance.update('_toast.right'); };
-
-  prototypeAccessors.right.get = function () { return this.data.right; };
-  prototypeAccessors.right.set = function (v) { this.data.right = v; this.data.left = false; this.data === this.holder.active && this.data.instance.update('_toast.right') && this.data.instance.update('_toast.left'); };
-
-  prototypeAccessors.top.get = function () { return !this.data.bottom; };
-  prototypeAccessors.top.set = function (v) { this.data.bottom = !v; this.data === this.holder.active && this.data.instance.update('_toast.bottom'); };
-
-  prototypeAccessors.bottom.get = function () { return this.data.bottom; };
-  prototypeAccessors.bottom.set = function (v) { this.data.bottom = v; this.data === this.holder.active && this.data.instance.update('_toast.bottom'); };
-
-  prototypeAccessors.center.get = function () { return !this.data.left && !this.data.right; };
-  prototypeAccessors.center.set = function (v) { this.data.left = false; this.data.right = false; this.data === this.holder.active && this.data.instance.update('_toast.right'); this.data.instance.update('_toast.left'); };
+  prototypeAccessors.left.set = function (v) { this.data.left = v; this.data.right = false; this.data.instance.update('_toast'); };
 
   prototypeAccessors.context.get = function () { return this.data.context; };
-  prototypeAccessors.context.set = function (v) { this.data.context = v; this.data === this.holder.active && this.data.instance.update('_toast.context'); };
+  prototypeAccessors.context.set = function (v) { this.data.context = v; this.data.instance.update('_toast'); };
 
   prototypeAccessors.type.get = function () { return this.data.type; };
-  prototypeAccessors.type.set = function (v) { this.data.type = v; this.data === this.holder.active && this.data.instance.update('_toast.type'); };
+  prototypeAccessors.type.set = function (v) { this.data.type = v; this.data.instance.update('_toast'); };
 
   prototypeAccessors.class.get = function () { return this.data.class; };
-  prototypeAccessors.class.set = function (v) { this.data.class = v; this.data === this.holder.active && this.data.instance.update('_toast.class'); };
+  prototypeAccessors.class.set = function (v) { this.data.class = v; this.data.instance.update('_toast'); };
 
   prototypeAccessors.dismissable.get = function () { return this.data.dismissable; };
-  prototypeAccessors.dismissable.set = function (v) { this.data.dismissable = v; this.data === this.holder.active && this.data.instance.update('_toast.dismissable'); };
+  prototypeAccessors.dismissable.set = function (v) { this.data.dismissable = v; this.data.instance.update('_toast'); };
 
   prototypeAccessors.closeButton.get = function () { return this.data.closeButton; };
-  prototypeAccessors.closeButton.set = function (v) { this.data.closeButton = v; this.data === this.holder.active && this.data.instance.update('_toast.closeButton'); };
+  prototypeAccessors.closeButton.set = function (v) { this.data.closeButton = v; this.data.instance.update('_toast'); };
 
   prototypeAccessors.buttons.get = function () { return this.data.buttons; };
-  prototypeAccessors.buttons.set = function (v) { this.data.buttons = v; this.data === this.holder.active && this.data.instance.update('_toast.buttons'); };
+  prototypeAccessors.buttons.set = function (v) { this.data.buttons = v; this.data.instance.update('_toast'); };
 
   prototypeAccessors.live.get = function () { return this.data === this.holder.active || ~this.holder.toasts.indexOf(this.data); };
   prototypeAccessors.closed.get = function () {
@@ -418,7 +418,8 @@
      primary.action = Object.assign({}, data('raui.window.action'), data('raui.window.primary.action'));
      primary.host = Object.assign({}, data('raui.window.host'), data('raui.window.primary.host'));
      primary.title = Object.assign({ inactive: {} }, data('raui.window.title'), data('raui.window.primary.title'));
-     return ("\n   .rwhost {\n     position: relative;\n     display: flex;\n     flex-direction: column;\n     box-sizing: border-box;\n     top: 0;\n     left: 0;\n     width: 100%;\n     height: 100%;\n     background-color: " + (primary.host.bg || primary.bg || '#fff') + ";\n   }\n \n   .rwhost-pane {\n     display: flex;\n     position: relative;\n     width: 100%;\n     box-sizing: border-box;\n     flex-grow: 2;\n     overflow: auto;\n     z-index: 1;\n   }\n   .rwhost-pane.blocked {\n     overflow: hidden;\n   }\n \n   .rwhost-pane-content {\n     flex-grow: 1;\n   }\n \n   .rwhost-modal {\n     position: absolute;\n     position: --webkit-sticky;\n     position: sticky;\n     top: 0;\n     left: 0;\n     z-index: -1;\n     opacity: 0;\n     transition: opacity 0.2s ease-in-out, z-index 0s linear 0.2s;\n     background-color: #000;\n     width: 100%;\n     height: 100%;\n   }\n   .rwhost-modal-active {\n     opacity: 0.5;\n     z-index: 1;\n     transition: opacity 0.2s ease-in-out, z-index 0s linear;\n   }\n \n   .rwindow-wrapper {\n     display: inline-block;\n     box-sizing: border-box;\n     position: absolute;\n   }\n   .rwindow-wrapper.rwindow-resizing {\n     transition: none;\n   }\n \n   .rwindow-wrapper.rwindow-resizable {\n     padding: " + (primary.handleSize || 7) + "px;\n   }\n \n   .rwindow-slide-left {\n     height: 100%;\n     left: 0;\n   }\n   .rwindow-slide-right {\n     height: 100%;\n     right: 0;\n   }\n   .rwindow-slide-top {\n     width: 100%;\n     top: 0;\n   }\n   .rwindow-slide-bottom {\n     width: 100%;\n     bottom: 0;\n   }\n \n   .rwindow-topmost > .rwindow {\n     box-shadow: 0 6px 10px 0 rgba(0, 0, 0, 0.14), 0 1px 18px 0 rgba(0, 0, 0, 0.12), 0 3px 5px -1px rgba(0, 0, 0, 0.3);\n     opacity: 1;\n   }\n \n   .rwindow-modal {\n     position: absolute;\n     top: 0;\n     bottom: 0;\n     left: 0;\n     right: 0;\n     background-color: rgba(0, 0, 0, 0.5);\n     opacity: 0;\n     z-index: -1;\n     transition: opacity 0.4s ease-in-out, z-index 0s linear 0.4s;\n   }\n   .rwindow-modal.rwindow-blocked {\n     opacity: 1;\n     z-index: 50;\n     transition: opacity 0.4s ease-in-out, z-index 0s linear;\n   }\n   .rwindow-modal.rwindow-move {\n     z-index: 50;\n   }\n \n   .rwindow {\n     position: relative;\n     box-sizing: border-box;\n     background-color: " + (primary.bg || '#fff') + ";\n     color: " + (primary.fg || '#222') + ";\n     box-shadow: 0 2px 2px 0 rgba(0, 0, 0, 0.14), 0 1px 5px 0 rgba(0, 0, 0, 0.12), 0 3px 1px -2px rgba(0, 0, 0, 0.2);\n     border-radius: 2px;\n     overflow: hidden;\n     width: 100%;\n     height: 100%;\n     min-width: " + (primary.minWidth || '6em') + ";\n     min-height: " + (primary.minHeight || '6em') + ";\n     transition: box-shadow 0.4s ease-in-out, opacity 0.4s ease-in-out;\n   }\n   .rwindow-max > .rwindow {\n    border-radius: 0;\n    box-shadow: none;\n   }\n \n   .rwindow-pane-top,\n   .rwindow-max-top {\n     background-color: " + (primary.title.inactive.bg || primary.fg || '#222') + ";\n     color: " + (primary.title.inactive.fg || primary.bg || '#fff') + ";\n     flex-shrink: 0;\n   }\n \n   .rwindow-max-top {\n     flex-shrink: 2;\n   }\n \n   .rwindow-pane-top {\n     display: flex;\n     align-items: center;\n     min-height: 2em;\n   }\n \n   .rwindow-topmost .rwindow-pane-top {\n     background-color: " + (primary.title.bg || primary.fga || '#07e') + ";\n     color: " + (primary.title.fg || primary.bg || '#fff') + ";\n   }\n \n   .rwindow-pane {\n     display: flex;\n     flex-direction: column;\n     table-layout: fixed;\n     width: 100%;\n     height: 100%;\n   }\n   .rwindow-autosizing {\n     display: block;\n     box-sizing: border-box;\n   }\n   .rwindow-content {\n     overflow: auto;\n     flex-grow: 2;\n     position: relative;\n     box-sizing: border-box;\n   }\n   .rwindow-content.rwindow-pad {\n     padding: 1em;\n   }\n   .rwindow-content.rwindow-flex {\n     display: flex;\n     flex-direction: column;\n   }\n \n   .rwindow-buttons {\n     display: flex;\n     flex-shrink: 0;\n     padding: 0.5em;\n     border-top: 1px solid " + (primary.action.bc || primary.bc || '#ccc') + ";\n     background-color: " + (primary.action.bg || primary.bg || '#fff') + ";\n     color: " + (primary.action.fg || primary.fg || '#222') + ";\n   }\n   .rwindow-buttons.no-buttons {\n     display: none;\n   }\n   .rwindow-left-buttons {\n     text-align: left;\n     flex-grow: 2;\n   }\n   .rwindow-left-buttons button {\n     margin-right: 0.5em;\n   }\n   .rwindow-center-buttons {\n     text-align: center;\n     flex-shrink: 2;\n   }\n   .rwindow-center-buttons button {\n     margin: 0 0.25em;\n   }\n   .rwindow-right-buttons {\n     text-align: right;\n     flex-grow: 2;\n   }\n   .rwindow-right-buttons button {\n     margin-left: 0.5em;\n   }\n \n   .rwindow-title {\n     overflow: hidden;\n     text-overflow: ellipsis;\n     user-select: none;\n     cursor: default;\n     padding: 0.5em;\n     white-space: nowrap;\n     box-sizing: border-box;\n     flex-grow: 1;\n   }\n \n   .rwindow-controls {\n     display: flex;\n     justify-content: flex-end;\n     align-items: center;\n     flex-grow: 1;\n   }\n   .rwindow-controls > div {\n     margin: 0 1em 0 0;\n     width: 0.7em;\n     height: 0.7em;\n     cursor: pointer;\n   }\n   .rwindow-minimize {\n     border-bottom: 2px solid;\n   }\n   .rwindow-maximize {\n     border: 2px solid;\n   }\n   .rwindow-controls > .rwindow-close {\n     width: 0.5em;\n     height: 1em;\n     border-right: 2px solid;\n     transform: rotate(45deg);\n     transform-origin: center right;\n     position: relative;\n     margin-right: 1.5em;\n   }\n   .rwindow-close:before {\n     cursor: pointer;\n     height: 1.2em;\n     width: 1.2em;\n     top: 0.3em;\n     left: 0.1em;\n     content: ' ';\n     transform: rotate(-45deg);\n     transform-origin: center left;\n     position: absolute;\n   }\n   .rwindow-close:after {\n     cursor: pointer;\n     height: 100%;\n     width: 100%;\n     top: 1px;\n     left: calc(100% + 1px);\n     content: ' ';\n     border-left: 2px solid;\n     transform: rotate(-90deg);\n     transform-origin: center left;\n     position: absolute;\n   }\n   .rwindow-max-top .rwindow-controls > .rwindow-close {\n     margin-right: 0.5em;\n   }\n   " + (typeof data('raui.window.extra') === 'function' ? data('raui.window.extra').call(this, data) : '') + "\n   ");
+     primary.topmost = Object.assign({}, data('raui.primary'), data('raui.window.primary'), data('raui.window.primary.topmost'));
+     return ("\n   .rwhost {\n     position: relative;\n     display: flex;\n     flex-direction: column;\n     box-sizing: border-box;\n     top: 0;\n     left: 0;\n     width: 100%;\n     height: 100%;\n     background-color: " + (primary.host.bg || primary.bg || '#fff') + ";\n   }\n \n   .rwhost-pane {\n     display: flex;\n     position: relative;\n     width: 100%;\n     box-sizing: border-box;\n     flex-grow: 2;\n     overflow: auto;\n     z-index: 1;\n   }\n   .rwhost-pane.blocked {\n     overflow: hidden;\n   }\n \n   .rwhost-pane-content {\n     flex-grow: 1;\n   }\n \n   .rwhost-modal {\n     position: absolute;\n     position: --webkit-sticky;\n     position: sticky;\n     top: 0;\n     left: 0;\n     z-index: -1;\n     opacity: 0;\n     transition: opacity 0.2s ease-in-out, z-index 0s linear 0.2s;\n     background-color: #000;\n     width: 100%;\n     height: 100%;\n   }\n   .rwhost-modal-active {\n     opacity: 0.5;\n     z-index: 1;\n     transition: opacity 0.2s ease-in-out, z-index 0s linear;\n   }\n \n   .rwindow-wrapper {\n     display: inline-block;\n     box-sizing: border-box;\n     position: absolute;\n   }\n   .rwindow-wrapper.rwindow-resizing {\n     transition: none;\n   }\n \n   .rwindow-wrapper.rwindow-resizable {\n     padding: " + (primary.handleSize || 7) + "px;\n   }\n \n   .rwindow-slide-left {\n     height: 100%;\n     left: 0;\n   }\n   .rwindow-slide-right {\n     height: 100%;\n     right: 0;\n   }\n   .rwindow-slide-top {\n     width: 100%;\n     top: 0;\n   }\n   .rwindow-slide-bottom {\n     width: 100%;\n     bottom: 0;\n   }\n \n   .rwindow-topmost > .rwindow {\n     box-shadow: 0 6px 10px 0 " + (primary.topmost.shadow || 'rgba(0, 0, 0, 0.14)') + ", 0 1px 18px 0 " + (primary.topmost.shadow || 'rgba(0, 0, 0, 0.12)') + ", 0 3px 5px -1px " + (primary.topmost.shadow || 'rgba(0, 0, 0, 0.3)') + ";\n     opacity: 1;\n   }\n \n   .rwindow-modal {\n     position: absolute;\n     top: 0;\n     bottom: 0;\n     left: 0;\n     right: 0;\n     background-color: rgba(0, 0, 0, 0.5);\n     opacity: 0;\n     z-index: -1;\n     transition: opacity 0.4s ease-in-out, z-index 0s linear 0.4s;\n   }\n   .rwindow-modal.rwindow-blocked {\n     opacity: 1;\n     z-index: 50;\n     transition: opacity 0.4s ease-in-out, z-index 0s linear;\n   }\n   .rwindow-modal.rwindow-move {\n     z-index: 50;\n   }\n \n   .rwindow {\n     position: relative;\n     box-sizing: border-box;\n     background-color: " + (primary.bg || '#fff') + ";\n     color: " + (primary.fg || '#222') + ";\n     box-shadow: 0 2px 2px 0 " + (primary.shadow || 'rgba(0, 0, 0, 0.14)') + ", 0 1px 5px 0 " + (primary.shadow || 'rgba(0, 0, 0, 0.12)') + ", 0 3px 1px -2px " + (primary.shadow || 'rgba(0, 0, 0, 0.2)') + ";\n     border-radius: 2px;\n     overflow: hidden;\n     width: 100%;\n     height: 100%;\n     min-width: " + (primary.minWidth || '6em') + ";\n     min-height: " + (primary.minHeight || '6em') + ";\n     transition: box-shadow 0.4s ease-in-out, opacity 0.4s ease-in-out;\n   }\n   .rwindow-max > .rwindow {\n    border-radius: 0;\n    box-shadow: none;\n   }\n \n   .rwindow-pane-top,\n   .rwindow-max-top {\n     background-color: " + (primary.title.inactive.bg || primary.fg || '#222') + ";\n     color: " + (primary.title.inactive.fg || primary.bg || '#fff') + ";\n     flex-shrink: 0;\n   }\n \n   .rwindow-max-top {\n     flex-shrink: 2;\n   }\n \n   .rwindow-pane-top {\n     display: flex;\n     align-items: center;\n     min-height: 2em;\n   }\n \n   .rwindow-topmost .rwindow-pane-top {\n     background-color: " + (primary.title.bg || primary.fga || '#07e') + ";\n     color: " + (primary.title.fg || primary.bg || '#fff') + ";\n   }\n \n   .rwindow-pane {\n     display: flex;\n     flex-direction: column;\n     table-layout: fixed;\n     width: 100%;\n     height: 100%;\n   }\n   .rwindow-autosizing {\n     display: block;\n     box-sizing: border-box;\n   }\n   .rwindow-content {\n     overflow: auto;\n     flex-grow: 2;\n     position: relative;\n     box-sizing: border-box;\n   }\n   .rwindow-content.rwindow-pad {\n     padding: 1em;\n   }\n   .rwindow-content.rwindow-flex {\n     display: flex;\n     flex-direction: column;\n   }\n \n   .rwindow-buttons {\n     display: flex;\n     flex-shrink: 0;\n     padding: 0.5em;\n     border-top: 1px solid " + (primary.action.bc || primary.bc || '#ccc') + ";\n     background-color: " + (primary.action.bg || primary.bg || '#fff') + ";\n     color: " + (primary.action.fg || primary.fg || '#222') + ";\n   }\n   .rwindow-buttons.no-buttons {\n     display: none;\n   }\n   .rwindow-left-buttons {\n     text-align: left;\n     flex-grow: 2;\n   }\n   .rwindow-left-buttons button {\n     margin-right: 0.5em;\n   }\n   .rwindow-center-buttons {\n     text-align: center;\n     flex-shrink: 2;\n   }\n   .rwindow-center-buttons button {\n     margin: 0 0.25em;\n   }\n   .rwindow-right-buttons {\n     text-align: right;\n     flex-grow: 2;\n   }\n   .rwindow-right-buttons button {\n     margin-left: 0.5em;\n   }\n \n   .rwindow-title {\n     overflow: hidden;\n     text-overflow: ellipsis;\n     user-select: none;\n     cursor: default;\n     padding: 0.5em;\n     white-space: nowrap;\n     box-sizing: border-box;\n     flex-grow: 1;\n   }\n \n   .rwindow-controls {\n     display: flex;\n     justify-content: flex-end;\n     align-items: center;\n     flex-grow: 1;\n   }\n   .rwindow-controls > div {\n     margin: 0 1em 0 0;\n     width: 0.7em;\n     height: 0.7em;\n     cursor: pointer;\n   }\n   .rwindow-minimize {\n     border-bottom: 2px solid;\n   }\n   .rwindow-maximize {\n     border: 2px solid;\n   }\n   .rwindow-controls > .rwindow-close {\n     width: 0.5em;\n     height: 1em;\n     border-right: 2px solid;\n     transform: rotate(45deg);\n     transform-origin: center right;\n     position: relative;\n     margin-right: 1.5em;\n   }\n   .rwindow-close:before {\n     cursor: pointer;\n     height: 1.2em;\n     width: 1.2em;\n     top: 0.3em;\n     left: 0.1em;\n     content: ' ';\n     transform: rotate(-45deg);\n     transform-origin: center left;\n     position: absolute;\n   }\n   .rwindow-close:after {\n     cursor: pointer;\n     height: 100%;\n     width: 100%;\n     top: 1px;\n     left: calc(100% + 1px);\n     content: ' ';\n     border-left: 2px solid;\n     transform: rotate(-90deg);\n     transform-origin: center left;\n     position: absolute;\n   }\n   .rwindow-max-top .rwindow-controls > .rwindow-close {\n     margin-right: 0.5em;\n   }\n   " + (typeof data('raui.window.extra') === 'function' ? data('raui.window.extra').call(this, data) : '') + "\n   ");
   }).call(this, data)].join(' '); },
     cssId: 'rwindow',
     noCssTransform: true,

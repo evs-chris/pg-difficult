@@ -1,5 +1,5 @@
 import * as oak from 'https://deno.land/x/oak@v12.5.0/mod.ts';
-import postgres from 'https://deno.land/x/postgresjs@v3.3.5/mod.js';
+import postgres from 'https://deno.land/x/postgresjs@v3.4.3/mod.js';
 import * as diff from './diff.ts';
 import { decode } from 'https://deno.land/std@0.190.0/encoding/base64url.ts'
 import { open } from 'https://deno.land/x/deno_open@v0.0.6/index.ts';
