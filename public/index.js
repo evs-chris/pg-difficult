@@ -170,6 +170,7 @@ let gate;
 }
 
 let reportId = 0;
+let scratchId = 0;
 
 class App extends Ractive {
   constructor(opts) { super(opts); }
@@ -228,12 +229,15 @@ const app = globalThis.app = new App({
       },
       strict: true, init: false,
     },
-    'connections savedQueries savedReports': {
+    'connections savedQueries savedReports scratchPads': {
       handler(v, _o, k) {
         localStorage.setItem(k, JSON.stringify(v || []));
         if (k === 'savedReports') {
           const min = Math.max.apply(Math, v.map(r => +r.id).concat([reportId]));
           reportId = min;
+        } else if (k === 'scratchPads') {
+          const min = Math.max.apply(Math, v.map(r => +r.id).concat([scratchId]));
+          scratchId = min;
         }
       },
       init: false,
@@ -381,6 +385,14 @@ const app = globalThis.app = new App({
     win = new Report({ data: { reportId } }, report);
     this.host.addWindow(win, { id: wid, title: `Loading report...` });
   },
+  openScratch(pad) {
+    const id = pad?.id ?? ++scratchId;
+    const wid = `scratch-${id}`;
+    let win = this.host.getWindow(wid);
+    if (win) return win.raise(true);
+    win = new ScratchPad({ data: { scratchId } }, pad);
+    this.host.addWindow(win, { id: wid, title: `Loading scratch pad...` });
+  },
   confirm(question, title) {
     const w = new Confirm({ data: { message: question } });
     this.host.addWindow(w, { title, block: true, top: 'center', left: 'center' });
@@ -425,6 +437,7 @@ app.set('connections', JSON.parse(localStorage.getItem('connections') || '[]'));
 app.set('settings', JSON.parse(localStorage.getItem('settings') || '{}'));
 app.set('savedQueries', JSON.parse(localStorage.getItem('savedQueries') || '[]'));
 app.set('savedReports', JSON.parse(localStorage.getItem('savedReports') || '[]'));
+app.set('scratchPads', JSON.parse(localStorage.getItem('scratchPads') || '[]'));
 
 class ControlPanel extends Window {
   constructor(opts) { super(opts); }
@@ -515,6 +528,9 @@ class ControlPanel extends Window {
   report(rep) {
     app.openReport(rep);
   }
+  scratch(pad) {
+    app.openScratch(pad);
+  }
   reportHasQuerySql(rep) {
     return rep.sources.find(s => s.type === 'query-all-sql' || s.type === 'query' && !s.config);
   }
@@ -537,7 +553,7 @@ Window.extendWith(ControlPanel, {
 .query .name { width: 15%; }
 .query .sql { width: 60%; }
 .query .actions { width: 25%; }
-.report { display: flex; align-items: center; justify-content: space-between; }
+.report, .scratch { display: flex; align-items: center; justify-content: space-between; }
 `,
   options: { title: 'Control Panel', flex: true, close: false, resizable: true, width: '60em', height: '45em', id: 'control-panel' },
   on: {
@@ -549,6 +565,7 @@ Window.extendWith(ControlPanel, {
       this.link('settings', 'settings', { instance: app });
       this.link('savedQueries', 'savedQueries', { instance: app });
       this.link('savedReports', 'savedReports', { instance: app });
+      this.link('scratchPads', 'scratchPads', { instance: app });
       this.link('loadedQuery', 'loadedQuery', { instance: app });
       this.link('newSegment', 'newSegment', { instance: app });
     },
@@ -1177,6 +1194,36 @@ Window.extendWith(SchemaCompare, {
 .entry { padding: 0.2em; }
 .entry .key { font-weight: bold; }
 `,
+});
+
+class ScratchPad extends Window {
+  constructor(opts, pad) {
+    super(opts);
+    const id = this.get('scratchId') || ++scratchId;
+    pad = pad || { id };
+    setTimeout(() => this.set('pad', JSON.parse(JSON.stringify(pad))));
+  }
+  save() {
+    const saved = app.get('scratchPads') || [];
+    const pad = this.get('pad');
+    if (!pad || !pad.id) return;
+    const idx = saved.findIndex(r => r.id === pad.id);
+    if (~idx) app.splice('scratchPads', idx, 1, pad);
+    else app.push('scratchPads', pad);
+  }
+}
+Window.extendWith(ScratchPad, {
+  template: '#scratch-pad',
+  options: { flex: true, resizable: true, minimize: false, width: '50em', height: '35em' },
+  observe: {
+    'pad.name'(n) {
+      this.title = `Scratch Pad${n ? ` - ${n}` : ''}`;
+      this.save();
+    },
+    'pad.text'(v) {
+      if (typeof v === 'string') this.save();
+    },
+  },
 });
 
 const listDBQuery = `SELECT d.datname as "database",

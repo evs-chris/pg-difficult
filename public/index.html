@@ -418,7 +418,7 @@
       <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.3em;">
         <div style="padding: 0.3em;">Reports can be set up to run against a Diff, a Schema, a Provided Result from querying multiple database, a Query for multiple database, a Query for a single database, or a JSON blob. Query-based reports can be managed from the Host Explorer.</div>
         <div style="flex-shrink: 0;"><button title="Open a new report designer." on-click="@.report()">New Designer</button></div>
-        </div>
+      </div>
       <div style="overflow: auto;">
         {{#each savedReports}}
           <div class="report striped">
@@ -432,6 +432,27 @@
           </div>
         {{else}}
           No reports have been saved.
+        {{/each}}
+      </div>
+    </tab>
+    <tab title="Scratch Pads">
+      <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.3em;">
+        <div style="padding: 0.3em;">Scratch pads are a place to write bits of text that are automatically saved to browser local storage when they are edited.</div>
+        <div style="flex-shrink: 0;"><button title="Open a new scratch pad." on-click="@.scratch()">New Scratch Pad</button></div>
+      </div>
+      <div style="overflow: auto;">
+        {{#each scratchPads}}
+          <div class="scratch striped">
+            <div class=name>{{.name}}</div>
+            <div class=actions>
+              <button class=flat disabled="{{@index === 0}}" on-click="moveUp(@context, @event.shiftKey || @event.ctrlKey)" title="Move up, hold shift or ctrl to move to top">&#9650;</button>
+              <button class=flat disabled="{{@index === @last}}" on-click="moveDown(@context, @event.shiftKey || @event.ctrlKey)" title="Move down, hold shift or ctrl to move to bottom">&#9660;</button>
+              <button on-click="@.scratch(.)" title="Open this scratch pad.">Open</button>
+              <button on-click="@.splice('scratchPads', @index, 1)" title="Remove this scratch pad from browser storage.">Remove</button>
+            </div>
+          </div>
+        {{else}}
+          No scratch pads have been saved.
         {{/each}}
       </div>
     </tab>
@@ -732,6 +753,13 @@
       No differences.
     {{/each}}
   </div>
+</script>
+
+<script type=text/ractive id=scratch-pad>
+  <div style="display: flex; justify-content: space-between; flex-shrink: 0;">
+    <label as-field class=inline><input value="{{pad.name}}" placeholder="Name..." lazy=1000 /></label>
+  </div>
+  <label as-field class=inline style="flex-grow: 1; display: flex; flex-direction: column; border: none; box-shadow: none;"><textarea style="flex-grow: 1; overflow: auto;" lazy=2000>{{pad.text}}</textarea></label>
 </script>
 
 <script type=text/ractive id=host-explore>
