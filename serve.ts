@@ -18,6 +18,10 @@ interface DatabaseConfig {
   ssl?: 'prefer'|'require';
 }
 
+interface DatabasesConfig extends DatabaseConfig {
+  databases: string[];
+}
+
 interface Connection {
   pid: string;
   user: string;
@@ -33,6 +37,7 @@ const config = {
   pollingInterval: 10000,
   listen: '127.0.0.1',
   noui: false,
+  ssl: undefined as any,
 };
 
 // process args
@@ -128,7 +133,7 @@ function clientForSource(src: number|string): number|undefined {
 }
 
 function prepareConfig(cfg: DatabaseConfig, extra?: Partial<DatabaseConfig> & { app?: string }): DatabaseConfig {
-  const base = {
+  const base: any = {
     onnotice() {},
     types: { date: {
       to: 1184, from: [1082, 1114, 1184],
@@ -138,6 +143,9 @@ function prepareConfig(cfg: DatabaseConfig, extra?: Partial<DatabaseConfig> & { 
     connection: { application_name: `pg-difficult:${config.port}${extra?.app ? `(${extra.app})` : ''}` },
     ssl: 'prefer',
   }
+  if (config.ssl === 'require') base.ssl = 'require';
+  if (config.ssl === false) delete base.ssl;
+  if (base.ssl) base.ssl = { rejectUnauthorized: false };
   return Object.assign(base, cfg, { host: cfg.host || 'localhost', username: cfg.username || 'postgres', database: cfg.database || 'postgres', port: cfg.port || 5432 }, extra);
 }
 
@@ -215,11 +223,12 @@ interface Segment { action: 'segment'; segment: string; id?: string }
 interface Check { action: 'check'; client: string|number; since?: string; id: string; }
 interface Schema { action: 'schema'; client?: string|number|DatabaseConfig; id?: string }
 interface Query { action: 'query'; client: string|number|DatabaseConfig; query: string[]; params?: unknown[][]; id: string }
+interface QueryAll { action: 'query-all', clients: Array<DatabasesConfig>, query: string[]; params?: unknown[][]; batch?: number; id: string }
 interface Leak { action: 'leak'; config: DatabaseConfig }
 interface Unleak { action: 'unleak'; config: DatabaseConfig }
 interface Interval { action: 'interval'; time: number }
 interface Halt { action: 'halt' }
-type Message = Ping|Start|Restart|Resume|Stop|Status|Clear|Segment|Check|Schema|Query|Leak|Unleak|Interval|Halt;
+type Message = Ping|Start|Restart|Resume|Stop|Status|Clear|Segment|Check|Schema|Query|QueryAll|Leak|Unleak|Interval|Halt;
 
 async function message(this: WebSocket, msg: Message) {
   try {
@@ -235,6 +244,7 @@ async function message(this: WebSocket, msg: Message) {
       case 'check': check(this, msg.client, msg.id, msg.since); break;
       case 'schema': schema(this, msg.client, msg.id); break;
       case 'query': query(msg.client, msg.query, msg.params || [], msg.id, this); break;
+      case 'query-all': queryAll(msg.clients, msg.query, msg.params || [], msg.batch || 10, msg.id, this); break;
       case 'leak': leak(msg.config); break;
       case 'unleak': unleak(msg.config); break;
       case 'interval':
@@ -278,8 +288,8 @@ async function start(config: DatabaseConfig, id: number, ws: WebSocket, start?: 
     if (source(st.config) === source(config)) return error(`Already connected to ${source(config)}`);
   }
 
-  config = prepareConfig(config, { app: 'diff' });
   if (!config.ssl) config.ssl = 'prefer';
+  config = prepareConfig(config, { app: 'diff' });
 
   const client = postgres(config);
 
@@ -483,6 +493,8 @@ async function schema(ws: WebSocket, client?: string|number|DatabaseConfig, id?:
   notify({ action: 'schema', schema: res, id }, ws);
 }
 
+type QueryResult = { rows: any[]; count: number } | { error: string };
+
 async function query(client: DatabaseConfig|number|string, query: string[], params: unknown[][], id: string, ws: WebSocket) {
   if (typeof client === 'number' || typeof client === 'string') {
     const c = state.diffs[+client];
@@ -493,7 +505,7 @@ async function query(client: DatabaseConfig|number|string, query: string[], para
       await c.client.begin(async sql => {
         const results: unknown[] = [];
         for (let i = 0; i < query.length; i++) results.push(await sql.unsafe(query[i], params[i] as JSONValue[]));
-        notify({ action: 'query', id, result: results.length === 1 ? results[0] : results, time: Date.now() - start, affected: results.length === 1 ? (results[0] as { count: number }).count : results.map(r => (r as { count: number }).count) });
+        notify({ action: 'query', id, result: results.length === 1 ? results[0] : results, time: Date.now() - start, affected: results.length === 1 ? (results[0] as { count: number }).count : results.map(r => (r as { count: number }).count) }, ws);
       });
     } catch (e) {
       console.error(e, query);
@@ -512,7 +524,7 @@ async function query(client: DatabaseConfig|number|string, query: string[], para
       await c.begin(async sql => {
         const results: unknown[] = [];
         for (let i = 0; i < query.length; i++) results.push(await sql.unsafe(query[i], params[i] as JSONValue[]));
-        notify({ action: 'query', id, result: results.length === 1 ? results[0] : results, time: Date.now() - start, affected: results.length === 1 ? (results[0] as { count: number }).count : results.map(r => (r as { count: number }).count) });
+        notify({ action: 'query', id, result: results.length === 1 ? results[0] : results, time: Date.now() - start, affected: results.length === 1 ? (results[0] as { count: number }).count : results.map(r => (r as { count: number }).count) }, ws);
       });
     } catch (e) {
       console.error(e, query);
@@ -520,6 +532,58 @@ async function query(client: DatabaseConfig|number|string, query: string[], para
     } finally {
       await c.end();
     }
+  }
+}
+
+interface QueryControl {
+  pending: number;
+  result: { [con: string]: QueryResult };
+  callback: () => void;
+}
+
+function queryAll(clients: DatabasesConfig[], query: string[], params: unknown[][], batch: number, id: string, ws: WebSocket) {
+  const queue = clients.reduce((a, c) => {
+    for (const d of c.databases) a.push(Object.assign({}, c, { database: d, __key: `${source(c)}@${d}` }));
+    return a;
+  }, [] as Array<DatabaseConfig & { __key: string }>);
+
+  let ctrl: QueryControl;
+  ctrl = { pending: queue.length, result: {}, callback: () => notify({ action: 'query-all', id, result: ctrl.result }, ws) };
+
+  for (let i = 0; i < batch && queue.length; i++) {
+    queryQueue(queue, query, params, ctrl);
+  }
+}
+
+async function queryOne(client: DatabaseConfig, query: string[], params: unknown[][]): Promise<QueryResult> {
+  const c = postgres(prepareConfig(client, { app: 'query-all' }));
+  try {
+    await c`select 1 as x`;
+  } catch (e) {
+    return { error: e.message };
+  }
+
+  try {
+    return await c.begin(async sql => {
+      let result: unknown;
+      for (let i = 0; i < query.length; i++) result = await sql.unsafe(query[i], params[i] as JSONValue[]);
+      return { rows: result, count: (result as any).count } as QueryResult;
+    });
+  } catch (e) {
+    console.error(e, query);
+    return { error: e.message };
+  } finally {
+    await c.end();
+  }
+}
+
+async function queryQueue(queue: Array<DatabaseConfig & { __key: string }>, query: string[], params: unknown[][], ctrl: QueryControl) {
+  let e: (DatabaseConfig & { __key: string })|undefined;
+  while ((e = queue.pop())) {
+    const res = await queryOne(e, query, params);
+    ctrl.pending--;
+    ctrl.result[e.__key] = res;
+    if (ctrl.pending === 0) ctrl.callback();
   }
 }
 

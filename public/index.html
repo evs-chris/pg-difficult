@@ -141,13 +141,13 @@
   }
 
   .striped:nth-child(odd), .striped-odd {
-    background-color: #eee;
+    background-color: rgba(128, 128, 128, 0.02);
     padding: 0.3em;
     box-sizing: border-box;
     border-radius: 0.3em;
   }
   .striped, .striped-even {
-    background-color: #fff;
+    background-color: rgba(128, 128, 128, 0.1);
     padding: 0.3em;
     box-sizing: border-box;
     border-radius: 0.3em;
@@ -176,6 +176,49 @@
   button.reject {
     color: #fff;
     background-color: #ca3c3c;
+  }
+
+  .schema { overflow: auto; }
+  .schema-row { padding: 0.2em; position: relative; display: flex; flex-wrap: no-wrap; }
+  .table { cursor: pointer; position: sticky; top: 0; z-index: 10; }
+  .column .name { padding-left: 1.7em; box-sizing: border-box; }
+  .schema-row > * { overflow: hidden; text-overflow: ellipsis; }
+  .schema-row .name { width: 55%; }
+  .schema-row.table { display: flex; }
+  .schema-row.table .name { width: auto; flex-grow: 1; }
+  .schema-row.table .details { opacity: 0.5; }
+  .schema-row .name.pkey { font-weight: bold; }
+  .schema-row .type { width: 20%; }
+  .schema-row .nullable { width: 7%; text-align: center; }
+  .schema-row .default { width: 8%; text-align: center; }
+  .schema-row .size { width: 10%; }
+
+  .round {
+    color: #eee;
+    background-color: #444;
+    flex-shrink: 0;
+    flex-grow: 0;
+    height: 1.4em;
+    width: 1.4em;
+    border-radius: 1.4em;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1em;
+    cursor: pointer;
+  }
+
+  .fade {
+    opacity: 0.5;
+    transition: opacity 0.2s ease-in-out;
+  }
+  .fade:hover {
+    opacity: 1;
+  }
+
+  th {
+    text-align: right;
   }
 </style>
 <!-- HEAD -->
@@ -231,7 +274,7 @@
     </div>{{/unless}}
     <input type=file id=file />
   {{else}}
-    <div style="width: 100vw; height: 100vh; display: flex; align-items: center; justify-content: center;">
+    <div class=html style="width: 100vw; height: 100vh; display: flex; align-items: center; justify-content: center;">
       <h2 style="text-align: center;">
         pg-difficult stopped.<br />
         Please close this window/tab.
@@ -251,7 +294,7 @@
   <tabs pad style="overflow: hidden;">
     <tab title="Connections" hidden="@global.clientOnly">
       <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.3em;">
-        <div>Connections are saved in browser storage and can be used to start diffs and run queries.<br/><br/><span style="color: #ca3c3c; font-weight: bold;">WARNING:</span> Starting a diff on a database will create two tables, create a function, and a then set the function as a trigger for each existing table in the database.</div>
+        <div>Connections are saved in browser storage and can be used to start diffs and run queries.<br/><br/><span style="color: #ca3c3c; font-weight: bold;">WARNING:</span> Starting a diff on a database will create two tables, create a function, and a then set the function as a trigger for each existing table in the database. A running diff in a database <em>will</em> cause performance degradation, especially if left to collect thousands of changes.</div>
         <button style="flex-shrink: 0;" on-click="@.editConnection()" title="Add a saved connection for this browser at this url.">Add Connection</button>
       </div>
       <div style="overflow: auto;">
@@ -260,8 +303,8 @@
             <div class="constr">
               <div>{{constr(.)}}</div>
               <div>
-                <button class=flat disabled="{{@index === 0}}" on-click="moveUp(@context)">Move Up</button>
-                <button class=flat disabled="{{@index === @last}}" on-click="moveDown(@context)">Move Down</button>
+                <button class=flat disabled="{{@index === 0}}" on-click="moveUp(@context, @event.shiftKey || @event.ctrlKey)" title="Move up, hold shift or ctrl to move to top">&#9650;</button>
+                <button class=flat disabled="{{@index === @last}}" on-click="moveDown(@context, @event.shiftKey || @event.ctrlKey)" title="Move down, hold shift or ctrl to move to bottom">&#9660;</button>
               </div>
               <div>
                 <button class=flat on-click="@.editConnection(@index)" {{#if @.hasDiff(.) || @.hasLeak(.)}}disabled title="Stop active watchers to modify this connection"{{else}}title="Edit this saved connection."{{/if}}>Edit</button>
@@ -356,6 +399,8 @@
             <div class="name">{{.name}}</div>
             <div class="sql">{{.sql}}</div>
             <div class="actions">
+              <button class=flat disabled="{{@index === 0}}" on-click="moveUp(@context, @event.shiftKey || @event.ctrlKey)" title="Move up, hold shift or ctrl to move to top">&#9650;</button>
+              <button class=flat disabled="{{@index === @last}}" on-click="moveDown(@context, @event.shiftKey || @event.ctrlKey)" title="Move down, hold shift or ctrl to move to bottom">&#9660;</button>
               {{#if ~/loadedQuery === .}}
                 <button on-click="@.set('loadedQuery', undefined)" title="Click to cancel waiting to load this query from a query window.">Cancel</button>
               {{else}}
@@ -371,7 +416,7 @@
     </tab>
     <tab title="Reports">
       <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.3em;">
-        <div style="padding: 0.3em;">Reports are currently experimental and somewhat limited. Report definitions are saved in browser storage.</div>
+        <div style="padding: 0.3em;">Reports can be set up to run against a Diff, a Schema, a Provided Result from querying multiple database, a Query for multiple database, a Query for a single database, or a JSON blob. Query-based reports can be managed from the Host Explorer.</div>
         <div style="flex-shrink: 0;"><button title="Open a new report designer." on-click="@.report()">New Designer</button></div>
         </div>
       <div style="overflow: auto;">
@@ -379,7 +424,9 @@
           <div class="report striped">
             <div class=name>{{.definition.name}}</div>
             <div class=actions>
-              <button on-click="@.report(.)" title="Open this report in the designer.">Designer</button>
+              <button class=flat disabled="{{@index === 0}}" on-click="moveUp(@context, @event.shiftKey || @event.ctrlKey)" title="Move up, hold shift or ctrl to move to top">&#9650;</button>
+              <button class=flat disabled="{{@index === @last}}" on-click="moveDown(@context, @event.shiftKey || @event.ctrlKey)" title="Move down, hold shift or ctrl to move to bottom">&#9660;</button>
+              <button on-click="@.report(.)" {{#if @.reportHasQuerySql(.)}}disabled title="This report uses SQL queries and must be accessed from the Host Explorer"{{else}}title="Open this report in the designer."{{/if}}>Designer</button>
               <button on-click="@.splice('savedReports', @index, 1)" title="Remove this report from browser storage.">Remove</button>
             </div>
           </div>
@@ -390,6 +437,11 @@
     </tab>
     <tab title="Settings">
       <div style="display: flex; flex-direction: column;">
+        <label as-field>Theme<select value="{{~/settings.theme}}">
+          <option value="{{undefined}}">Auto</option>
+          <option value="dark">Dark</option>
+          <option value="light">Light</option>
+        </select></label>
         {{#if !@global.clientOnly}}
           <label as-field class=inline><input type=checkbox bind-checked="~/settings.queryOrderColumns" /> Order query result columns alphabetically?</label>
           <label as-field class=inline><input type=checkbox bind-checked="~/settings.allowUndoSegment" /> Enable undoing diff segments by default?</label>
@@ -401,31 +453,34 @@
     </tab>
   </tabs>
   <buttons>
-    {{#unless @global.clientOnly}}<button class=reject on-click="@.halt()">Stop pg-difficult</button>{{/unless}}
+    {{#unless @global.clientOnly}}
+      <button left on-click="@.exploreHosts()">Host Explorer</button>
+      <button class=reject on-click="@.halt()">Stop pg-difficult</button>
+    {{/unless}}
   </buttons>
 </script>
 
 <script type=text/ractive id=query>
   <div style="border-bottom: 1px solid; display: flex; justify-content: space-between;">
-    <button on-click="@.run(.query)" title="Execute this query and return the result. (ctrl+Enter)">Run</button>
-    <label as-field class=inline><input type=checkbox bind-checked="settings.queryOrderColumns" /> Order query result columns alphabetically?</label>
+    <button on-click="@.runQuery(~/query)" title="Execute this query and return the result. (ctrl+Enter)">Run</button>
+    <label as-field class=inline><input type=checkbox bind-checked="~/settings.queryOrderColumns" /> Order query result columns alphabetically?</label>
     {{#if ~/loadedQuery}}
-      <button on-click="@.load()" title="Load the selected saved query in this window.">Load Query</button>
-    {{elseif .query}}
+      <button on-click="@.loadQuery()" title="Load the selected saved query in this window.">Load Query</button>
+    {{elseif ~/query}}
       <div>
-        <button on-click="@.save()">Save</button>
-        {{#if .name}}<button on-click="@.set('name', undefined)" title="This query is currently saved as {{.name}}. Click here to disconnect this query from that named query. When the query is disconnected, it may be saved with a different name.">Unload</button>{{/if}}
+        <button on-click="@.saveQuery()">Save</button>
+        {{#if ~/name}}<button on-click="@.set('name', undefined)" title="This query is currently saved as {{~/name}}. Click here to disconnect this query from that named query. When the query is disconnected, it may be saved with a different name.">Unload</button>{{/if}}
       </div>
     {{/if}}
   </div>
   <div class="query">
-    <div class="query-text"><textarea value="{{.query}}" on-keydown="@event.ctrlKey && @event.key === 'Enter' ? @.run(.query) : true" /></div>
+    <div class="query-text"><textarea as-tracked=`queryTextArea` value="{{~/query}}" on-keydown="@event.ctrlKey && @event.key === 'Enter' ? @.runQuery(~/query) : true" /></div>
     <div class="result">
-      <data-table auto-titles no-wrap fixed-header allow-select=false on-init="@.set('@.table', $1)" items="{{.result}}">
+      <data-table auto-titles no-wrap fixed-header allow-select=false on-init="@.set('@.table', $1)" items="{{~/result}}">
         <bottom>
           <div style="display:flex; justify-content: space-between;">
-            <span>{{#if !.result.length && .affected != null}}{{.affected}} rows affected.{{/if}} {{#unless .error}}{{.result.length || 'No'}} rows{{#if .result.length}}, {{@.table.data.columns.length}} cols{{/if}}{{/unless}}</span>
-            <span>{{#if runtime != null}}Completed in {{runtime}}ms{{/if}}</span>
+            <span>{{#if !~/result.length && ~/affected != null}}{{~/affected}} rows affected.{{/if}} {{#unless ~/error}}{{~/result.length || 'No'}} rows{{#if ~/result.length}}, {{@.table.data.columns.length}} cols{{/if}}{{/unless}}</span>
+            <span>{{#if ~/runtime != null}}Completed in {{~/runtime}}ms{{/if}}</span>
           </div>
         </bottom>
       </data-table>
@@ -463,7 +518,7 @@
 
               <div class=buttons>
                 {{#if ~/allowUndoSingle}}<button class=undo on-click="@.undoSingle(record)" title="Undo this change by running the inverse of the statment that created the change.">Undo</button>{{/if}}
-                <button title="Split segment above" on-click="@.renameSegment(record, 'above')">&#9650;</button> <button title="Split segment below" on-click="@.renameSegment(record, 'below')">&#9660;</button>
+                <button class=split-up title="Split this entry and all entries above it up to the previous segment into a new segment" on-click="@.renameSegment(record, 'above')">&#9650;</button> <button class=split-down title="Split this entry and all entries below it down to the next segment into a new segment" on-click="@.renameSegment(record, 'below')">&#9660;</button>
               </div>
             </div>
           {{else}}
@@ -475,16 +530,16 @@
 
               <div class=buttons>
                 {{#if ~/allowUndoSingle}}<button class=undo on-click="@.undoSingle(record)" title="Undo this change by running the inverse of the statment that created the change.">Undo</button>{{/if}}
-                <button title="Split segment above" on-click="@.renameSegment(record, 'above')">&#9650;</button> <button title="Split segment below" on-click="@.renameSegment(record, 'below')">&#9660;</button>
+                <button class=split-up title="Split this entry and all entries above it up to the previous segment into a new segment" on-click="@.renameSegment(record, 'above')">&#9650;</button> <button class=split-down title="Split this entry and all entries below it down to the next segment into a new segment" on-click="@.renameSegment(record, 'below')">&#9660;</button>
               </div>
             </div>
           {{/if}}
         {{else}}
           <div class="wrapper striped-{{index % 2 == 0 ? 'even' : 'odd'}}">
             <div class=name><span>{{record.table}} {{entry.id || ''}} {{entry.status || '(empty changeset)'}}</span><span class=src>({{record.source}})</span></div>
-          </div>
-          <div class=buttons>
-            <button title="Split segment above" on-click="@.renameSegment(record, 'above')">&#9650;</button> <button title="Split segment below" on-click="@.renameSegment(record, 'below')">&#9660;</button>
+            <div class=buttons>
+              <button class=split-up title="Split this entry and all entries above it up to the previous segment into a new segment" on-click="@.renameSegment(record, 'above')">&#9650;</button> <button class=split-down title="Split this entry and all entries below it down to the next segment into a new segment" on-click="@.renameSegment(record, 'below')">&#9660;</button>
+            </div>
           </div>
         {{/if}}
       {{/with}}
@@ -679,6 +734,234 @@
   </div>
 </script>
 
+<script type=text/ractive id=host-explore>
+  <div style="display: flex; height: 100%;">
+    <div style="width: 22em; flex-shrink: 0; flex-grow: 0; border-right: 1px solid; padding: 0.5em; overflow: auto;">
+      <div class=filter-pane style="position: sticky; top: -0.5em; border-bottom: 1px solid; padding: 0.5em; margin: -0.5em -0.5em 0.5em -0.5em; display: flex;" title="Filter visible databases using a raport expression. Visible databases will be condidates to query all, so collapsing a host node will prevent any databases on that node from being queried.{{'\n\n'}}Available fields are connection: { host, port, username, password, database, ssl, label }, entry: { access, collate, ctype, data, encoding, owner }, constr, db, index, query, last-query{{'\n\n'}}Any applied query results are also available here by their applied name as a property of query. If a query is run and not applied or saved as a result, it will be available as last-query.">
+        <label as-field class=inline style="width: 100%;">
+          <input value="{{~/filter}}" style="flex-grow: 1; padding: 0.25em;" lazy=1000 placeholder="Filter Expression" />
+        </label>
+      </div>
+      {{#each ~/connections as con}}
+        <div class="host" style="display: flex; position: sticky; top: 4.1em; word-break: break-all; align-items: center; justify-content: space-between;" on-click="@.toggle('expanded.' + escapeKey(.constr))">
+          <div style="width: 1em; height: 1em; display: flex; border: 1px solid; align-items: center; justify-content: center; margin-right: 0.5em; flex-shrink: 0;">
+            {{#if ~/expanded[.constr]}}-{{else}}+{{/if}}
+          </div>
+          <div style="padding: 0.2em;">{{#if .label}}<strong>{{.label}}</strong> <em>({{.constr}})</em>{{else}}<em>{{.constr}}</em>{{/if}}{{#if ~/hosts && ~/expanded[.constr] && Array.isArray(~/hosts[.constr])}} ({{~/_entries[.constr].length}} / {{~/hosts[.constr].length}}){{/if}}</div>
+          <div class="round fade" on-click="@.refreshHost(con), false" title="Refresh host database list">&#10227;</div>
+        </div>
+        <div style="padding-left: 1.5em;">
+          {{#if ~/expanded[.constr]}}
+            {{#if ~/hosts[.constr].error}}
+              <div style="display: flex; padding: 0.2em; justify-content: space-between; color: darkred;"><span>{{~/hosts[.constr].error}}</span></div>
+            {{elseif ~/hosts && Array.isArray(~/hosts[.constr])}}
+              {{#each ~/_entries[.constr] as entry}}
+                <div style="display: flex; padding: 0.2em; justify-content: space-between;" on-click="@.set('selectedDB', { connection: con, entry: entry })" class-selected="~/selectedDB.connection.constr === con.constr && ~/selectedDB.entry.database === .database"><span>{{.database}}</span></div>
+              {{/each}}
+            {{else}}
+              <div style="padding: 0.5em;">[[@.refreshHost(.) && 'Loading...']]</div>
+            {{/if}}
+          {{/if}}
+        </div>
+      {{/each}}
+    </div>
+    <tabs pad style="overflow: hidden;" flex>
+      <tab no-pad title="Database">
+        {{#if ~/selectedDB}}
+          {{#with ~/selectedDB}}
+            <tabs defer style="overflow: hidden; margin-top: 2px; flex-grow: 1;" pad flex>
+              <tab title="Info">
+                <div style="padding: 0.5em;">
+                  {{.entry.database}} on {{.connection.config.host}}:{{.connection.config.port}}
+                  <table>
+                    {{#each .entry}}
+                      <tr><th>{{@key}}</th><td>{{.}}</td></tr>
+                    {{/each}}
+                  </table>
+                </div>
+              </tab>
+              <tab title="Schema" on-enter="@.set('showSchema', true)" on-leave="@.set('showSchema', false)" no-pad>
+                {{#if ~/showSchema}}
+                  {{#if ~/schemas[.connection.constr + '@' + .entry.database]}}
+                    {{#with ~/schemas[.connection.constr + '@' + .entry.database]}}
+                      {{#if .error}}
+                        <div style="padding: 0.5em;">Error loading schema...</div>
+                      {{else}}
+                        {{#with @.entries(.schema) as entries}}
+                          <virtual-list bind-items="entries" size=34 style="flex-grow: 1;">
+                            <header>
+                              <div style="border-bottom: 1px solid;">
+                                <div class="stretch-fields">
+                                  <label as-field>Search<input value="{{~/schemafilter}}" lazy=500 /></label>
+                                  <label as-field title="Available fields are column.{name, default, enum, type, pgtype, nullable, length, precision, pkey, schema, table}">Expression<input value="{{~/schemaexpr}}" lazy=500 /></label>
+                                  <label as-field style="flex-grow: 0;"><button on-click="@.download()" title="Download a file containing this schema.">Download</button></label>
+                                </div>
+                                <div class="schema-row" style="font-weight: bold;">
+                                  <div class="name" style="cursor: pointer;" title="Click to sort columns by {{~/schemasort === 'position' ? 'name' : 'position'}}" on-click="@.set('schemasort', ~/schemasort === 'position' ? 'name' : 'position')">Name ({{~/schemasort === 'position' ? '#' : 'A'}})</div>
+                                  <div class="nullable">Null</div>
+                                  <div class="default">Default</div>
+                                  <div class="type">Type</div>
+                                  <div class="size">Size</div>
+                                </div>
+                              </div>
+                              {{#if index}}
+                                <div class="schema-row table" style="padding: 0.5em;" on-click="@.toggle('schemaexpanded.' + escapeKey(.table || .name))">
+                                  <div class="name">{{.table || .name}}</div>
+                                  <div class="details">({{@.colsFor(.table || .name)}} cols{{#if ~/schemafilter || ~/expr}}, {{~/schemamatches[.table || .name].length}} match{{/if}})</div>
+                                </div>
+                              {{/if}}
+                            </header>
+                            <item class="striped-{{index % 2 ? 'odd' : 'even'}}">
+                              {{#if !.table}}
+                                <div class="schema-row table" on-click="@.toggle('schemaexpanded.' + escapeKey(.name))">
+                                  <div class="name">{{.name}}</div>
+                                  <div class="details">({{.columns.length}} cols{{#if ~/schemafilter || ~/schemaexpr}}, {{schemamatches[.name].length}} match{{/if}})</div>
+                                </div>
+                              {{else}}
+                                <div class="schema-row column">
+                                  <div class="name {{#if .pkey}}pkey{{/if}}" {{#if .default}}title="Default: {{.default}}"{{/if}}>
+                                    <div class=expand-indicator class-expanded class-matched />
+                                    {{.name}}
+                                  </div>
+                                  <div class="nullable">{{.nullable ? 'Y' : 'N'}}</div>
+                                  <div class="default" {{#if .default}}title="{{.default}}"{{/if}}>{{.default ? 'Y' : 'N'}}</div>
+                                  <div class="type" {{#if .enum}}title="Values: {{.enum.join(', ')}}"{{/if}}>{{.pgtype}}</div>
+                                  <div class="size">{{#if .length != null}}{{.length}}{{elseif .precision != null}}{{.precision}}{{/if}}</div>
+                                </div>
+                              {{/if}}
+                            </item>
+                            <else>
+                              <div class="schema-row">
+                                No {{#if ~/schemafilter || ~/schemaexpr}}matching{{/if}} tables or columns.
+                              </div>
+                            </else>
+                          </virtual-list>
+                          <div style="padding: 0.5em; border-top: 1px solid;">
+                            {{.schema.length}} tables, {{@.colCount(.schema)}} columns{{#if ~/schemafilter || ~/schemaexpr}}, {{@.matchCount(~/schemamatches)}} match{{/if}}
+                          </div>
+                        {{/with}}
+                      {{/if}}
+                    {{/with}}
+                  {{else}}
+                    <div style="padding: 0.5em;">[[@.refreshSchema(.) && 'Loading...']]</div>
+                  {{/if}}
+                {{/if}}
+              </tab>
+              <tab title="Query" no-pad>
+                {{>query}}
+              </tab>
+              <tab title="Reports" no-pad>
+                <div style="display: flex; height: 100%; margin-top: 2px;">
+                  <div style="flex-grow: 1;">
+                    {{#if ~/queryreport}}
+                      <tabs style="overflow: hidden;" flex pad>
+                        <tab title="Details">
+                          <div style="display: flex; justify-content: space-between; align-items: center;"><span>{{~/queryreport.definition.name}}</span><button on-click="@.reportDesigner(~/queryreport)">Report Designer</button></div>
+                          <h3>Queries</h3>
+                          <dl>
+                            {{#each ~/queryreport.sources}}
+                              {{#if .type === 'query'}}
+                                <dt>{{.name}}</dt><dd>{{.query}}</dd>
+                              {{/if}}
+                            {{/each}}
+                          </dl>
+                        </tab>
+                        <tab title="Run">
+                          <div>
+                            {{#each ~/queryreport.definition.parameters}}
+                              <label as-field>{{.label || .name}}<input value="{{~/params[.name]}}" /></label>
+                            {{/each}}
+                          </div>
+                          <div>
+                            <button on-click="@.runSingleReport(queryreport, false, ~/params)">Run Report</button>
+                          </div>
+                        </tab>
+                      </tabs>
+                    {{else}}
+                      <div style="padding: 0.5em; opacity: 0.5;">
+                        Select a report...
+                      </div>
+                    {{/if}}
+                  </div>
+                  <div style="width: 15em; flex-shrink: 0; background-color: rgba(128, 128, 128, 0.05); border-left: 1px solid #222;">
+                    {{#each ~/reports}}
+                      {{#if @.isJustQueryReport(.)}}
+                        <div style="padding: 0.5em;" on-click="@.link(@keypath, 'queryreport')" class-selected="~/queryreport === .">{{.definition.name}}</div>
+                      {{/if}}
+                    {{/each}}
+                  </div>
+                </div>
+              </tab>
+            </tabs>
+          {{/with}}
+        {{else}}
+          <div style="padding: 0.5em;">Select a database</div>
+        {{/if}}
+      </tab>
+      <tab title="Query All" no-pad>
+        <tabs style="margin-top: 2px; overflow: hidden; height: 100%;" pad flex>
+          <tab title="Reports" no-pad>
+            <div style="display: flex; height: 100%; margin-top: 2px;">
+              <div style="flex-grow: 1;">
+                {{#if ~/allreport}}
+                  <tabs style="overflow: hidden;" flex pad>
+                    <tab title="Details">
+                      <div style="display: flex; justify-content: space-between; align-items: center;"><span>{{~/allreport.definition.name}}</span><button on-click="@.reportDesigner(~/allreport)">Report Designer</button></div>
+                      <h3>Queries</h3>
+                      <dl>
+                        {{#each ~/allreport.sources}}
+                          {{#if .type === 'query-all-sql'}}
+                            <dt>{{.name}}</dt><dd>{{.query}}</dd>
+                          {{/if}}
+                        {{/each}}
+                      </dl>
+                    </tab>
+                    <tab title="Run">
+                      <div style="padding: 0.3em;">Reports will run against all visible databases in the Host Explorer tree.</div>
+                      <div>
+                        {{#each ~/allreport.definition.parameters}}
+                          <label as-field>{{.label || .name}}<input value="{{~/params[.name]}}" /></label>
+                        {{/each}}
+                      </div>
+                      <div>
+                        <button on-click="@.runReport(allreport)">Run Report</button>
+                      </div>
+                    </tab>
+                  </tabs>
+                {{else}}
+                  <div style="padding: 0.5em; opacity: 0.5;">
+                    Select a report...
+                  </div>
+                {{/if}}
+              </div>
+              <div style="width: 15em; flex-shrink: 0; background-color: rgba(128, 128, 128, 0.05); border-left: 1px solid #222;">
+                {{#each ~/reports}}
+                  {{#if @.isQueryAllReport(.)}}
+                    <div style="padding: 0.5em;" on-click="@.link(@keypath, 'allreport')" class-selected="~/allreport === .">{{.definition.name}}</div>
+                  {{/if}}
+                {{/each}}
+              </div>
+            </div>
+          </tab>
+          <tab title="Query">
+            <div style="padding: 0.3em;">Queries will run against all visible databases in the Host Explorer tree. Queries run here are useful to extend data available for filtering. Results may be provided for reports, but having a report with a query all source is preferable.</div>
+            <label as-field>SQL<textarea>{{~/queryall}}</textarea></label>
+            <div>
+              <label as-field title="Give a name to the result set to be available in the expression filter of this host explorer. Applied results are added to any existing results, so collapsing a host that already has results and rerunning a query will not remove the previous result.">Apply As<input value="{{~/queryapply}}" /></label>
+              <label as-field><button on-click="@.queryAll(~/queryall, ~/queryapply), @.set('queryapply', '')">Run</button></label>
+              <label as-field style="margin-left: 2em;"><button class-reject title="Clear cached results. To clear all, leave Apply As blank. To clear a specific set, fill the desired name in Apply As." on-click="@.set(~/queryapply ? 'results.' + escapeKey(~/queryapply) : 'results', {}), @.set('queryapply', '')">Clear Results</button></label>
+              <hr />
+              <label as-field title="Provide a result set with the given name, which will be available to any reports that have a provided query all source of the same name.">Provide Result<input value="{{~/queryname}}" /></label>
+              <label as-field><button on-click="@.queryAll(~/queryall, undefined, ~/queryname), @.set('queryname', '')">Run</button></label>
+              <label as-field style="margin-left: 2em;"><button class-reject title="Clear cached provided results. To clear all, leave Provided Result blank. To clear a specific set, fill the desired name in Provided Result." on-click="app.set(~/queryname ? 'results.' + escapeKey(~/queryname) : 'results', {}), @.set('queryname', '')">Clear Results</button></label>
+            </div>
+          </tab>
+        </tabs>
+      </tab>
+    </tabs>
+  </div>
+</script>
+
 <script type=text/ractive id=report>
   <iframe src="./report.html"></iframe>
   {{#unless ~/control.topmost}}<div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0;" />{{/unless}}
@@ -688,6 +971,10 @@
   </buttons>
 </script>
 
+<script type=text/ractive id=view-report>
+  <iframe srcdoc="{{html}}" />
+</script>
+
 <script type=text/ractive id=source-edit>
   <div class=content-wrapper>
     <div>
@@ -695,26 +982,55 @@
       <label as-field>Type<select value="{{source.type}}" on-change="@node.value === 'diff' ? @.set('source', { type: 'diff'}) : true">
         <option value="diff">Diff Entries</option>
         <option value="diff-schema">Diff Schema</option>
-        {{#if !@global.clientOnly}}<option value="query">Query</option>{{/if}}
+        {{#if !@global.clientOnly}}
+          <option value="query">Query</option>
+          <option value="query-all">Query All Provided Result</option>
+          <option value="query-all-sql">Query All</option>
+        {{/if}}
         <option value="json">JSON</option>
       </select></label>
+      {{#if source.type === 'query'}}<label as-field><input type=checkbox checked="{{source.config !== undefined}}" twoway=false on-change="@.set('source.config', @node.checked ? {} : undefined)" /> Custom connection?</label>{{/if}}
     </div>
     {{#if source.type === 'query'}}
+      {{#if !!source.config}}
+        <div>
+          <label as-field>Host<input value="{{source.config.host}}" /></label>
+          <label as-field>Port<input type=number value="{{source.config.port}}" /></label>
+          <label as-field>SSL<select value="{{source.config.ssl}}">
+            <option value="{{undefined}}">Default</option>
+            <option value="prefer">Prefer</option>
+            <option value="require">Require</option>
+            <option value="{{false}}">None</option>
+          </select></label>
+          <label as-field>User<input value="{{source.config.username}}" /></label>
+          <label as-field>Password<input type=password value="{{source.config.password}}" /></label>
+          <label as-field>Database<input value="{{source.config.database}}" /></label>
+        </div>
+      {{/if}}
+      <div><label as-field>Query<textarea>{{source.query}}</textarea></label></div>
+      {{#if ~/error}}<div style="color: red;">{{~/error}}</div>{{/if}}
       <div>
-        <label as-field>Host<input value="{{source.config.host}}" /></label>
-        <label as-field>Port<input type=number value="{{source.config.port}}" /></label>
-        <label as-field>User<input value="{{source.config.username}}" /></label>
-        <label as-field>Password<input type=password value="{{source.config.password}}" /></label>
-        <label as-field>Database<input value="{{source.config.database}}" /></label>
+        {{#each ~/paramArray}}
+          <label as-field>Parameter ${{@index + 1}}<input value="{{source.parameters[@index]}}" /></label>
+        {{/each}}
       </div>
-      <label as-field>Query<textarea>{{source.query}}</textarea></label>
     {{elseif source.type === 'json'}}
       <label as-field>JSON<textarea>{{source.json}}</textarea></label>
+    {{elseif source.type === 'query-all'}}
+      <label as-field>Result Name<input value="{{source.result}}" /></label>
+    {{elseif source.type === 'query-all-sql'}}
+      <div><label as-field>Query<textarea>{{source.query}}</textarea></label></div>
+      {{#if ~/error}}<div style="color: red;">{{~/error}}</div>{{/if}}
+      <div>
+        {{#each ~/paramArray}}
+          <label as-field>Parameter ${{@index + 1}}<input value="{{source.parameters[@index]}}" /></label>
+        {{/each}}
+      </div>
     {{/if}}
   </div>
   <buttons>
     <button left on-click="@.close()">Cancel</button>
-    <button on-click="@.close(false, source)">Done</button>
+    <button on-click="@.save()" disabled="{{!!error}}">Done</button>
   </buttons>
 </script>
 
@@ -725,10 +1041,27 @@
     <label as-field>User<input value="{{~/config.username}}" /></label>
     <label as-field>Password<input type=password value="{{~/config.password}}" /></label>
     <label as-field>Database<input value="{{~/config.database}}" /></label>
+    <label as-field>SSL<select value="{{~/config.ssl}}">
+      <option value="{{undefined}}">Default</option>
+      <option value="prefer">Prefer</option>
+      <option value="require">Require</option>
+      <option value="{{false}}">None</option>
+    </select></label>
+    <label as-field>Label<input value="{{~/config.label}}" /></label>
   </div>
   <buttons>
     <button left class=flat on-click="@.cancel()">Cancel</button>
     <button on-click="@.accept()">Done</button>
+  </buttons>
+</script>
+
+<script type=text/ractive id=confirm>
+  <div class=content-wrapper>
+    <div class="message" style="max-width: 36em;"><pre style="font-family: sans-serif;">{{{.message}}}</pre></div>
+  </div>
+  <buttons>
+    <button center on-click="@.close(false, true)">Yes</button>
+    <button center class=reject on-click="@.close(false, false)">No</button>
   </buttons>
 </script>
 
