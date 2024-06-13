@@ -40,8 +40,8 @@
       }
     </style>
     <script src="./ractive@1.4.2.js"></script>
-    <script src="./raport@0.18.1.js"></script>
-    <script src="./raport.design@0.18.1.js"></script>
+    <script src="./raport@0.24.7.js"></script>
+    <script src="./raport.design@0.24.7.js"></script>
   </head>
   <body>
     <script type=text/ractive id="template">
@@ -86,8 +86,8 @@ class App extends Ractive {
           if (data.source) ctx.set('.', data.source);
         } catch {}
       },
-      async loadSourceData(source) {
-        return (await request({ action: 'fetch-source', source })).data;
+      async loadSourceData(source, play, params, report) {
+        return (await request({ action: 'fetch-source', source, play, params, report })).data;
       },
     });
 
@@ -149,7 +149,8 @@ window.addEventListener('message', ev => {
       break;
 
     case 'get':
-      respond({ get: app.report.get(ev.data.get) }, ev.data);
+      if (ev.data.get === 'sources') respond({ get: app.get('sources') }, ev.data);
+      else respond({ get: app.report.get(ev.data.get) }, ev.data);
       break;
 
     default:

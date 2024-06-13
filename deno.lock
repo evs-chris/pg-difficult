@@ -1,7 +1,11 @@
 {
-  "version": "2",
+  "version": "3",
+  "redirects": {
+    "https://deno.land/x/is_docker/mod.ts": "https://deno.land/x/is_docker@v2.0.0/mod.ts"
+  },
   "remote": {
     "https://deno.land/std@0.106.0/path/_constants.ts": "1247fee4a79b70c89f23499691ef169b41b6ccf01887a0abd131009c5581b853",
+    "https://deno.land/std@0.106.0/path/_interface.ts": "1fa73b02aaa24867e481a48492b44f2598cd9dfa513c7b34001437007d3642e4",
     "https://deno.land/std@0.106.0/path/_util.ts": "2e06a3b9e79beaf62687196bd4b60a4c391d862cfa007a20fc3a39f778ba073b",
     "https://deno.land/std@0.106.0/path/posix.ts": "b81974c768d298f8dcd2c720229639b3803ca4a241fa9a355c762fa2bc5ef0c1",
     "https://deno.land/std@0.132.0/_deno_unstable.ts": "23a1a36928f1b6d3b0170aaa67de09af12aa998525f608ff7331b9fb364cbde6",
@@ -610,6 +614,19 @@
     "https://deno.land/x/postgresjs@v3.3.5/src/result.js": "001ff5e0c8d634674f483d07fbcd620a797e3101f842d6c20ca3ace936260465",
     "https://deno.land/x/postgresjs@v3.3.5/src/subscribe.js": "47d7edb9e8be1d7912338371d3310fd70e819dc00d1be5dd0c2ac8ad3f18293b",
     "https://deno.land/x/postgresjs@v3.3.5/src/types.js": "14088a11a1b76ca3d3b6b78086544bfe2142a4352663639449a36712b22eab56",
-    "https://deno.land/x/postgresjs@v3.3.5/types/index.d.ts": "a5cf9a17f0572f5cf48572312f51dcd455bb8f8580ede37777aa6d054d49261f"
+    "https://deno.land/x/postgresjs@v3.3.5/types/index.d.ts": "a5cf9a17f0572f5cf48572312f51dcd455bb8f8580ede37777aa6d054d49261f",
+    "https://deno.land/x/postgresjs@v3.4.3/mod.js": "cb68f17d6d90df318934deccdb469d740be0888e7a597a9e7eea7100ce36a252",
+    "https://deno.land/x/postgresjs@v3.4.3/polyfills.js": "318eb01f2b4cc33a46c59f3ddc11f22a56d6b1db8b7719b2ad7decee63a5bd47",
+    "https://deno.land/x/postgresjs@v3.4.3/src/bytes.js": "f2de43bdc8fa5dc4b169f2c70d5d8b053a3dea8f85ef011d7b27dec69e14ebb7",
+    "https://deno.land/x/postgresjs@v3.4.3/src/connection.js": "506df20bbaa44256e8511ee87e5f18e6343c406f7b9804c20dd182c1b5b4270b",
+    "https://deno.land/x/postgresjs@v3.4.3/src/errors.js": "85cfbed9a5ab0db41ab8e97b806c881af29807dfe99bc656fdf1a18c1c13b6c6",
+    "https://deno.land/x/postgresjs@v3.4.3/src/index.js": "9dca008e765675f8218d4e2e3ccc75359cc2240f7be4e80bf6735e92b5562e3a",
+    "https://deno.land/x/postgresjs@v3.4.3/src/large.js": "f3e770cdb7cc695f7b50687b4c6c4b7252129515486ec8def98b7582ee7c54ef",
+    "https://deno.land/x/postgresjs@v3.4.3/src/query.js": "67c45a5151032aa46b587abc15381fe4efd97c696e5c1b53082b8161309c4ee2",
+    "https://deno.land/x/postgresjs@v3.4.3/src/queue.js": "15e6345adb6708bf3b99ad39fc2231c2fb61de5f6cba4b7a7a6be881482a4ec3",
+    "https://deno.land/x/postgresjs@v3.4.3/src/result.js": "001ff5e0c8d634674f483d07fbcd620a797e3101f842d6c20ca3ace936260465",
+    "https://deno.land/x/postgresjs@v3.4.3/src/subscribe.js": "6ac0679e186ab4e681c55252ff50ac4e567df47a7d1382e6e37928f3e9f1fff8",
+    "https://deno.land/x/postgresjs@v3.4.3/src/types.js": "471f4a6c35412aa202a7c177c0a7e5a7c3bd225f01bbde67c947894c1b8bf6ed",
+    "https://deno.land/x/postgresjs@v3.4.3/types/index.d.ts": "b6e470411c58728d6970d5d7716a5542e3305bdec90d64b3ea166e48a93bbe03"
   }
 }

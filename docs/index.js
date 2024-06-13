@@ -1,9 +1,11 @@
-const { evaluate, registerOperator, parse } = Raport;
+const { evaluate, registerOperator, parse, run } = Raport;
 const { Window } = RauiWindow;
 
 registerOperator({ type: 'value', names: ['log'], apply: (_name, args) => console.log.apply(console, args) });
 
 Ractive.use(RauiButton.plugin(), RauiForm.plugin({ includeStyle: true }), RauiShell.plugin(), RauiMenu.plugin(), RauiWindow.plugin(), RauiAppBar.plugin(), RauiTabs.plugin(), RauiTable.plugin({ includeGrid: true }), RauiVirtualList.plugin());
+
+Ractive.perComponentStyleElements = true;
 
 function constr(config, extra) {
   if (typeof config === 'string') return config;
@@ -38,24 +40,40 @@ Ractive.decorators.autofocus = function autofocus(node) {
   return { teardown() {} };
 }
 
+Ractive.decorators.tracked = function tracked(node, name) {
+  const init = this[name];
+  if (node && name) {
+    this[name] = node;
+  }
+  return { 
+    teardown() {
+      this[name] = init;
+    }
+  };
+}
+
 setInterval(() => {
   Ractive.sharedSet('now', new Date());
 }, 5000);
 
-Ractive.helpers.moveUp = ctx => {
+Ractive.helpers.moveUp = (ctx, max) => {
   const idx = ctx.get('@index');
 
   if (idx <= 0) return;
-  const [item] = ctx.splice('../', idx - 1, 1).result;
-  ctx.splice('../', idx, 0, item);
+  const path = ctx.resolve('../');
+  const inst = ctx.ractive;
+  const [item] = inst.splice(path, idx, 1).result;
+  inst.splice(path, max ? 0 : idx - 1, 0, item);
 };
 
-Ractive.helpers.moveDown = ctx => {
+Ractive.helpers.moveDown = (ctx, max) => {
   const idx = ctx.get('@index');
 
   if (idx >= ctx.get('@last')) return;
-  const [item] = ctx.splice('../', idx + 1, 1).result;
-  ctx.splice('../', idx, 0, item);
+  const path = ctx.resolve('../');
+  const inst = ctx.ractive;
+  const [item] = inst.splice(path, idx, 1).result;
+  inst.splice(path, max ? ctx.get('@last') + 1 : idx + 1, 0, item);
 };
 
 Ractive.styleSet({
@@ -152,8 +170,24 @@ let gate;
 }
 
 let reportId = 0;
+let scratchId = 0;
 
-const app = globalThis.app = new Ractive({
+class App extends Ractive {
+  constructor(opts) { super(opts); }
+}
+Ractive.extendWith(App, {
+  css(data) {
+    return `
+      .html { color: ${data('raui.primary.fg') || '#222'}; background-color: ${data('raui.primary.bg') || '#fff'}; }
+      .query-text textarea {
+        color: ${data('raui.primary.fg') || data('raui.fg') || '#222'};
+        background-color: ${data('raui.primary.bg') || data('raui.bg') || '#fff'};
+      }
+    `;
+  },
+});
+
+const app = globalThis.app = new App({
   target: '#target',
   template: '#template',
   data: {
@@ -195,12 +229,15 @@ const app = globalThis.app = new Ractive({
       },
       strict: true, init: false,
     },
-    'connections savedQueries savedReports': {
+    'connections savedQueries savedReports scratchPads': {
       handler(v, _o, k) {
         localStorage.setItem(k, JSON.stringify(v || []));
         if (k === 'savedReports') {
           const min = Math.max.apply(Math, v.map(r => +r.id).concat([reportId]));
           reportId = min;
+        } else if (k === 'scratchPads') {
+          const min = Math.max.apply(Math, v.map(r => +r.id).concat([scratchId]));
+          scratchId = min;
         }
       },
       init: false,
@@ -218,7 +255,7 @@ const app = globalThis.app = new Ractive({
             const wins = v.get('windows');
             const list = [];
             for (const k in wins) {
-              if (!/query-|leaks-|entries-|control-/.test(k)) list.push({ title: wins[k].title, marquee: true, action() { v.raise(k, true); } });
+              if (!/query-|leaks-|entries-|control-|host-/.test(k)) list.push({ title: wins[k].title, marquee: true, action() { v.raise(k, true); } });
             }
             this.set('others', list);
           };
@@ -234,6 +271,47 @@ const app = globalThis.app = new Ractive({
         }
       },
       strict: true,
+    },
+    'settings.theme'(v) {
+      if (v !== 'light' && v !== 'dark') {
+        const ml = window.matchMedia('(prefers-color-scheme: dark)');
+        v = ml.matches ? 'dark' : 'light';
+      }
+      if (v === 'light') {
+        Ractive.styleSet({
+          'raui.primary.bg': '#fff',
+          'raui.primary.fg': '#222',
+          'raui.primary.fga': '#787878',
+          'raui.window.host.bg': '#eee',
+          'raui.window.primary.title.fg': '#ddd',
+          'raui.window.primary.shadow': 'rgba(0, 0, 0, 0.2)',
+          'raui.window.primary.topmost.shadow': 'rgba(0, 0, 0, 0.3)',
+          'raui.table': {
+            even: '#f2f2f2',
+            odd: '#fdfdfd',
+            header: {
+              bg: '#dedede',
+            },
+          },
+        });
+      } else if (v === 'dark') {
+        Ractive.styleSet({
+          'raui.primary.bg': '#333',
+          'raui.primary.fg': '#e0e0e0',
+          'raui.primary.fga': '#999',
+          'raui.window.host.bg': '#444',
+          'raui.window.primary.title.fg': '#e0e0e0',
+          'raui.window.primary.shadow': 'rgba(128, 128, 128, 0.2)',
+          'raui.window.primary.topmost.shadow': 'rgba(128, 128, 128, 0.3)',
+          'raui.table': {
+            even: '#3b3b3b',
+            odd: '#353535',
+            header: {
+              bg: '#2a2a2a',
+            },
+          }
+        });
+      }
     },
   },
   on: {
@@ -307,6 +385,19 @@ const app = globalThis.app = new Ractive({
     win = new Report({ data: { reportId } }, report);
     this.host.addWindow(win, { id: wid, title: `Loading report...` });
   },
+  openScratch(pad) {
+    const id = pad?.id ?? ++scratchId;
+    const wid = `scratch-${id}`;
+    let win = this.host.getWindow(wid);
+    if (win) return win.raise(true);
+    win = new ScratchPad({ data: { scratchId } }, pad);
+    this.host.addWindow(win, { id: wid, title: `Loading scratch pad...` });
+  },
+  confirm(question, title) {
+    const w = new Confirm({ data: { message: question } });
+    this.host.addWindow(w, { title, block: true, top: 'center', left: 'center' });
+    return w.result;
+  },
   ask(question, title, value) {
     const w = new Ask({ data: { message: question, value: value || '' } });
     this.host.addWindow(w, { title, block: true, top: 'center', left: 'center' });
@@ -335,12 +426,18 @@ const app = globalThis.app = new Ractive({
       app.host.addWindow(win, { title: `Loaded schema from ${file.name}` });
     }
   },
+  exploreHosts() {
+    const wnd = new HostExplore();
+    wnd.link('savedReports', 'reports', { instance: this });
+    app.host.addWindow(wnd);
+  },
 });
 
 app.set('connections', JSON.parse(localStorage.getItem('connections') || '[]'));
 app.set('settings', JSON.parse(localStorage.getItem('settings') || '{}'));
 app.set('savedQueries', JSON.parse(localStorage.getItem('savedQueries') || '[]'));
 app.set('savedReports', JSON.parse(localStorage.getItem('savedReports') || '[]'));
+app.set('scratchPads', JSON.parse(localStorage.getItem('scratchPads') || '[]'));
 
 class ControlPanel extends Window {
   constructor(opts) { super(opts); }
@@ -431,9 +528,18 @@ class ControlPanel extends Window {
   report(rep) {
     app.openReport(rep);
   }
+  scratch(pad) {
+    app.openScratch(pad);
+  }
+  reportHasQuerySql(rep) {
+    return rep.sources.find(s => s.type === 'query-all-sql' || s.type === 'query' && !s.config);
+  }
   halt() {
     app.set('halted', true);
     app.notify({ action: 'halt' });
+  }
+  exploreHosts() {
+    app.exploreHosts();
   }
 }
 Window.extendWith(ControlPanel, {
@@ -447,7 +553,7 @@ Window.extendWith(ControlPanel, {
 .query .name { width: 15%; }
 .query .sql { width: 60%; }
 .query .actions { width: 25%; }
-.report { display: flex; align-items: center; justify-content: space-between; }
+.report, .scratch { display: flex; align-items: center; justify-content: space-between; }
 `,
   options: { title: 'Control Panel', flex: true, close: false, resizable: true, width: '60em', height: '45em', id: 'control-panel' },
   on: {
@@ -459,6 +565,7 @@ Window.extendWith(ControlPanel, {
       this.link('settings', 'settings', { instance: app });
       this.link('savedQueries', 'savedQueries', { instance: app });
       this.link('savedReports', 'savedReports', { instance: app });
+      this.link('scratchPads', 'scratchPads', { instance: app });
       this.link('loadedQuery', 'loadedQuery', { instance: app });
       this.link('newSegment', 'newSegment', { instance: app });
     },
@@ -474,6 +581,14 @@ Window.extendWith(ControlPanel, {
 });
 
 app.host.addWindow(new ControlPanel());
+
+class Confirm extends Window {
+  constructor(opts) { super(opts); }
+}
+Window.extendWith(Confirm, {
+  template: '#confirm',
+  options: { flex: true, close: false, resizable: false, maximize: false, minimize: false, width: 'auto', height: 'auto' },
+});
 
 class Ask extends Window {
   constructor(opts) { super(opts); }
@@ -510,7 +625,10 @@ class Query extends Window {
     super(opts);
     this.config = config;
   }
-  async run(query) {
+  async runQuery(query) {
+    if (this.queryTextArea && this.queryTextArea.selectionStart - this.queryTextArea.selectionEnd) {
+      query = this.queryTextArea.value.slice(this.queryTextArea.selectionStart, this.queryTextArea.selectionEnd);
+    }
     this.blocked = true;
     try {
       const res = await request({ action: 'query', query: [query], client: this.config });
@@ -525,7 +643,7 @@ class Query extends Window {
     }
     this.blocked = false;
   }
-  async save() {
+  async saveQuery() {
     const query = this.get('query');
     let name = this.get('name');
     if (!name) {
@@ -543,7 +661,7 @@ class Query extends Window {
       if (~idx) app.set(`savedQueries.${idx}`, { name, sql: query });
     }
   }
-  load() {
+  loadQuery() {
     const q = this.get('loadedQuery');
     this.set({
       loadedQuery: undefined,
@@ -552,9 +670,10 @@ class Query extends Window {
     });
   }
   clicked(ev, col, rec) {
+    if (col === undefined) return;
     if (rec?.query === this.get('query')) return;
-    const val = ev.ctrlKey ? rec : col;
-    const msg = `Copied ${ev.ctrlKey ? 'record JSON' : 'column value'} to clipboard.`;
+    const val = (ev.ctrlKey || ev.shiftKey) ? rec : col;
+    const msg = `Copied ${(ev.ctrlKey || ev.shiftKey) ? 'record JSON' : 'column value'} to clipboard.`;
     const str = val && typeof val === 'object' ? JSON.stringify(val) : val;
     Ractive.helpers.copyToClipboard(str, msg);
   }
@@ -641,16 +760,17 @@ const EntryCSS = `
 .controls .filter { flex-grow: 1; min-width: 5em; }
 .controls button, .controls label.check { flex-shrink: 0; }
 .diff { padding: 0.3em; display: flex; flex-wrap: wrap; }
-.diff .left, .diff .right, .diff .value { white-space: pre-wrap; }
+.diff .left, .diff .right, .diff .value { white-space: pre-wrap; word-break: break-all; }
 .diff .name, .diff .left, .diff .right { width: 33%; overflow: hidden; text-overflow: ellipsis; }
 .diff .name, .wrapper .name { font-weight: bold; }
 .diff.whole .name { width: 100%; }
+.diff.whole { min-height: 5.5em; }
 .entry { padding: 0.2em 0.5em; }
 .entry .key { font-weight: bold; }
 .wrapper > .name, .diff.whole > .name { display: flex; justify-content: space-between; }
 .wrapper > .name > .src, .diff.whole > .name > .src { opacity: 0.4; }
 .wrapper, .diff.whole, .header { position: relative; }
-.wrapper { min-height: 3em; }
+.wrapper { min-height: 5.5em; }
 h2 { padding: 1em 0 0.5em 0; margin: 0; }
 .header { display: flex; justify-content: space-between; }
 .header h2 { flex-shrink: 1; user-select: none; }
@@ -870,13 +990,18 @@ Window.extendWith(Entries, {
   on: {
     complete() {
       this.set({
-        allowUndoSegment: app.get('settings.allowUndoSegment'),
-        allowUndoSingle: app.get('settings.allowUndoSingle'),
         hideBlankFields: app.get('settings.hideBlankFields'),
         hideDefaultFields: app.get('settings.hideDefaultFields'),
       });
-      if (this.get('loaded')) this.link('loaded.schemas', 'schemas');
-      else this.link(`schemas`, 'schemas', { instance: app });
+      if (this.get('loaded')) {
+        this.link('loaded.schemas', 'schemas');
+      } else {
+        this.link(`schemas`, 'schemas', { instance: app });
+        this.set({
+          allowUndoSegment: app.get('settings.allowUndoSegment'),
+          allowUndoSingle: app.get('settings.allowUndoSingle'),
+        });
+      }
       this.scroller = this.find('.rvlist');
     }
   },
@@ -988,28 +1113,12 @@ class Schema extends Window {
     return 0;
   }
   download() {
-    const db = this.config ? `${this.config.host || 'localhost'}-${this.config.database || 'postgres'}` : `Local File`;
+    const db = this.config ? `${this.config.host || 'localhost'}-${this.config.port || 5432}-${this.config.database || 'postgres'}` : `Local File`;
     download(`schema ${db} ${evaluate(`#now##date,'yyyy-MM-dd HH mm'`)}.pgds`, JSON.stringify(this.get('schema')), 'application/pg-difficult-schema');
   }
 }
 Window.extendWith(Schema, {
   template: '#schema',
-  css: `
-.schema { overflow: auto; }
-.schema-row { padding: 0.2em; position: relative; display: flex; flex-wrap: no-wrap; }
-.table { cursor: pointer; position: sticky; top: 0; z-index: 10; }
-.column .name { padding-left: 1.7em; box-sizing: border-box; }
-.schema-row > * { overflow: hidden; text-overflow: ellipsis; }
-.schema-row .name { width: 55%; }
-.schema-row.table { display: flex; }
-.schema-row.table .name { width: auto; flex-grow: 1; }
-.schema-row.table .details { opacity: 0.5; }
-.schema-row .name.pkey { font-weight: bold; }
-.schema-row .type { width: 20%; }
-.schema-row .nullable { width: 7%; text-align: center; }
-.schema-row .default { width: 8%; text-align: center; }
-.schema-row .size { width: 10%; }
-`,
   options: { flex: true, resizable: true, width: '50em', height: '35em' },
   data() { return { expanded: {} }; },
   helpers: {
@@ -1087,12 +1196,434 @@ Window.extendWith(SchemaCompare, {
 `,
 });
 
+class ScratchPad extends Window {
+  constructor(opts, pad) {
+    super(opts);
+    const id = this.get('scratchId') || ++scratchId;
+    pad = pad || { id };
+    setTimeout(() => this.set('pad', JSON.parse(JSON.stringify(pad))));
+  }
+  save() {
+    const saved = app.get('scratchPads') || [];
+    const pad = this.get('pad');
+    if (!pad || !pad.id) return;
+    const idx = saved.findIndex(r => r.id === pad.id);
+    if (~idx) app.splice('scratchPads', idx, 1, pad);
+    else app.push('scratchPads', pad);
+  }
+}
+Window.extendWith(ScratchPad, {
+  template: '#scratch-pad',
+  options: { flex: true, resizable: true, minimize: false, width: '50em', height: '35em' },
+  observe: {
+    'pad.name'(n) {
+      this.title = `Scratch Pad${n ? ` - ${n}` : ''}`;
+      this.save();
+    },
+    'pad.text'(v) {
+      if (typeof v === 'string') this.save();
+    },
+  },
+});
+
+const listDBQuery = `SELECT d.datname as "database",
+  pg_catalog.pg_get_userbyid(d.datdba) as "owner",
+   pg_catalog.pg_encoding_to_char(d.encoding) as "encoding",
+   d.datcollate as "collate",
+   d.datctype as "ctype",
+   pg_catalog.array_to_string(d.datacl, E'\n') AS "access"
+FROM pg_catalog.pg_database d
+ORDER BY d.datname;`;
+class HostExplore extends Window {
+  constructor(opts) { super(opts); }
+
+  async refreshHost(con) {
+    this.blocked = true;
+    try {
+      const res = await request({ action: 'query', query: [listDBQuery], client: con.config });
+      this.set('hosts.' + Ractive.escapeKey(con.constr), res.result);
+    } catch (e) {
+      this.set('hosts.' + Ractive.escapeKey(con.constr), { error: e.message || e.error });
+    }
+    this.blocked = false;
+  }
+
+  async refreshSchema(selected) {
+    this.blocked = true;
+
+    try {
+      const res = await request({ action: 'schema', client: Object.assign({}, selected.connection.config, { database: selected.entry.database }) });
+      this.set('schemas.' + Ractive.escapeKey(selected.connection.constr + '@' + selected.entry.database), res);
+    } catch (e) {
+      this.set(`schemas.${Ractive.escapeKey(selected.connection.constr + '@' + selected.entry.database)}`, { error: e.message || e.error })
+    }
+
+    this.blocked = false;
+  }
+
+  isQueryAllReport(report) {
+    return (report?.sources || []).find(s => s.type === 'query-all-sql');
+  }
+
+  isJustQueryReport(report) {
+    return (report?.sources || []).find(s => s.type === 'query');
+  }
+
+  visibleDBs(sample) {
+    const list = [];
+    const entries = Object.assign({}, this.get('_entries'));
+    const expanded = this.get('expanded') || {};
+    const cons = this.get('connections');
+
+    for (const k in entries) {
+      if (expanded[k]) {
+        const c = cons.find(c => c.constr === k);
+        const dbs = entries[k];
+        if (!c || !Array.isArray(dbs)) continue;
+        if (dbs.length) list.push(Object.assign({}, c.config, { databases: dbs.map(d => d.database) }));
+        if (sample) {
+          list[0].databases = list[0].databases[0].slice(0, 1);
+          return list;
+        }
+      }
+    }
+
+    return list;
+  }
+
+  async queryAll(query, apply, result) {
+    const list = this.visibleDBs();
+    if (!list.length) return;
+
+    this.blocked = true;
+
+    const res = await request({ action: 'query-all', clients: list, query: [query] });
+    if (apply) {
+      const old = this.get(`results.${Ractive.escapeKey(apply)}`);
+      this.set(`results.${Ractive.escapeKey(apply)}`, Object.assign({}, old, res.result));
+    }
+    if (result) {
+      const set = [];
+      for (const l of list) {
+        for (const d of l.databases) {
+          const k = `${l.username || 'postgres'}@${l.host || 'localhost'}:${l.port || 5432}/${l.database}@${d}`;
+          set.push(Object.assign({}, { connection: Object.assign({}, l, { database: d, databases: undefined }) }, res.result[k]));
+        }
+      }
+      app.set(`results.${Ractive.escapeKey(result)}`, set);
+    }
+    if (!apply && !result) this.set('lastresults', res.result);
+
+    this.blocked = false;
+  }
+
+  async reportData(connections, source, sample, params, report) {
+    if (!connections) {
+      connections = this.visibleDBs(sample);
+    }
+
+    if (!connections.length) return { value: {} };
+
+    if (source.type === 'query-all-sql') {
+      const res = await request({ action: 'query-all', clients: connections, query: [source.query], params: [queryParams(report.definition, source, params)], });
+      const set = [];
+      for (const l of connections) {
+        for (const d of l.databases) {
+          const k = `${l.username || 'postgres'}@${l.host || 'localhost'}:${l.port || 5432}/${l.database}@${d}`;
+          set.push(Object.assign({}, { connection: Object.assign({}, l, { database: d, databases: undefined }) }, res.result[k]));
+        }
+      }
+      return { value: set };
+    }
+  }
+  
+  async runReport(report, sample) {
+    const list = this.visibleDBs();
+
+    if (!list.length) return;
+
+    const hosts = list.length;
+    const dbs = list.reduce((a, c) => a + c.databases.length, 0);
+    const queries = report.sources.filter(s => s.type === 'query-all-sql');
+
+    if (await app.confirm(`Do you want to run ${queries.length} queries on ${dbs} databases across ${hosts} servers?\n\n${queries.map(q => q.query).join('\n\n')}`), 'Run Report?') {
+      const data = {};
+
+      for (const src of report.sources) {
+        data[src.name] = await this.reportData(list, src, sample, this.get('params'), report);
+      } // TODO: other sources?
+
+      const html = run(report.definition, data);
+      const w = new ViewReport({}, html);
+      this.host.addWindow(w, { title: `Report Viewer - ${report.definition.name}` });
+    }
+  }
+
+  reportDesigner(report) {
+    const id = report?.id ?? ++reportId;
+    const wid = `report-${id}`;
+    let win = this.host.getWindow(wid);
+    if (win) return win.raise(true);
+    win = new Report({ data: { reportId } }, report, this);
+    this.host.addWindow(win, { id: wid, title: `Loading report...` });
+  }
+
+  async singleReportQuery(report, src, params) {
+    const selected = this.get('selectedDB.connection.config');
+    if (!selected) return {};
+    const client = Object.assign({}, selected, { database: this.get('selectedDB.entry.database') });
+    this.blocked = true;
+
+    try {
+      const res = (await request({ action: 'query', query: [src.query], params: [queryParams(report.definition, src, params)], client })).result;
+      return res;
+    } catch (e) {
+      return { error: e.message };
+    } finally {
+      this.blocked = false;
+    }
+  }
+
+  async runSingleReport(report, sample, params) {
+    const selected = this.get('selectedDB.connection.config');
+    if (!selected) return;
+    const client = Object.assign({}, selected, { database: this.get('selectedDB.entry.database') });
+
+    this.blocked = true;
+
+    try {
+      const data = {};
+
+      for (const src of report.sources) {
+        if (src.type === 'query') {
+          data[src.name] = (await request({ action: 'query', query: [src.query], params: [queryParams(report.definition, src, params)], client })).result;
+        }
+      } // TODO: other sources?
+
+      const html = run(report.definition, data);
+      const w = new ViewReport({}, html);
+      this.host.addWindow(w, { title: `Report Viewer - ${report.definition.name}` });
+    } finally {
+      this.blocked = false;
+    }
+  }
+
+  async runQuery(query) {
+    const selected = this.get('selectedDB.connection.config');
+    if (!selected) return;
+    const client = Object.assign({}, selected, { database: this.get('selectedDB.entry.database') });
+    if (this.queryTextArea && this.queryTextArea.selectionStart - this.queryTextArea.selectionEnd) {
+      query = this.queryTextArea.value.slice(this.queryTextArea.selectionStart, this.queryTextArea.selectionEnd);
+    }
+    this.blocked = true;
+    try {
+      const res = await request({ action: 'query', query: [query], client });
+      this.set('result', res.result);
+      this.set('runtime', res.time);
+      this.set('affected', res.affected);
+      this.set('error', null);
+    } catch (e) {
+      this.set('error', e.message);
+      this.set('result', []);
+      this.set('affected', null);
+    }
+    this.blocked = false;
+  }
+  async saveQuery() {
+    const query = this.get('query');
+    let name = this.get('name');
+    if (!name) {
+      name = await app.ask('What should this query be named?');
+      if (name) {
+        const qs = app.get('savedQueries') || [];
+        if (qs.find(q => q.name === name)) return this.host.toast(`A query named ${name} already exists.`, { type: 'error' });
+        else {
+          this.set('name', name);
+          app.push('savedQueries', { name, sql: query });
+        }
+      }
+    } else {
+      const idx = (app.get('savedQueries') || []).findIndex(q => q.name === name)
+      if (~idx) app.set(`savedQueries.${idx}`, { name, sql: query });
+    }
+  }
+  loadQuery() {
+    const q = this.get('loadedQuery');
+    this.set({
+      loadedQuery: undefined,
+      query: q.sql,
+      name: q.name,
+    });
+  }
+
+  entries(tables) {
+    const res = [];
+    const filter = this.get('schemafilter');
+    const expr = this.get('schemaexpr');
+    const expanded = this.get('schemaexpanded') || {};
+    const sort = this.get('schemasort');
+
+    if (filter) tables = evaluate({ tables, filter }, `filter(tables =>[name] + map(columns =>name) ilike '%{~filter}%')`);
+    if (expr) tables = evaluate({ tables }, `filter(tables =>find(columns |column| => (${expr})))`);
+
+    const matches = {};
+
+    for (const t of tables) {
+      let cols;
+      if (filter) cols = evaluate({ cols: t.columns, filter }, `filter(cols =>name ilike '%{~filter}%')`);
+      if (expr) cols = evaluate({ cols: cols || t.columns }, `filter(cols |column| => (${expr}))`);
+      matches[t.name] = cols;
+      res.push(t);
+      if (expanded[t.name]) cols = t.columns;
+      if (cols && sort === 'position') cols = evaluate({ cols: cols.slice() }, 'sort(cols =>position)');
+      if (cols) for (const c of cols) res.push(c);
+    }
+
+    setTimeout(() => this.set('schemamatches', matches));
+
+    return res;
+  }
+
+  colsFor(name) {
+    const selected = this.get('selectedDB');
+    if (!selected) return;
+    const key = selected.connection.constr + '@' + selected.entry.database;
+    const schema = this.get(`schemas.${Ractive.escapeKey(key)}.schema`);
+    for (const t of schema) if (t.name === name) return t.columns.length;
+    return 0;
+  }
+
+  colCount(tables) {
+    return tables.reduce((a, c) => a + c.columns.length, 0);
+  }
+
+  matchCount(obj) {
+    return Object.values(obj || {}).reduce((a, c) => a + (c?.length || 0), 0);
+  }
+
+  download() {
+    const selected = this.get('selectedDB');
+    if (!selected) return;
+    const db = `${selected.connection.host || 'localhost'}-${selected.connection.port || 5432}-${selected.entry.database || 'postgres'}`;
+    download(`schema ${db} ${evaluate(`#now##date,'yyyy-MM-dd HH mm'`)}.pgds`, JSON.stringify(this.get(`schemas.${Ractive.escapeKey(selected.connection.constr + '@' + selected.entry.database)}.schema`)), 'application/pg-difficult-schema');
+  }
+
+  clicked(ev, col, rec) {
+    if (col === undefined) return;
+    if (rec?.query === this.get('query')) return;
+    const val = (ev.ctrlKey || ev.shiftKey) ? rec : col;
+    const msg = `Copied ${(ev.ctrlKey || ev.shiftKey) ? 'record JSON' : 'column value'} to clipboard.`;
+    const str = val && typeof val === 'object' ? JSON.stringify(val) : val;
+    Ractive.helpers.copyToClipboard(str, msg);
+  }
+}
+Window.extendWith(HostExplore, {
+  template: '#host-explore',
+  css(data) {
+    return `div.host { background-color: ${data('raui.primary.bg') || '#fff'}; }
+.filter-pane { background-color: ${data('raui.window.host.bg') || '#eee'}; height: 3.5em; }
+.query { flex-grow: 1; display: flex; flex-direction: column; overflow: hidden; }
+.query .query-text { display: flex; min-height: 20%; }
+.query textarea { width: 100%; border: 0; outline: none; }
+.query .result { display: flex; border-top: 1px solid; overflow: hidden; flex-grow: 1; }
+.selected { background-color: rgba(128, 128, 128, 0.1); }
+dd { white-space: pre-wrap; }
+`;
+  },
+  options: { flex: true, resizable: true, minimize: false, width: '70em', height: '45em', title: 'Host Explorer' },
+  helpers: { escapeKey: Ractive.escapeKey },
+  on: {
+    init() {
+      this.link('connections', '_connections', { instance: app });
+      this.set('settings', Object.assign({}, app.get('settings')));
+      this.link('loadedQuery', 'loadedQuery', { instance: app });
+      this.link('@', 'app', { instance: app });
+    },
+  },
+  computed: {
+    connections() {
+      const cons = this.get('_connections');
+      return cons.map(c => {
+        return {
+          constr: `${c.username || 'postgres'}@${c.host || 'localhost'}:${c.port || 5432}/${c.database}`,
+          label: c.label,
+          config: c,
+        };
+      });
+    },
+  },
+  data() {
+    return { meta: {}, expanded: {} };
+  },
+  observe: {
+    'hosts filter'() {
+      const filter = this.get('filter');
+      const hosts = this.get('hosts');
+      if (!filter) this.set('_entries', hosts);
+      const cons = this.get('connections') || [];
+      const apply = this.get('results') || {};
+      const last = this.get('lastresults') || {};
+      const provided = app.get('results');
+
+      const context = {};
+      const res = {};
+      for (const constr in hosts) {
+        const con = cons.find(c => c.constr === constr);
+        if (!con) continue;
+        const list = hosts[constr];
+        res[constr] = Raport.evaluate({ list, con, filter, apply, last, results: provided }, `let flt = parse('=>{filter}' raport:1);
+let connection = con.config;
+let constr = con.constr;
+filter(list |entry| => {
+  let db = entry.database;
+  let index = @index;
+  let query = map(~apply =>_['{constr}@{db}']);
+  let last-query = map(~last =>_['{constr}@{db}']);
+  flt()
+})`);
+      }
+
+      this.set('_entries', res);
+    },
+    'result settings.queryOrderColumns': {
+      handler() {
+        const result = this.get('result') || [];
+        const first = (result && result[0]) || {};
+        const order = this.get('settings.queryOrderColumns') ? Object.keys(first).sort() : Object.keys(first);
+        if (order.length) {
+          const cols = [];
+          for (const k of order) {
+            cols.push({ label: [k], content: [{ t: 2, x: { r: [k], s: '_0&&typeof _0==="object"?JSON.stringify(_0):_0' } }], attrs: [{ t: 13, n: 'style', f: [`width: ${Math.ceil(Math.min(20, Math.max(4, k.length, `${first[k]}`.length)) / 1.4)}em;`]}, { t: 70, n: ['click'], f: { r: ['@this', '@event', k, '.'], s: '[_0.clicked(_1,_2,_3)]' } }], id: k, sort: k });
+          }
+          this.table.replaceColumns(cols);
+        } else {
+          this.table.replaceColumns([]);
+        }
+      },
+      init: false,
+    }
+  },
+});
+
+class ViewReport extends Window {
+  constructor(opts, html) {
+    super(opts);
+    this.set('html', html);
+  }
+}
+Window.extendWith(ViewReport, {
+  template: '#view-report',
+  options: { flex: true, resizeable: true, minimize: false, width: '70em', height: '45em', title: 'Report Viewer' },
+  css: `iframe { flex-grow: 1; border: 0; }`,
+});
+
 let reportFrameId = 0;
 class Report extends Window {
-  constructor(opts, report) {
+  constructor(opts, report, parent) {
     super(opts);
     this.ownerId = 0;
     this.callbacks = {};
+    this._parent = parent;
     const id = this.get('reportId') || ++reportId;
     report = report || { id, sources: [], definition: { type: 'page', size: { width: 51, height: 66, margin: [1.5, 1.5] }, name: 'New Report', classifyStyles: true } };
     this.set('report', JSON.parse(JSON.stringify(report)));
@@ -1116,7 +1647,7 @@ class Report extends Window {
 
     switch (ev.data.action) {
       case 'ready':
-        wnd.postMessage({ action: 'set', set: { 'settings.theme': 'light', showProjects: false, report: this.get('report.definition') || {}, sources: this.get('report.sources') || [] } });
+        wnd.postMessage({ action: 'set', set: { 'settings.theme': app.get('settings.theme'), showProjects: false, report: this.get('report.definition') || {}, sources: this.get('report.sources') || [] } });
         break;
 
       case 'new-source': case 'edit-source':
@@ -1176,13 +1707,24 @@ class Report extends Window {
         }
         this.respond({ data: [] }, msg);
       }
-    } else if (src.type === 'json') this.respond({ data: JSON.parse(src.json) }, msg);
-    else {
+    } else if (src.type === 'json') {
+      this.respond({ data: JSON.parse(src.json) }, msg);
+    } else if (src.type === 'query-all') {
+      this.respond({ data: app.get(`results.${Ractive.escapeKey(src.result)}`) || {} }, msg);
+    } else if (src.type === 'query-all-sql') {
+      if (!this._parent) return this.respond({ data: {} }, msg);
+      const data = await this._parent.reportData(undefined, src, !msg.play, msg.params, { definition: msg.report || this.get('report') });
+      this.respond({ data }, msg);
+    } else if (src.type === 'query' && this._parent) {
+      this.respond({ data: await this._parent.singleReportQuery({ definition: msg.report || this.get('report') }, src, msg.params) }, msg);
+    } else if (src.type === 'query' && src.config) {
       try {
         this.respond({ data: (await request({ action: 'query', query: [src.query], client: src.config })).result }, msg);
       } catch (e) {
         this.respond({ error: e.message }, msg);
       }
+    } else {
+      this.respond({ error: `Invalid source ${src.type}` }, msg);
     }
   }
 
@@ -1208,6 +1750,7 @@ class Report extends Window {
     const saved = app.get('savedReports') || [];
     const report = this.get('report');
     report.definition = (await this.request({ action: 'get', get: 'report' })).get;
+    report.sources = (await this.request({ action: 'get', get: 'sources' })).get;
     const idx = saved.findIndex(r => r.id === report.id);
     if (~idx) app.splice('savedReports', idx, 1, report);
     else app.push('savedReports', report);
@@ -1229,6 +1772,18 @@ Window.extendWith(Report, {
 
 class SourceEdit extends Window {
   constructor(opts) { super(opts); }
+  save() {
+    if (this.get('error')) return;
+    const source = this.get('source');
+    const arr = this.get('paramArray');
+    if (arr.length) {
+      source.parameters = source.parameters || [];
+      source.parameters = source.parameters.slice(0, arr.length);
+    } else {
+      delete source.parameters;
+    }
+    this.close(false, source);
+  }
 }
 Window.extendWith(SourceEdit, {
   template: '#source-edit', css: `
@@ -1236,6 +1791,23 @@ Window.extendWith(SourceEdit, {
 .field.textarea textarea { height: calc(100% - 1.6em); }
   `,
   options: { close: false, flex: true, resizable: true, maximize: false, minimize: false, width: '40em', height: '30em' },
+  observe: {
+    'source.query'(q) {
+      if (q) {
+        let list = [];
+        q.replaceAll(/\$([0-9])+/g, (_, n) => { list.push(+n); return _; });
+        list = Raport.evaluate({ list }, 'sort(unique(list))');
+        for (let i = 0; i < list.length; i++) {
+          if (list[i] !== i + 1) {
+            this.set('error', `Parameter $${i + 1} expected, but found $${list[i]}`);
+            return;
+          }
+        }
+        this.set('error', undefined);
+        this.set('paramArray', list.map(p => ''));
+      }
+    },
+  },
 });
 
 const wsUrl = new URL(window.location);
@@ -1309,9 +1881,9 @@ function message(msg) {
   if ('id' in msg) request.response(msg.id, msg);
 }
 
-function reconnect() {
+function reconnect(wait = 10000) {
   if (app.get('halted')) return;
-  if (!app.get('connected')) setTimeout(() => connect(), 10000);
+  if (!app.get('connected')) setTimeout(() => connect(), wait);
 }
 
 function download(name, value, type) {
@@ -1343,6 +1915,31 @@ function load(ext, multi) {
   };
   file.click();
   return res;
+}
+
+function cloneDeep(any) {
+  try {
+    return JSON.parse(JSON.stringify(any));
+  } catch {
+    return undefined;
+  }
+}
+
+function queryParams(definition, source, params) {
+  if (source.query) {
+    const ctx = new Raport.Root(definition.context ? cloneDeep(definition.context) : {});
+    ctx.parameters = params;
+    if (definition.extraContext) Raport.evaluate(definition.extraContext)
+    params = params || {};
+    if (definition.parameters) {
+      for (const p of definition.parameters) {
+        if (!(p.name in params) && p.init) params[p.name] = Raport.evaluate(ctx, p.init);
+      }
+    }
+    if (source.parameters) {
+      return source.parameters.map(p => Raport.evaluate(ctx, p));
+    } else return [];
+  }
 }
 
 if (!globalThis.clientOnly) connect();

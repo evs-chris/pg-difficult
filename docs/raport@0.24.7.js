@@ -172,7 +172,7 @@
     const startSpace = /^\s*/;
     const shared = {};
     let _compact = false;
-    function parser(parser, error) {
+    function parser$1(parser, error) {
         let mps;
         const oerror = error;
         const det = (error ? (error.detailed ? 1 : 0) + (error.causes ? 2 : 0) : 0);
@@ -700,7 +700,7 @@
         });
     }
     shared.map = map;
-    function name(parser, name) {
+    function name$1(parser, name) {
         let ps;
         return lazy(() => ps = unwrap(parser), function parse(s, p, res, tree) {
             if (tree) {
@@ -1125,25 +1125,25 @@
     const digits = '0123456789';
     const alpha = _hex + 'ghijklmnopqrstuvwxyzGHIJKLMNOPQRSTUVWXYZ';
     const identStart = _hex + alpha + '$_';
-    const hex = _hex + digits;
+    const hex$1 = _hex + digits;
     const space$3 = ' \t\n\r';
     const escmap$1 = { b: '\b', r: '\r', n: '\n', "'": "'", '"': '"', t: '\t', '\\': '\\' };
     const underscores = /_/g;
     const JNum = map(seq(opt(str('-', '+')), read1(digits), read(digits + '_'), opt(str(".")), read(digits + '_'), map(opt(seq(str('e', 'E'), opt(str('+', '-')), read1(digits + '_'))), r => r && concat$1(r))), r => +(concat$1(r).replace(underscores, '')));
     const JStringEscape = map(seq(str("\\"), notchars(1, 'xu')), r => escmap$1[r[1]] || r[1]);
-    const JStringUnicode = map(seq(str("\\u"), chars(4, hex)), r => String.fromCharCode(parseInt(r[1], 16)));
-    const JStringHex = map(seq(str('\\x'), chars(2, hex)), r => String.fromCharCode(parseInt(r[1], 16)));
+    const JStringUnicode = map(seq(str("\\u"), chars(4, hex$1)), r => String.fromCharCode(parseInt(r[1], 16)));
+    const JStringHex = map(seq(str('\\x'), chars(2, hex$1)), r => String.fromCharCode(parseInt(r[1], 16)));
     const JString = alt(bracket(str('"'), map(rep(alt('string part', read1To('"\\'), JStringUnicode, JStringHex, JStringEscape)), r => concat$1(r)), str('"')), bracket(str('\''), map(rep(alt('string part', read1To('\'\\'), JStringUnicode, JStringHex, JStringEscape)), r => concat$1(r)), str('\'')));
     const JBool = map(str('true', 'false'), v => v === 'true');
     const JNull = map(str('null'), () => null);
     const JIdentifier = map(seq(read1(identStart), opt(read(identStart + digits))), ([s, t]) => t !== null ? s + t : s);
-    const ws = skip(space$3);
+    const ws$2 = skip(space$3);
     const JArray = {};
     const JObject = {};
     const JValue = alt('value', JString, JArray, JObject, JNum, JBool, JNull);
-    const JKeyPair = map(seq(ws, alt('key', JString, JIdentifier), check(ws, str(':'), ws), JValue), r => [r[1], r[3]]);
-    JArray.parser = bracket(check(str('['), ws), repsep(JValue, check(ws, str(','), ws), 'allow'), check(ws, str(']')));
-    JObject.parser = map(bracket(check(str('{'), ws), repsep(JKeyPair, check(ws, str(','), ws), 'allow'), check(ws, str('}'))), pairs => {
+    const JKeyPair = map(seq(ws$2, alt('key', JString, JIdentifier), check(ws$2, str(':'), ws$2), JValue), r => [r[1], r[3]]);
+    JArray.parser = bracket(check(str('['), ws$2), repsep(JValue, check(ws$2, str(','), ws$2), 'allow'), check(ws$2, str(']')));
+    JObject.parser = map(bracket(check(str('{'), ws$2), repsep(JKeyPair, check(ws$2, str(','), ws$2), 'allow'), check(ws$2, str('}'))), pairs => {
         const len = pairs.length;
         const res = {};
         for (let i = 0; i < len; i++) {
@@ -1152,7 +1152,7 @@
         }
         return res;
     });
-    parser(map(seq(ws, JValue, ws), r => r[1]));
+    parser$1(map(seq(ws$2, JValue, ws$2), r => r[1]));
 
     const timespans = {
         y: 0,
@@ -1180,9 +1180,9 @@
     const space$2 = ' \r\n\t';
     const endSym = space$2 + '():{}[]<>,"\'`\\;&#';
     const endRef = endSym + '.+/*|^%=!?';
-    const _comment = map(seq(ws, str('//'), opt(str(' ')), readTo('\n'), str('\n')), ([, , , c]) => ({ c }), { name: 'comment', primary: true });
+    const _comment = map(seq(ws$2, str('//'), opt(str(' ')), readTo('\n'), str('\n')), ([, , , c]) => ({ c }), { name: 'comment', primary: true });
     function comment(prop, p) {
-        return map(seq(rep(_comment), ws, p), ([c, , v]) => {
+        return map(seq(rep(_comment), ws$2, p), ([c, , v]) => {
             if (c && c.length)
                 v[prop] = c.map(c => c.c);
             return v;
@@ -1210,7 +1210,7 @@
     const pathesc = map(seq(str('\\'), chars(1)), ([, char]) => escmap[char] || char);
     const pathident = map(rep1(alt('ref-part', read1To(endRef, true), pathesc)), parts => parts.join(''), 'keypath-part');
     const dotpath = map(seq(str('.'), pathident), ([, part]) => part);
-    const bracketpath = bracket(seq(str('['), ws), value, seq(ws, str(']')));
+    const bracketpath = bracket(seq(str('['), ws$2), value, seq(ws$2, str(']')));
     const keypath = map(seq(alt('ref-sigil', str('!', '~', '*'), seq(read('^'), opt(str('@', '.')))), alt('keypath', pathident, bracketpath), rep(alt('keypath', dotpath, bracketpath))), ([prefix, init, parts]) => {
         const res = { k: [init].concat(parts).map(p => typeof p === 'object' && 'v' in p && (typeof p.v === 'string' || typeof p.v === 'number') ? p.v : p) };
         if (Array.isArray(prefix)) {
@@ -1230,9 +1230,9 @@
             res.u = prefix.length;
         return res;
     }, 'localpath');
-    const parsePath = parser(keypath);
-    const parseLetPath = parser(localpath);
-    const illegalRefs = ['if', 'else', 'elif', 'elseif', 'elsif', 'unless', 'then', 'case', 'when', 'not', 'gte', 'gt', 'lte', 'lt', 'in', 'like', 'ilike', 'not-in', 'not-like', 'not-ilike', 'contains', 'does-not-contain', 'is-not', 'is', 'strict-is-not', 'strict-is', 'deep-is-not', 'deep-is', 'and', 'or'];
+    const parsePath = parser$1(keypath);
+    const parseLetPath = parser$1(localpath);
+    const illegalRefs = ['if', 'else', 'elif', 'elseif', 'elsif', 'fi', 'esac', 'unless', 'then', 'case', 'when', 'not', 'gte', 'gt', 'lte', 'lt', 'in', 'like', 'ilike', 'not-in', 'not-like', 'not-ilike', 'contains', 'does-not-contain', 'is-not', 'is', 'strict-is-not', 'strict-is', 'deep-is-not', 'deep-is', 'and', 'or', 'end', 'with', 'each'];
     const ref = map(keypath, (r, err) => {
         if (r.k.length === 1 && !r.p && !r.u && illegalRefs.includes(r.k[0]))
             err(`invalid reference name '${r.k[0]}'`);
@@ -1259,7 +1259,7 @@
             return res[0];
         return { op: '+', args: res };
     }
-    const timespan = map(rep1sep(seq(JNum, ws, istr('years', 'year', 'y', 'months', 'month', 'minutes', 'minute', 'milliseconds', 'millisecond', 'mm', 'ms', 'm', 'weeks', 'week', 'w', 'days', 'day', 'd', 'hours', 'hour', 'h', 'seconds', 'second', 's')), ws), parts => {
+    const timespan = map(rep1sep(seq(JNum, ws$2, istr('years', 'year', 'y', 'months', 'month', 'minutes', 'minute', 'milliseconds', 'millisecond', 'mm', 'ms', 'm', 'weeks', 'week', 'w', 'days', 'day', 'd', 'hours', 'hour', 'h', 'seconds', 'second', 's')), ws$2), parts => {
         const span = { y: 0, m: 0, d: 0, h: 0, mm: 0, s: 0, ms: 0 };
         for (let i = 0; i < parts.length; i++) {
             if (parts[i][2][0] === 'y')
@@ -1307,7 +1307,7 @@
             return { d: s };
         }
     }, { primary: true, name: 'timespan' });
-    const timezone = map(seq(ws, alt('timezone', istr('z'), seq(opt(chars(1, '+-')), alt(chars(4, digits), chars(2, digits), chars(1, digits)), opt(seq(str(':'), chars(2, digits)))))), v => {
+    const timezone = map(seq(ws$2, alt('timezone', istr('z'), seq(opt(chars(1, '+-')), alt(chars(4, digits), chars(2, digits), chars(1, digits)), opt(seq(str(':'), chars(2, digits)))))), v => {
         if (v[1][0] === 'z')
             return 0;
         else {
@@ -1339,12 +1339,12 @@
             res[3] = +ms;
         return res;
     }), map(istr('start', 'midnight'), () => [0, 0, 0, 0]), map(istr('noon', 'mid'), () => [12, 0, 0, 0]), map(istr('end'), () => [23, 59, 59, 999]));
-    const parseTime = parser(alt(map(seq(timeexact, opt(seq(ws, timezone))), ([tm, z]) => {
+    const parseTime = parser$1(alt(map(seq(timeexact, opt(seq(ws$2, timezone))), ([tm, z]) => {
         if (z)
             tm.push(z[1]);
         return tm;
     }), timezone), { trim: true, consumeAll: true, undefinedOnError: true });
-    const dateend = opt(seq(ws, str('>')));
+    const dateend = opt(seq(ws$2, str('>')));
     const daterel = alt('date', map(seq(opt(istr('last', 'this', 'next')), rws, istr('week', 'month', 'year'), opt(timezone), dateend), ([o, , f, tz, e]) => {
         const val = { f: f[0] === 'w' ? 'w' : f[0] === 'm' ? 'm' : 'y', o: o === 'last' ? -1 : o === 'next' ? 1 : 0, e: e ? 1 : undefined };
         if (tz != null)
@@ -1355,7 +1355,7 @@
         if (tz != null)
             val.z = tz;
         return val;
-    }), map(seq(istr('yesterday', 'today', 'tomorrow'), alt(bracket(ws, istr('at'), ws), rws), timeexact, ws, opt(timezone)), v => {
+    }), map(seq(istr('yesterday', 'today', 'tomorrow'), alt(bracket(ws$2, istr('at'), ws$2), rws), timeexact, ws$2, opt(timezone)), v => {
         const res = { f: 'd', o: v[0] === 'yesterday' ? -1 : v[0] === 'today' ? 0 : 1, t: v[2] };
         if (v[4] != null)
             res.t[4] = v[4];
@@ -1408,8 +1408,8 @@
         }
     });
     const date$2 = bracket(str('#'), alt('date', dateexact, daterel, timespan), str('#'), { primary: true, name: 'date' });
-    const typelit = map(seq(str('@['), ws, schema(), ws, str(']')), ([, , v]) => ({ v, s: 1 }), { name: 'typelit', primary: true });
-    const parseDate = parser(map(seq(opt(str('#')), alt('date', dateexact, daterel, timespan), opt(str('#'))), ([, d,]) => d), { trim: true, consumeAll: true, undefinedOnError: true });
+    const typelit = map(seq(str('@['), ws$2, schema(), ws$2, str(']')), ([, , v]) => ({ v, s: 1 }), { name: 'typelit', primary: true });
+    const parseDate = parser$1(map(seq(opt(str('#')), alt('date', dateexact, daterel, timespan), opt(str('#'))), ([, d,]) => d), { trim: true, consumeAll: true, undefinedOnError: true });
     const string = alt({ primary: true, name: 'string' }, map(seq(str(':'), read1To(endSym, true)), v => ({ v: v[1] })), map(bracket(str('"'), rep(alt('string-part', read1To('\\"'), JStringEscape, JStringUnicode, JStringHex)), str('"')), a => ({ v: ''.concat(...a) })), map(bracket(str(`'`), rep(alt('string-part', map(read1To(`'\\$\{`, true), v => ({ v })), map(str('\\$', '$$'), () => ({ v: '$' })), bracket(str('${', '{'), value, str('}'), { primary: true, name: 'string-interpolation' }), map(str('$', '{'), v => ({ v })), map(JStringUnicode, v => ({ v })), map(JStringHex, v => ({ v })), map(JStringEscape, v => ({ v })))), str(`'`)), stringInterp), map(bracket(str('`'), rep(alt('string-part', map(read1To('`\\${', true), v => ({ v })), map(str('\\$', '$$'), () => ({ v: '$' })), bracket(str('${'), value, str('}'), { primary: true, name: 'string-interpolation' }), map(str('$', '{'), v => ({ v })), map(JStringUnicode, v => ({ v })), map(JStringHex, v => ({ v })), map(JStringEscape, v => ({ v })))), str('`')), stringInterp));
     const literal = map(alt('literal', map(JNum, v => v, { primary: true, name: 'number' }), keywords, date$2), v => {
         if (v instanceof Date || v == null || typeof v !== 'object')
@@ -1417,7 +1417,7 @@
         else
             return v;
     });
-    const sexp = map(bracket(check(str('('), ws), seq(sexprop, ws, args), check(ws, str(')'))), ([op, , args]) => {
+    const sexp = map(bracket(check(str('('), ws$2), seq(sexprop, ws$2, args), check(ws$2, str(')'))), ([op, , args]) => {
         const res = { op };
         if (args[0] && args[0].length)
             res.args = args[0];
@@ -1426,23 +1426,22 @@
         return res;
     }, { primary: true, name: 's-expression' });
     function fmt_op(parser) {
-        return map(seq(parser, opt(seq(str('#'), ident, opt(alt(map(seq(str(','), rep1sep(value, str(','), 'allow')), ([, value]) => [value, undefined]), bracket_op(args)))), { primary: true, name: 'format-op' })), ([value, fmt]) => {
-            if (!fmt)
+        return map(seq(parser, rep(seq(str('#'), ident, opt(alt(map(seq(str(','), rep1sep(value, str(','), 'allow')), ([, value]) => [value, undefined]), bracket_op(args)))), { primary: true, name: 'format-op' })), ([value, fmt]) => {
+            if (!fmt || !fmt.length)
                 return value;
-            if (fmt[2])
-                return { op: 'fmt', args: [value, { v: fmt[1] }, ...(fmt[2][0] || [])], opts: fmt[2][1] };
-            else
-                return { op: 'fmt', args: [value, { v: fmt[1] }] };
+            return fmt.reduce((a, c) => c[2] ?
+                { op: 'fmt', args: [a, { v: c[1] }, ...(c[2][0] || [])], opts: c[2][1] } :
+                { op: 'fmt', args: [a, { v: c[1] }] }, value);
         }, 'fmt-op');
     }
     function bracket_op(parser) {
-        return bracket(seq(str('('), ws), parser, seq(ws, str(')')));
+        return bracket(seq(str('('), ws$2), parser, seq(ws$2, str(')')));
     }
     const binop = {};
     const if_op$1 = {};
     const case_op$1 = {};
     const opName = read1('abcdefghifghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ-_$0123456789');
-    const call_op$1 = map(seq(name(opName, 'op'), bracket_op(args)), ([op, args]) => {
+    const call_op$1 = map(seq(name$1(opName, 'op'), bracket_op(args)), ([op, args]) => {
         const res = { op };
         if (args[0] && args[0].length)
             res.args = args[0];
@@ -1451,7 +1450,7 @@
         return res;
     }, { primary: true, name: 'call' });
     const operand = fmt_op(postfix_path(alt('operand', bracket_op(application), bracket_op(if_op$1), bracket_op(case_op$1), verify(bracket_op(binop), v => 'op' in v || `expected bracketed op`), sexp, values$1)));
-    const unop = map(seq(str('not ', '+'), operand), ([op, arg]) => ({ op: op === '+' ? op : 'not', args: [arg] }), 'unary op');
+    const unop = map(seq(str('not ', '+', '-'), operand), ([op, arg]) => ({ op: op === 'not ' ? 'not' : op, args: [arg] }), 'unary op');
     function leftassoc(left, [, op, , right]) {
         return { op, args: [left, right] };
     }
@@ -1468,15 +1467,15 @@
         }, first);
         return { op, args: [left, right] };
     }
-    const binop_e = map(seq(operand, rep(seq(rws, name(str('**'), 'exp op'), rws, operand))), ([arg1, more]) => more.length ? rightassoc(arg1, more) : arg1, 'exp-op');
-    const binop_md = map(seq(binop_e, rep(seq(rws, name(str('*', '/%', '/', '%'), 'muldiv-op'), rws, binop_e))), ([arg1, more]) => more.length ? more.reduce(leftassoc, arg1) : arg1, 'muldiv-op');
-    const binop_as = map(seq(binop_md, rep(seq(rws, name(str('+', '-'), 'addsub-op'), rws, binop_md))), ([arg1, more]) => more.length ? more.reduce(leftassoc, arg1) : arg1, 'addsub-op');
-    const binop_cmp = map(seq(binop_as, rep(seq(rws, name(str('>=', '>', '<=', '<', 'gte', 'gt', 'lte', 'lt', 'in', 'like', 'ilike', 'not-in', 'not-like', 'not-ilike', 'contains', 'does-not-contain'), 'cmp-op'), rws, binop_as))), ([arg1, more]) => more.length ? more.reduce(leftassoc, arg1) : arg1, 'cmp-op');
-    const binop_eq = map(seq(binop_cmp, rep(seq(rws, name(str('is-not', 'is', 'strict-is-not', 'strict-is', 'deep-is-not', 'deep-is', '===', '==', '!==', '!='), 'eq-op'), rws, binop_cmp))), ([arg1, more]) => more.length ? more.reduce(leftassoc, arg1) : arg1, 'eq-op');
-    const binop_and = map(seq(binop_eq, rep(seq(rws, name(str('and', '&&'), 'and-op'), rws, binop_eq))), ([arg1, more]) => more.length ? more.reduce(leftassoc, arg1) : arg1, 'and-op');
-    const binop_or = map(seq(binop_and, rep(seq(rws, name(str('or', '||', '??'), 'or-op'), rws, binop_and))), ([arg1, more]) => more.length ? more.reduce(leftassoc, arg1) : arg1, 'or-op');
+    const binop_e = map(seq(operand, rep(seq(rws, name$1(str('**'), 'exp op'), rws, operand))), ([arg1, more]) => more.length ? rightassoc(arg1, more) : arg1, 'exp-op');
+    const binop_md = map(seq(binop_e, rep(seq(rws, name$1(str('*', '/%', '/', '%'), 'muldiv-op'), rws, binop_e))), ([arg1, more]) => more.length ? more.reduce(leftassoc, arg1) : arg1, 'muldiv-op');
+    const binop_as = map(seq(binop_md, rep(seq(rws, name$1(str('+', '-'), 'addsub-op'), rws, binop_md))), ([arg1, more]) => more.length ? more.reduce(leftassoc, arg1) : arg1, 'addsub-op');
+    const binop_cmp = map(seq(binop_as, rep(seq(rws, name$1(str('>=', '>', '<=', '<', 'gte', 'gt', 'lte', 'lt', 'in', 'like', 'ilike', 'not-in', 'not-like', 'not-ilike', 'contains', 'does-not-contain'), 'cmp-op'), rws, binop_as))), ([arg1, more]) => more.length ? more.reduce(leftassoc, arg1) : arg1, 'cmp-op');
+    const binop_eq = map(seq(binop_cmp, rep(seq(rws, name$1(str('is-not', 'is', 'strict-is-not', 'strict-is', 'deep-is-not', 'deep-is', '===', '==', '!==', '!='), 'eq-op'), rws, binop_cmp))), ([arg1, more]) => more.length ? more.reduce(leftassoc, arg1) : arg1, 'eq-op');
+    const binop_and = map(seq(binop_eq, rep(seq(rws, name$1(str('and', '&&'), 'and-op'), rws, binop_eq))), ([arg1, more]) => more.length ? more.reduce(leftassoc, arg1) : arg1, 'and-op');
+    const binop_or = map(seq(binop_and, rep(seq(rws, name$1(str('or', '||', '??'), 'or-op'), rws, binop_and))), ([arg1, more]) => more.length ? more.reduce(leftassoc, arg1) : arg1, 'or-op');
     binop.parser = map(binop_or, v => v, { primary: true, name: 'binary-op' });
-    if_op$1.parser = alt({ primary: true, name: 'conditional' }, map(seq(str('if'), rws, value, rws, block, rep(seq(ws, str('else if', 'elseif', 'elsif', 'elif'), rws, value, rws, block)), opt(seq(ws, str('else'), rws, block))), ([, , cond1, , block1, elifs, el]) => {
+    if_op$1.parser = alt({ primary: true, name: 'conditional' }, map(seq(str('if'), rws, value, rws, block, rep(seq(ws$2, str('else if', 'elseif', 'elsif', 'elif'), rws, value, rws, block)), opt(seq(ws$2, str('else'), rws, block))), ([, , cond1, , block1, elifs, el]) => {
         const op = { op: 'if', args: [cond1, block1] };
         for (const [, , , cond, , block] of elifs)
             op.args.push(cond, block);
@@ -1490,7 +1489,7 @@
         if (el)
             op.args.push(el[3]);
         return op;
-    }, 'if'), map(seq(str('unless'), rws, value, rws, str('then'), rws, value, opt(seq(rws, str('else'), rws, value))), ([, , cond, , , , hit, miss]) => {
+    }, 'if'), map(seq(str('unless'), rws, value, rws, str('then'), rws, value, opt(seq(rws, str('else'), rws, value)), opt(seq(rws, str('end')))), ([, , cond, , , , hit, miss]) => {
         const op = { op: 'unless', args: [cond, hit] };
         if (miss)
             op.args.push(miss[3]);
@@ -1539,38 +1538,39 @@
         }, 'postfix-path-op');
     }
     const operation = alt('expression', if_op$1, case_op$1, binop);
-    const pair = map(seq(alt('key', string, map(ident, v => ({ v }))), ws, str(':'), ws, value), t => [t[0], t[4]], 'pair');
-    array.parser = map(bracket(check(ws, str('['), ws), repsep(value, read1(space$2 + ','), 'allow'), check(ws, str(']'))), args => args.filter(a => !('v' in a)).length ? { op: 'array', args } : { v: args.map(a => a.v) }, { primary: true, name: 'array' });
+    const pair = map(seq(alt('key', string, map(ident, v => ({ v }))), ws$2, str(':'), ws$2, value), t => [t[0], t[4]], 'pair');
+    array.parser = map(bracket(check(ws$2, str('['), ws$2), repsep(value, read1(space$2 + ','), 'allow'), check(ws$2, str(']'))), args => args.filter(a => !('v' in a)).length ? { op: 'array', args } : { v: args.map(a => a.v) }, { primary: true, name: 'array' });
     function objectOp(pairs) {
         return pairs.filter(p => !('v' in p[0] && 'v' in p[1])).length ?
             { op: 'object', args: pairs.reduce((a, c) => (a.push(c[0], c[1]), a), []) } :
             { v: pairs.reduce((a, c) => (a[c[0].v] = c[1].v, a), {}) };
     }
-    object.parser = map(bracket(check(ws, str('{'), ws), repsep(pair, read1(space$2 + ','), 'allow'), check(ws, str('}'))), objectOp, { primary: true, name: 'object' });
-    block.parser = map(bracket(check(ws, str('{'), ws), rep1sep(value, read1(space$2 + ';'), 'allow'), check(ws, str('}'))), args => ({ op: 'block', args }), { primary: true, name: 'block' });
+    object.parser = map(bracket(check(ws$2, str('{'), ws$2), repsep(pair, read1(space$2 + ','), 'allow'), check(ws$2, str('}'))), objectOp, { primary: true, name: 'object' });
+    block.parser = map(bracket(check(ws$2, str('{'), ws$2), rep1sep(value, read1(space$2 + ';'), 'allow'), check(ws$2, str('}'))), args => ({ op: 'block', args }), { primary: true, name: 'block' });
     value.parser = unwrap(comment('c', operation));
-    const namedArg = map(seq(ident, str(':'), ws, value), ([k, , , v]) => [{ v: k }, v], 'named-arg');
-    application.parser = map(seq(opt(bracket(check(str('|'), ws), rep1sep(opName, read1(space$2 + ','), 'allow'), str('|'))), ws, str('=>', '=\\'), ws, value), ([names, , , , value]) => (names ? { a: value, n: names } : { a: value }), { primary: true, name: 'application' });
+    const namedArg = map(seq(ident, str(':'), ws$2, value), ([k, , , v]) => [{ v: k }, v], 'named-arg');
+    application.parser = map(seq(opt(bracket(check(str('|'), ws$2), rep1sep(opName, read1(space$2 + ','), 'allow'), str('|'))), ws$2, str('=>', '=\\'), ws$2, value), ([names, , , , value]) => (names ? { a: value, n: names } : { a: value }), { primary: true, name: 'application' });
     args.parser = map(repsep(alt('argument', namedArg, value), read1(space$2 + ','), 'allow'), (args) => {
         const [plain, obj] = args.reduce((a, c) => ((Array.isArray(c) ? a[1].push(c) : a[0].push(c)), a), [[], []]);
         if (obj.length)
             return [plain, objectOp(obj)];
         return [plain, undefined];
     });
-    const letter = map(seq(str('let'), rws, name(localpath, { name: 'reference', primary: true }), ws, str('='), ws, value), ([, , k, , , , v]) => ({ op: 'let', args: [{ v: k }, v] }), { primary: true, name: 'let' });
-    const setter = map(seq(str('set'), rws, name(keypath, { name: 'reference', primary: true }), ws, str('='), ws, value), ([, , k, , , , v]) => ({ op: 'set', args: [{ v: k }, v] }), { primary: true, name: 'set' });
+    const letter = map(seq(str('let'), rws, name$1(localpath, { name: 'reference', primary: true }), ws$2, str('='), ws$2, value), ([, , k, , , , v]) => ({ op: 'let', args: [{ v: k }, v] }), { primary: true, name: 'let' });
+    const setter = map(seq(str('set'), rws, name$1(keypath, { name: 'reference', primary: true }), ws$2, str('='), ws$2, value), ([, , k, , , , v]) => ({ op: 'set', args: [{ v: k }, v] }), { primary: true, name: 'set' });
     values$1.parser = alt('expression', array, object, literal, typelit, string, application, unop, call_op$1, letter, setter, ref, block);
-    const parseBlock = parser(map(rep1sep(value, read1(space$2 + ';'), 'allow'), args => args.length === 1 ? args[0] : { op: 'block', args }, 'expression-sequence'), { trim: true });
-    const parseExpr = parser(value, { trim: true });
-    const parse$2 = parseBlock;
+    const parseBlock = parser$1(map(rep1sep(value, read1(space$2 + ';'), 'allow'), args => args.length === 1 ? args[0] : { op: 'block', args, opts: { v: { implicit: 1 } } }, 'expression-sequence'), { trim: true });
+    const parseExpr = parser$1(value, { trim: true });
+    parseBlock.namespace = 'default';
+    const parse$3 = parseBlock;
     function schema() {
         const type = {};
-        const conditions = opt(seq(ws, rep1sep(map(seq(name(str('?'), { name: 'condition', primary: true }), ws, application), ([, , a]) => a), rws, 'disallow')));
+        const conditions = opt(seq(ws$2, rep1sep(map(seq(name$1(str('?'), { name: 'condition', primary: true }), ws$2, application), ([, , a]) => a), rws, 'disallow')));
         const value = map(seq(str('string[]', 'number[]', 'boolean[]', 'date[]', 'any', 'string', 'number', 'boolean', 'date'), not(read1To(endRef))), ([s]) => ({ type: s }), { name: 'type', primary: true });
-        const typedef = comment('c', map(seq(str('type'), ws, name(ident, { name: 'type', primary: true }), ws, str('='), ws, type), ([, , name, , , , type]) => ({ name, type })));
-        const typedefs = map(rep1sep(typedef, read1(' \t\n;'), 'disallow'), defs => defs.reduce((a, c) => (c.type.desc = c.c, a[c.name] = c.type, a), {}));
+        const typedef = comment('c', map(seq(str('type'), ws$2, name$1(ident, { name: 'type', primary: true }), ws$2, str('='), ws$2, type), ([, , name, , , , type]) => ({ name, type })));
+        const typedefs = map(rep1sep(typedef, read1(' \t\n;'), 'allow'), defs => defs.reduce((a, c) => (c.type.desc = c.c, a[c.name] = c.type, a), {}));
         const ref = map(seq(ident, opt(str('[]'))), ([ref, arr]) => ({ type: arr ? 'array' : 'any', ref }), { name: 'type', primary: true });
-        const key = map(seq(name(ident, { name: 'key', primary: true }), opt(str('?')), ws, str(':'), ws, type), ([name, opt, , , , type]) => {
+        const key = map(seq(name$1(ident, { name: 'key', primary: true }), opt(str('?')), ws$2, str(':'), ws$2, type), ([name, opt, , , , type]) => {
             const res = type;
             res.name = name;
             if (!opt)
@@ -1582,10 +1582,10 @@
         }), map(str('true', 'false', 'null', 'undefined'), v => {
             return { type: 'literal', literal: v === 'true' ? true : v === 'false' ? false : v === 'null' ? null : undefined };
         }));
-        const rest = map(seq(str('...'), ws, str(':'), ws, type), ([, , , , type]) => {
+        const rest = map(seq(str('...'), ws$2, str(':'), ws$2, type), ([, , , , type]) => {
             return Object.assign({ name: '...' }, type);
         });
-        const object = map(seq(str('{'), ws, repsep(comment('desc', alt(key, rest)), read1(' \t\n,;'), 'allow'), ws, str('}'), opt(str('[]'))), ([, , keys, , , arr], fail) => {
+        const object = map(seq(str('{'), ws$2, repsep(comment('desc', alt(key, rest)), read1(' \t\n,;'), 'allow'), ws$2, str('}'), opt(str('[]'))), ([, , keys, , , arr], fail) => {
             const rests = keys.filter(k => k.name === '...');
             if (rests.length > 1)
                 fail('only one object rest can be specified');
@@ -1602,10 +1602,10 @@
                 return type;
             }
         });
-        const tuple = map(seq(str('['), ws, repsep(type, read1(' \t\r\n,'), 'allow'), ws, str(']'), opt(str('[]'))), ([, , types, , , arr]) => {
+        const tuple = map(seq(str('['), ws$2, repsep(type, read1(' \t\r\n,'), 'allow'), ws$2, str(']'), opt(str('[]'))), ([, , types, , , arr]) => {
             return { type: arr ? 'tuple[]' : 'tuple', types };
         });
-        const maybe_union = map(rep1sep(seq(alt(value, object, tuple, literal, ref), conditions), seq(ws, str('|'), ws), 'disallow'), list => {
+        const maybe_union = map(rep1sep(seq(alt(value, object, tuple, literal, ref), conditions), seq(ws$2, str('|'), ws$2), 'disallow'), list => {
             const types = list.map(([t, c]) => {
                 if (c && c[1] && c[1].length)
                     t.checks = c[1];
@@ -1616,7 +1616,7 @@
             else
                 return { type: 'union', types: types };
         });
-        const union_array = alt(map(seq(str('Array<'), ws, maybe_union, ws, str('>')), ([, , union], fail) => {
+        const union_array = alt(map(seq(str('Array<'), ws$2, maybe_union, ws$2, str('>')), ([, , union], fail) => {
             if (union.type === 'union')
                 return { type: 'union[]', types: union.types };
             else if (union.type === 'literal')
@@ -1629,13 +1629,13 @@
                 union.type += '[]';
                 return union;
             }
-        }), map(seq(str('('), ws, maybe_union, ws, str(')')), ([, , union]) => union), maybe_union);
+        }), map(seq(str('('), ws$2, maybe_union, ws$2, str(')')), ([, , union]) => union), maybe_union);
         type.parser = map(seq(union_array, conditions), ([type, checks]) => {
             if (checks && checks[1] && checks[1].length)
                 type.checks = checks[1];
             return type;
         });
-        const root = map(seq(opt(typedefs), ws, type), ([defs, , type]) => {
+        const root = map(seq(opt(typedefs), ws$2, type), ([defs, , type]) => {
             if (defs)
                 type.defs = defs;
             return type;
@@ -1643,33 +1643,33 @@
         return root;
     }
 
-    const endTxt = '\\{';
+    const endTxt$1 = '\\{';
     const txtEsc = alt(map(str('\\{{'), () => '{{'), map(seq(str('\\'), chars(1)), ([, c]) => c));
-    const text = map(rep1(alt(read1To(endTxt, true), txtEsc, andNot(str('{'), str('{')))), txts => ({ v: txts.join('') }), 'text');
+    const text$1 = map(rep1(alt(read1To(endTxt$1, true), txtEsc, andNot(str('{'), str('{')))), txts => ({ v: txts.join('') }), 'text');
     function tag_value(names) {
-        return map(seq(str('{{'), ws, str(...names), rws, value, ws, str('}}')), arr => [arr[2], arr[4]], 'tag');
+        return map(seq(str('{{'), ws$2, str(...names), rws, value, ws$2, str('}}')), arr => [arr[2], arr[4]], 'tag');
     }
     function case_value(names) {
-        return map(seq(str('{{'), ws, str(...names), rws, value, rws, str('when'), rws, value, str('}}')), arr => [arr[2], arr[4], arr[8]], 'tag');
+        return map(seq(str('{{'), ws$2, str(...names), rws, value, rws, str('when'), rws, value, str('}}')), arr => [arr[2], arr[4], arr[8]], 'tag');
     }
-    const tag_end = name(check(seq(str('{{/'), readTo('}'), str('}}'))), 'tag end');
-    const content = {};
+    const tag_end = name$1(check(seq(str('{{/'), readTo('}'), str('}}'))), 'tag end');
+    const content$1 = {};
     function branch(names, value) {
         if (value)
             return map(tag_value(names), ([name, value]) => ({ name, value }));
         else
-            return map(seq(str('{{'), ws, str(...names), ws, str('}}')), ([, , name]) => ({ name }), 'tag');
+            return map(seq(str('{{'), ws$2, str(...names), ws$2, str('}}')), ([, , name]) => ({ name }), 'tag');
     }
     function min_one(values) {
         return map(values, v => v.length < 1 ? [{ v: '' }] : v);
     }
     const else_tag = branch(['else']);
     const branch_tag = branch(['else if', 'elseif', 'elsif', 'elif'], true);
-    const each_op = map(seq(tag_value(['each']), min_one(rep(alt(branch_tag, else_tag, content))), tag_end), ([tag, content]) => ({ op: 'each', args: [tag[1]].concat(apply_first(cond_branches(content))) }), { primary: true, name: 'each-block' });
-    const if_op = map(seq(tag_value(['if']), min_one(rep(alt(branch_tag, else_tag, content))), tag_end), ([tag, content]) => ({ op: 'if', args: [tag[1]].concat(cond_branches(content)) }), { primary: true, name: 'if-block' });
-    const with_op = map(seq(tag_value(['with']), min_one(rep(alt(else_tag, content))), tag_end), ([tag, content]) => ({ op: 'with', args: [tag[1]].concat(apply_first(cond_branches(content))) }), { primary: true, name: 'with-block' });
-    const unless_op = map(seq(tag_value(['unless']), min_one(rep(content)), tag_end), ([tag, content]) => ({ op: 'unless', args: [tag[1]].concat(concat(content)) }), { primary: true, name: 'unless-block' });
-    const case_op = map(seq(case_value(['case']), min_one(rep(alt(branch(['when'], true), else_tag, content))), tag_end), ([tag, content]) => {
+    const each_op = map(seq(tag_value(['each']), min_one(rep(alt(branch_tag, else_tag, content$1))), tag_end), ([tag, content]) => ({ op: 'each', args: [tag[1]].concat(apply_first(cond_branches(content))) }), { primary: true, name: 'each-block' });
+    const if_op = map(seq(tag_value(['if']), min_one(rep(alt(branch_tag, else_tag, content$1))), tag_end), ([tag, content]) => ({ op: 'if', args: [tag[1]].concat(cond_branches(content)) }), { primary: true, name: 'if-block' });
+    const with_op = map(seq(tag_value(['with']), min_one(rep(alt(else_tag, content$1))), tag_end), ([tag, content]) => ({ op: 'with', args: [tag[1]].concat(apply_first(cond_branches(content))) }), { primary: true, name: 'with-block' });
+    const unless_op = map(seq(tag_value(['unless']), min_one(rep(content$1)), tag_end), ([tag, content]) => ({ op: 'unless', args: [tag[1]].concat(concat(content)) }), { primary: true, name: 'unless-block' });
+    const case_op = map(seq(case_value(['case']), min_one(rep(alt(branch(['when'], true), else_tag, content$1))), tag_end), ([tag, content]) => {
         const op = { op: 'case', args: tag.slice(1).concat(cond_branches(content)) };
         for (let i = 1; i < op.args.length; i += 2) {
             const arg = op.args[i];
@@ -1678,8 +1678,8 @@
         }
         return op;
     }, { primary: true, name: 'case-block' });
-    const interpolator = map(seq(str('{{'), ws, value, ws, str('}}')), ([, , value]) => ({ op: 'string', args: [value] }), { primary: true, name: 'interpolator' });
-    content.parser = alt({ primary: true, name: 'content' }, text, each_op, if_op, with_op, case_op, unless_op, interpolator);
+    const interpolator = map(seq(str('{{'), ws$2, value, ws$2, str('}}')), ([, , value]) => ({ op: 'string', args: [value] }), { primary: true, name: 'interpolator' });
+    content$1.parser = alt({ primary: true, name: 'content' }, text$1, each_op, if_op, with_op, case_op, unless_op, interpolator);
     function apply_first(content) {
         if (content.length)
             content[0] = { a: content[0] };
@@ -1717,7 +1717,9 @@
             return values[0];
         return { op: '+', args: values };
     }
-    const parse$1 = parser(alt(map(rep1(content), args => concat(args)), map(ws, () => ({ v: '' }))), { trim: true });
+    const _parse$1 = parser$1(alt(map(rep1(content$1), args => concat(args)), map(ws$2, () => ({ v: '' }))), { trim: true });
+    _parse$1.namespace = 'template';
+    const parse$2 = _parse$1;
 
     function toDataSet(value) {
         if (Array.isArray(value))
@@ -1916,11 +1918,15 @@
             r = root.context;
             t = template || '';
         }
+        else if (root && typeof root !== 'string') {
+            r = new Root(root);
+            t = template || '';
+        }
         else {
             r = new Root();
             t = root;
         }
-        r = extend$1(r, { parser: parse$1 });
+        r = extend$1(r, { parser: parse$2 });
         return evalParse(r, t);
     }
     /**
@@ -1949,8 +1955,12 @@
         }
     }
     function evalParse(ctx, expr) {
-        if (typeof expr === 'string')
-            expr = ctx.root.exprs[expr] || (ctx.root.exprs[expr] = (ctx.parser || parse$2)(expr));
+        if (typeof expr === 'string') {
+            const p = ctx.parser || parse$3;
+            const ns = p.namespace || 'unknown';
+            const cache = ctx.root.exprs[ns] || (ctx.root.exprs[ns] = {});
+            expr = cache[expr] || (cache[expr] = p(expr));
+        }
         if (typeof expr !== 'object')
             expr = { v: expr };
         return evalValue(ctx, expr);
@@ -2078,7 +2088,7 @@
             _context = new Root(context);
         const values = filter ? [] : _ds.value.slice();
         if (filter) {
-            let flt = typeof filter === 'string' ? parse$2(filter) : filter;
+            let flt = typeof filter === 'string' ? parse$3(filter) : filter;
             if ('m' in flt)
                 flt = { v: true };
             _ds.value.forEach((row, index) => {
@@ -2256,7 +2266,7 @@
     }
     function extend$1(context, opts) {
         return {
-            parent: opts.fork ? context.parent : context,
+            parent: opts.fork ? (context.parent || context.root) : context,
             root: context.root,
             path: opts.path || '',
             value: 'value' in opts ? opts.value : context.value,
@@ -2266,6 +2276,7 @@
         };
     }
     const formats = {};
+    const virtualFormats = {};
     function registerFormat(name, format, defaults = {}) {
         if (Array.isArray(name))
             name.forEach(n => formats[n] = { apply: format, defaults });
@@ -2551,8 +2562,13 @@
         if (!context.styles[id])
             context.styles[id] = style;
     }
+    function error(context, placement, message = 'Widget overflow error') {
+        addStyle(context, 'error', `.error { position: absolute; box-sizing: border-box; color: red; border: 1px dotted; width: 100%; height: 2rem; padding: 0.5rem; }`);
+        return { output: `<div class="error" style="top: ${placement.y}rem;">${message}</div>`, height: 2 };
+    }
+
     function isComputed(v) {
-        return typeof v === 'object' && isValueOrExpr(v.x);
+        return v && typeof v === 'object' && isValueOrExpr(v.x);
     }
     function maybeComputed(v, context) {
         if (!isComputed(v))
@@ -2561,9 +2577,9 @@
             return evaluate(context, v.x);
     }
     function extend(context, opts) {
-        return { report: context.report, context: extend$1(context.context, opts), styles: context.styles, styleMap: context.styleMap };
+        return { parent: context, report: context.report, context: extend$1(context.context, opts), styles: context.styles, styleMap: context.styleMap, commit: opts.commit };
     }
-    const htmlChars = /\>\<\&/g;
+    const htmlChars = /[><&]/g;
     const htmlReplace = { '<': '&lt;', '>': '&gt;', '&': '&amp;' };
     function escapeHTML(html) {
         return ('' + html).replace(htmlChars, m => htmlReplace[m] || '');
@@ -2587,17 +2603,29 @@
     function measureEstimate(text, width, context, font) {
         const family = (font && maybeComputed(font.family, context)) || 'sans';
         const size = (font && maybeComputed(font.size, context)) || 0.83;
+        const line = (font && maybeComputed(font.line, context)) || size;
+        const brw = font && 'break-word' in font ? font['break-word'] : true;
         const avg = (((font && maybeComputed(font.metric, context)) || ((family === 'mono' || /fixed|mono/i.test(family) ? avgs.mono :
             family === 'narrow' || /narrow|condensed/i.test(family) ? avgs.narrow :
                 family === 'sans' || /sans|arial|helvetica/i.test(family) ? avgs.sans :
                     avgs.serif))) * size) / 16;
         const lines = text.split(/\r?\n/g);
         return lines.reduce((a, c) => {
-            const [word, lines] = c.split(/\s/g).reduce((a, c) => {
+            const [word, lines] = c.split(/\s|-/g).reduce((a, c) => {
                 const wlen = (c.length + 1) * avg;
                 if (a[0] + wlen > width) {
-                    a[0] = wlen;
-                    a[1]++;
+                    if (a[0] === 0 || wlen > width) {
+                        if (brw) {
+                            a[0] = (wlen - (width - a[0])) % width;
+                            if (wlen > width)
+                                a[1] += Math.floor(wlen / width);
+                        }
+                        a[1]++;
+                    }
+                    else {
+                        a[0] = wlen;
+                        a[1]++;
+                    }
                 }
                 else {
                     a[0] += wlen;
@@ -2605,7 +2633,7 @@
                 return a;
             }, [0, 0]);
             return a + ((lines + (word > 0 ? 1 : 0)) || 1);
-        }, 0) * size;
+        }, 0) * line;
     }
     /** Text height measurement function for the given text, font, available width in rem, and line height in rem.
      * The text is assumed to be rendered as white-space: pre-wrap.
@@ -2619,30 +2647,39 @@
         if (!('height' in w) && renderer.container)
             w.height = 'auto';
         const h = getHeightWithMargin(w, placement, context);
-        if (placement.maxY && !isNaN(h) && h > placement.maxY) {
-            addStyle(context, 'error', `.error { position: absolute; box-sizing: border-box; color: red; border: 1px dotted; width: 100%; height: 2rem; padding: 0.5rem; }`);
-            return { output: `<div class="error" style="top: ${placement.y}rem;">Widget overflow error</div>`, height: 2 };
-        }
-        if (placement.availableY && h > placement.availableY)
+        if (placement.maxY && !isNaN(h) && h > placement.maxY)
+            return error(context, placement);
+        if (placement.availableY != null && h > placement.availableY)
             return { output: '', continue: { offset: 0 }, cancel: true };
         let extraHeight = 0;
         if (w.margin) {
             const m = expandMargin(w, context, placement);
             extraHeight += m[0] + m[2];
-            if (placement.availableY)
+            if (placement.availableY != null)
                 placement.availableY -= m[0] + m[2];
+        }
+        if (w.border && !h && w.box === 'expand') {
+            const b = expandBorder(w, context, placement);
+            extraHeight += b[0] + b[2];
+            if (placement.availableY != null)
+                placement.availableY -= b[0] + b[2];
         }
         const r = renderer.render(w, context, placement, state);
         if (typeof r === 'string')
             return { output: r, height: h, width: getWidthWithMargin(w, placement, context) };
-        if (placement.maxY && r.height > placement.maxY) {
-            addStyle(context, 'error', `.error { position: absolute; box-sizing: border-box; color: red; border: 1px dotted; width: 100%; height: 2rem; padding: 0.5rem; }`);
-            return { output: `<div class="error" style="top: ${placement.y}rem;">Widget overflow error</div>`, height: 2 };
-        }
-        if (isNaN(h) && placement.availableY && r.height > placement.availableY)
-            return { output: '', continue: { offset: 0 }, height: r.height, cancel: true };
+        if (typeof r.height === 'number')
+            r.height = +r.height.toFixed(6);
+        if (typeof r.width === 'number')
+            r.width = +r.width.toFixed(6);
+        if (placement.availableY != null)
+            placement.availableY = +placement.availableY.toFixed(6);
+        if (placement.maxY && r.height > placement.maxY)
+            return error(context, placement);
+        if (isNaN(h) && placement.availableY != null && r.height > placement.availableY)
+            return { output: '', continue: { offset: 0 }, height: r.height || 0, cancel: true };
         r.height = r.height || 0;
         r.height += extraHeight;
+        r.height = +(r.height.toFixed(6));
         return r;
     }
     const layouts = {};
@@ -2651,18 +2688,20 @@
     }
     registerLayout('row', (w, o, m, p, ps, context) => {
         let n;
-        const availableX = p.maxX - ps[0][0] - ps[0][2];
-        const nw = getWidthWithMargin(w, { x: p.x, y: p.y, maxX: p.maxX, maxY: p.maxY, availableY: p.availableY, availableX }, context);
-        const br = isComputed(w.br) ? evaluate(extend$1(context.context, { special: { placement: p, widget: w } }), w.br.x) : w.br;
-        if (br || ps[0][0] + ps[0][2] + nw > p.maxX) {
+        let br = isComputed(w.br) ? evaluate(extend$1(context.context, { special: { placement: p, widget: w } }), w.br.x) : w.br;
+        let availableX = p.maxX - ps[0][0] - ps[0][2] + ps[ps.length - 1][0];
+        if (availableX <= 0) {
+            availableX = p.maxX;
+            br = true;
+        }
+        if (br || ps[0][0] + ps[0][2] + getWidthWithMargin(w, { x: p.x, y: p.y, maxX: p.maxX, maxY: p.maxY, availableY: p.availableY, availableX }, context) - ps[ps.length - 1][0] > p.maxX) {
             n = { x: m[3], y: maxYOffset(ps), availableX: p.maxX, maxX: p.maxX };
+            n.availableY = p.availableY - (n.y - o);
         }
         else {
-            n = { x: ps[0][0] + ps[0][2], y: ps[0][1], availableX, maxX: p.maxX };
+            n = { x: ps[0][0] + ps[0][2], y: ps[0][1], availableX, maxX: p.maxX, availableY: p.availableY };
         }
         n.y -= o;
-        if (p.availableY)
-            n.availableY = p.availableY - ps[0][1] - n.y;
         return n;
     });
     /** Render child widgets handling continuation across pages */
@@ -2674,15 +2713,26 @@
             const m = expandMargin(widget, context, placement);
             ps[0][0] += m[3];
             ps[0][1] += m[0];
+            // placement starts with availableY shrunk for margins, so offset y by the top margin
+            const yo = m[0] || 0;
+            if (widget.border && widget.box === 'expand') {
+                const b = expandBorder(widget, context, placement);
+                if (placement.availableX != null)
+                    placement.availableX -= b[1] + b[3];
+                if (placement.availableY != null)
+                    placement.availableY -= b[0] + b[2];
+            }
             for (let i = state && state.last || 0; i < widget.widgets.length; i++) {
-                const w = widget.widgets[i];
+                let w = widget.widgets[i];
+                if (w.macro)
+                    w = expandMacro(w.macro, w, context, placement, state);
                 if (w.hide && evaluate(extend$1(context.context, { special: { widget: w, placement } }), w.hide))
                     continue;
                 // allow widgets that are taller than max height to be dropped
                 let h = placement && getHeightWithMargin(w, placement, context);
                 if (h > placement.maxY)
                     h = 1;
-                if (placement && placement.availableY && h > placement.availableY) {
+                if (placement && placement.availableY != null && h > placement.availableY) {
                     const offset = maxYOffset(ps);
                     state = state || { offset };
                     state.last = i;
@@ -2698,10 +2748,16 @@
                         lp[1] = 0;
                     let p = Array.isArray(lp) ? { x: lp[0] < 0 ? lp[0] : lp[0] + m[3], y: lp[1] < 0 ? lp[1] : lp[1] + m[0], maxX: placement.maxX } : (lp || placement);
                     if (Array.isArray(lp))
-                        p.availableX = p.maxX - p.x;
+                        p.availableX = p.maxX;
                     if (!layout || typeof layout === 'string') {
                         const l = layout ? layouts[layout] || layouts.row : layouts.row;
                         p = l(w, offset, m, placement, ps, context);
+                        if (h > p.availableY) {
+                            const offset = maxYOffset(ps);
+                            state = state || { offset };
+                            state.last = i;
+                            return { output: s, continue: state, height: offset };
+                        }
                     }
                     p.maxX = p.maxX || placement.maxX;
                     p.maxY = p.maxY || placement.maxY;
@@ -2711,12 +2767,15 @@
                     }
                     if (p.y < 0) {
                         p.offsetY = m[0];
-                        p.y = (placement.availableY || 1) + p.y - h + 1;
+                        if (placement.availableY == null)
+                            p.y = 0;
+                        else
+                            p.y = (placement.availableY || 1) + p.y - h + 1;
                     }
                     const { x, y } = p;
                     const r = renderWidget(w, context, p, state && state.child);
                     // skip empty output
-                    if (typeof r === 'string' && !r || (!r.cancel && !r.output && !r.height))
+                    if (typeof r === 'string' && !r || (!r.cancel && !r.output && !r.continue && !r.height))
                         continue;
                     if (typeof r === 'string') {
                         s += r;
@@ -2726,15 +2785,13 @@
                         if (r.cancel)
                             return { output: '', cancel: true };
                         const h = r.height || getHeightWithMargin(w, placement, context) || 0;
-                        if (y + h > placement.availableY) {
+                        if (y - yo + h > placement.availableY) {
                             const offset = maxYOffset(ps);
                             state = state || { offset };
                             state.last = i;
                             state.attempt = (+state.attempt || 0) + 1;
-                            if (state.attempt > 1) {
-                                addStyle(context, 'error', `.error { position: absolute; box-sizing: border-box; color: red; border: 1px dotted; width: 100%; height: 2rem; padding: 0.5rem; }`);
-                                return { output: `<div class="error" style="bottom: 0rem;">Widget overflow error</div>`, height: 2 };
-                            }
+                            if (state.attempt > 1)
+                                return error(context, placement);
                             return { output: s, continue: state, height: offset };
                         }
                         s += r.output;
@@ -2769,7 +2826,7 @@
             width = +((width.percent / 100) * (placement.maxX || 51)).toFixed(4);
             pct = true;
         }
-        if (typeof width === 'number' && (w.box === 'contain' || pct && w.box !== 'expand')) {
+        if (typeof width === 'number' && (w.box === 'contain' || (pct || width === placement.availableX) && w.box !== 'expand')) {
             if (m)
                 width -= m[1] + m[3];
             else if (w.font && w.font.right)
@@ -2794,8 +2851,9 @@
             n = w.font.size;
         if ('text' in w && Array.isArray(w.text)) {
             for (let i = 0; i < w.text.length; i++) {
-                if (typeof w.text[i] === 'object' && w.text[i].font && w.text[i].font.size > n)
-                    n = w.text[i].font.size;
+                const t = w.text[i];
+                if (typeof t === 'object' && 'font' in t && t.font && t.font.size > n)
+                    n = t.font.size;
             }
         }
         return n;
@@ -2804,31 +2862,33 @@
         let r = 1;
         let h = isComputed(w.height) ? evaluate(extend$1(context.context, { special: { widget: w, placement, computed, linesize } }), w.height.x) : w.height;
         const m = w.margin && expandMargin(w, context, placement);
+        const b = w.border && expandBorder(w, context, placement);
         let pct = false;
         if (h == null && linesize)
             h = maxFontSize(w);
         if (typeof h === 'number')
             r = h;
-        else if (typeof h === 'object' && 'percent' in h && h.percent && placement.maxY) {
+        else if (h && typeof h === 'object' && 'percent' in h && h.percent && placement.maxY) {
             r = +(placement.maxY * (h.percent / 100)).toFixed(4);
             pct = true;
         }
-        else if (h === 'auto' || (computed && !h))
-            return computed || NaN;
         else if (h === 'grow') {
             r = placement.availableY || 0;
-            if (w.margin) {
-                const m = expandMargin(w, context, placement);
-                r -= m[0] + m[2];
-            }
         }
-        if (typeof r === 'number' && (w.box === 'contain' || pct && w.box !== 'expand') && m)
-            r -= m[0] + m[2];
+        else if (h === 'auto' || typeof h === 'string' || (h == null && w.type === 'container') || (computed && !h)) {
+            if (b && w.box === 'expand')
+                return computed + b[0] + b[2] || NaN;
+            return computed || NaN;
+        }
+        if (typeof r === 'number' && (w.box === 'contain' || (pct || r === placement.availableY) && w.box !== 'expand')) {
+            if (m)
+                r -= m[0] + m[2];
+        }
         return r;
     }
     function getHeightWithMargin(w, placement, context, computed, linesize) {
         let h = getHeight(w, placement, context, computed, linesize);
-        if (w.margin) {
+        if (typeof h === 'number' && w.margin) {
             const m = expandMargin(w, context, placement);
             h += m[0] + m[2];
         }
@@ -2853,6 +2913,43 @@
                 return [m, m, m, m];
         }
         return [0, 0, 0, 0];
+    }
+    function expandBorder(w, context, placement) {
+        let b = w.border;
+        let res = [0, 0, 0, 0];
+        if (typeof b === 'string' || (b && !Array.isArray(b) && typeof b === 'object' && ('v' in b || 'r' in b || 'op' in b)))
+            b = evaluate(extend$1(context.context, { special: { widget: w, placement } }), b);
+        if (typeof b === 'number')
+            res = [0, 0, b, 0];
+        else if (Array.isArray(b)) {
+            if (b.length === 1)
+                res = [b[0], b[0], b[0], b[0]];
+            else if (b.length === 2)
+                res = [b[0], b[1], b[0], b[1]];
+            else if (b.length === 3)
+                res = [b[0], b[1], b[2], b[1]];
+            else if (b.length >= 4)
+                res = [b[0], b[1], b[2], b[3]];
+        }
+        else if (b && typeof b === 'object')
+            res = [b.top || 0, b.right || 0, b.bottom || 0, b.left || 0];
+        for (let i = 0; i < 4; i++)
+            res[i] = res[i] * 0.0625;
+        return res;
+    }
+    function expandMacro(macro, w, ctx, placement, state) {
+        const res = evaluate(extend$1(ctx.context, { special: { widget: w, placement, state } }), macro);
+        if (res && !Array.isArray(res) && typeof res === 'object') {
+            if ('content' in res || 'props' in res || 'properties' in res)
+                w = Object.assign({}, w, res.props, res.properties, { widgets: Array.isArray(res.content) ? res.content : res.content ? [res.content] : w.widgets, macro: undefined });
+            else if ('replace' in res && res.replace && typeof res.replace === 'object' && 'type' in res.replace)
+                return res.replace;
+            else
+                w = Object.assign({}, w, { widgets: [res], macro: undefined });
+        }
+        else if (Array.isArray(res))
+            w = Object.assign({}, w, { widgets: res, macro: undefined });
+        return w;
     }
 
     function nextStyleId(ctx, prefix) {
@@ -2883,7 +2980,7 @@
             return `${c}${s ? ` style="${s}"` : ''}`;
         }
     }
-    function style(w, placement, context, opts) {
+    function style$1(w, placement, context, opts) {
         let s = `left:${(placement.x || 0) + (placement.offsetX || 0)}rem;top:${((placement.y || 0) + (placement.offsetY || 0))}rem;`;
         let i = ``;
         s += `width:${getWidthWithMargin(w, placement, context)}rem;`;
@@ -2898,7 +2995,8 @@
             s += `height:${h}rem;`;
         const line = w.font && maybeComputed(w.font.line, context);
         const size = w.font && maybeComputed(w.font.size, context);
-        s += `${!opts || !opts.container || line ? `line-height:${(line || size) || getHeight(w, placement, context, opts && opts.computedHeight, opts && opts.lineSize)}rem;` : ''}`;
+        if (line != null || size != null)
+            s += `line-height: ${line !== null && line !== void 0 ? line : size}rem;`;
         if (w.margin) {
             const m = expandMargin(w, context, placement);
             if (m[0] || m[1] || m[2] || m[3])
@@ -2910,7 +3008,7 @@
         if ((opts && opts.font) || w.font)
             s += styleFont((opts && opts.font) || w.font, context);
         if (w.border)
-            s += styleBorder(w.border, context);
+            s += styleBorder(w, context, placement);
         s += styleExtra(w, context);
         return [s, i];
     }
@@ -2950,31 +3048,17 @@
         if (t = maybeComputed(f.weight, context))
             s += `font-weight:${t};`;
         if (t = maybeComputed(f.pre, context))
-            s += `white-space:pre-wrap;`;
+            s += `white-space:pre-wrap;word-break:break-word;`;
+        const pre = t;
         if (t = maybeComputed(f.clamp, context))
-            s += `white-space:nowrap;overflow:hidden;`;
+            s += `${pre ? '' : 'white-space:nowrap;'}overflow:hidden;`;
         return s;
     }
-    function styleBorder(b, context) {
-        if (typeof b === 'string' || (typeof b === 'object' && ('v' in b || 'r' in b || 'op' in b)))
-            b = evaluate(context, b);
-        if (typeof b === 'number')
-            return `border-bottom:${b * 0.0625}rem solid;`;
-        else if (isBorder(b))
-            return `border-style:solid;border-width:${(b.top || 0) * 0.0625}rem ${(b.right || 0) * 0.0625}rem ${(b.bottom || 0) * 0.0625}rem ${(b.left || 0) * 0.0625}rem;`;
-        else if (Array.isArray(b)) {
-            if (b.length === 1)
-                return `border:${(+b[0] || 0) * 0.0625}rem solid;`;
-            else if (b.length === 2)
-                return `border-style:solid;border-width:${(+b[0] || 0) * 0.0625}rem ${(+b[1] || 0) * 0.0625}rem ${(+b[0] || 0) * 0.0625}rem ${(+b[1] || 0) * 0.0625}rem;`;
-            else if (b.length === 3)
-                return `border-style:solid;border-width:${(+b[0] || 0) * 0.0625}rem ${(+b[1] || 0) * 0.0625}rem ${(+b[2] || 0) * 0.0625}rem ${(+b[1] || 0) * 0.0625}rem;`;
-            else if (b.length === 4)
-                return `border-style:solid;border-width:${(+b[0] || 0) * 0.0625}rem ${(+b[1] || 0) * 0.0625}rem ${(+b[2] || 0) * 0.0625}rem ${(+b[3] || 0) * 0.0625}rem;`;
-        }
-    }
-    function isBorder(b) {
-        return typeof b === 'object' && ('top' in b || 'bottom' in b || 'left' in b || 'right' in b);
+    function styleBorder(w, context, placement) {
+        const b = expandBorder(w, context, placement);
+        if (b[0] + b[1] + b[2] + b[3])
+            return `border-style:solid;border-width:${b[0]}rem ${b[1]}rem ${b[2]}rem ${b[3]}rem;`;
+        return '';
     }
     function styleImage(fit) {
         const s = `background-size:${!fit || fit === 'contain' ? 'contain;background-position:center' : fit === 'stretch' ? '100% 100%' : 'cover'};`;
@@ -3031,7 +3115,7 @@
                 ctx.value = Object.assign(ctx.value, res);
         }
         if (report.type === 'delimited')
-            return runDelimited(report, ctx);
+            return runDelimited(report, ctx, { table: extra === null || extra === void 0 ? void 0 : extra.table });
         else if (report.type === 'flow')
             return runFlow(report, ctx, extra);
         else
@@ -3060,7 +3144,7 @@
         else
             context.sources[source.name || source.source] = toDataSet(base);
     }
-    function runDelimited(report, context) {
+    function runDelimited(report, context, options) {
         const source = context.root.sources[report.source ? report.source : (report.sources[0].name || report.sources[0].source)];
         const values = Array.isArray(source.value) ?
             source.value :
@@ -3076,51 +3160,100 @@
         }
         let res = '';
         if (headers) {
-            const ctx = extend$1(context, { parser: parse$1 });
-            res += headers.map(h => `${report.quote || ''}${evaluate(ctx, h)}${report.quote || ''}`).join(report.field || ',') + (report.record || '\n');
+            const ctx = extend$1(context, { parser: parse$2 });
+            if (options === null || options === void 0 ? void 0 : options.table)
+                res += `<tr class=header><th style="border-right: 2px solid;"></th>${headers.map(h => `<th>${evaluate(ctx, h)}</th>`).join('')}</tr>`;
+            else
+                res += headers.map(h => `${report.quote || ''}${evaluate(ctx, h)}${report.quote || ''}`).join(report.field || ',') + (report.record || '\n');
         }
-        const unquote = report.quote ? new RegExp(report.quote, 'g') : undefined;
-        for (const value of values) {
-            const c = extend$1(context, { value });
-            res += fields.map(f => {
-                let val = f ? `${evaluate(c, f)}` : '';
-                if (unquote)
-                    val = val.replace(unquote, report.quote + report.quote);
-                return `${report.quote || ''}${val}${report.quote || ''}`;
-            }).join(report.field || ',') + (report.record || '\n');
+        if (options === null || options === void 0 ? void 0 : options.table) {
+            let idx = 1;
+            for (const value of values) {
+                const c = extend$1(context, { value });
+                if (report.rowContext) {
+                    if (!c.locals)
+                        c.locals = {};
+                    const v = evaluate(c, report.rowContext);
+                    if (v)
+                        c.value = v;
+                }
+                res += `<tr class=row><th>${idx}</th>${fields.map(f => {
+                let val = f ? evaluate(c, f) : '';
+                if (val === undefined)
+                    val = '';
+                if (typeof val !== 'string')
+                    val = `${val}`;
+                return `<td>${val}</td>`;
+            }).join('')}</tr>`;
+                idx++;
+            }
+            res = `<table>${res}</table>`;
+        }
+        else {
+            const unquote = report.quote ? new RegExp(report.quote, 'g') : undefined;
+            for (const value of values) {
+                const c = extend$1(context, { value });
+                if (report.rowContext) {
+                    if (!c.locals)
+                        c.locals = {};
+                    const v = evaluate(c, report.rowContext);
+                    if (v)
+                        c.value = v;
+                }
+                res += fields.map(f => {
+                    let val = f ? evaluate(c, f) : '';
+                    if (val === undefined)
+                        val = '';
+                    if (typeof val !== 'string')
+                        val = `${val}`;
+                    if (unquote)
+                        val = val.replace(unquote, report.quote + report.quote);
+                    return `${report.quote || ''}${val}${report.quote || ''}`;
+                }).join(report.field || ',') + (report.record || '\n');
+            }
         }
         return res;
     }
     function runPage(report, context, extras) {
+        var _a, _b, _c, _d, _e, _f, _g;
         let size = report.orientation !== 'portrait' ? { width: report.size.height, height: report.size.width, margin: [report.size.margin[1], report.size.margin[0]] } : report.size;
         const ctx = { context, report, styles: {}, styleMap: { ids: {}, styles: {} } };
+        const margin = expandMargin(report, ctx, { x: 0, y: 0 });
         context.special = context.special || {};
         context.special.page = 0;
         context.special.pages = 0;
         const pages = [''];
         let page = 0;
-        let availableY = size.height - 2 * size.margin[0];
+        const printX = size.width - 2 * size.margin[1];
+        const printY = size.height - 2 * size.margin[0];
+        let availableY = printY - margin[0] - margin[2];
         const pageY = availableY;
         let maxY = availableY;
         let y = 0;
-        const availableX = size.width - 2 * size.margin[1];
+        const availableX = printX - margin[1] - margin[3];
         let state = null;
         let headSize = 0;
         if (report.header) {
             const r = renderWidget(report.header, ctx, { x: 0, y: 0, availableX, availableY, maxX: availableX, maxY });
             headSize = r.height;
-            availableY -= headSize;
-            maxY -= headSize;
-            y += headSize;
+            if (!((_a = report.header) === null || _a === void 0 ? void 0 : _a.outer)) {
+                availableY -= headSize;
+                maxY -= headSize;
+                y += headSize;
+            }
         }
         let footSize = 0;
         if (report.footer) {
             const r = renderWidget(report.footer, ctx, { x: 0, y: 0, availableX, availableY, maxX: availableX, maxY });
             footSize = r.height;
-            availableY -= footSize;
-            maxY -= footSize;
+            if (!((_b = report.footer) === null || _b === void 0 ? void 0 : _b.outer)) {
+                availableY -= footSize;
+                maxY -= footSize;
+            }
         }
-        for (const w of report.widgets) {
+        for (let w of report.widgets) {
+            if (w.macro)
+                w = expandMacro(w.macro, w, ctx, { x: 0, y: 0, availableX, availableY, maxX: availableX, maxY }, state);
             let r;
             do {
                 r = renderWidget(w, ctx, { x: 0, y, availableX, availableY, maxX: availableX, maxY }, state);
@@ -3128,8 +3261,8 @@
                 if (r.continue) {
                     page++;
                     pages[page] = '';
-                    y = headSize;
-                    availableY = size.height - 2 * size.margin[0] - headSize - footSize;
+                    y = ((_c = report.header) === null || _c === void 0 ? void 0 : _c.outer) ? 0 : headSize;
+                    availableY = printY - (((_d = report.header) === null || _d === void 0 ? void 0 : _d.outer) ? 0 : headSize) - (((_e = report.footer) === null || _e === void 0 ? void 0 : _e.outer) ? 0 : footSize) - margin[0] - margin[2];
                     state = r.continue;
                 }
                 else {
@@ -3140,33 +3273,39 @@
             } while (state !== null);
         }
         context.special.pages = pages.length;
-        const footTop = size.height - 2 * size.margin[0] - footSize;
+        const footPlace = ((_f = report.footer) === null || _f === void 0 ? void 0 : _f.outer) ?
+            { x: 0, y: printY - footSize, maxX: printX, maxY: printY } :
+            { x: 0 + margin[3], y: printY - margin[0] - footSize, maxX: printX - margin[3] - margin[1], maxY: printY - margin[0] - margin[2] };
+        const headPlace = ((_g = report.header) === null || _g === void 0 ? void 0 : _g.outer) ?
+            { x: 0, y: 0, maxX: printX, maxY: printY } :
+            { x: 0 + margin[3], y: margin[0], maxX: printX - margin[3] - margin[1], maxY: printY - margin[0] - margin[2] };
         context.special.size = { x: availableX, y: pageY };
         pages.forEach((p, i) => {
             let n = `<div class="page-back pb${i}"><div${styleClass(ctx, ['page', `ps${i}`], ['', ''], '', 'p')}>\n`;
             context.special.page = i + 1;
             if (report.watermark) {
-                const r = renderWidget(report.watermark, ctx, { x: 0, y: 0, maxX: availableX, maxY: pageY });
+                const r = renderWidget(report.watermark, ctx, { x: 0, y: 0, maxX: printX, availableX: printX, maxY: printY, availableY: printY });
                 n += r.output + '\n';
             }
             if (report.header) {
-                const r = renderWidget(report.header, ctx, { x: 0, y: 0, maxX: availableX, maxY });
+                const r = renderWidget(report.header, ctx, headPlace);
                 n += r.output + '\n';
             }
-            n += p;
+            n += `<div class="page-inner">${p}</div>`;
             if (report.footer) {
-                const r = renderWidget(report.footer, ctx, { x: 0, y: footTop, maxX: availableX, maxY });
+                const r = renderWidget(report.footer, ctx, footPlace);
                 n += r.output + '\n';
             }
             if (report.overlay) {
-                const r = renderWidget(report.overlay, ctx, { x: 0, y: 0, maxX: availableX, maxY: pageY });
+                const r = renderWidget(report.overlay, ctx, { x: 0, y: 0, maxX: printX, availableX: printX, maxY: printY, availableY: printY });
                 n += r.output + '\n';
             }
             n += '\n</div></div>';
             pages[i] = n;
         });
         return `<html style="font-size:100%;margin:0;padding:0;"><head><style>
-    .page { width: ${size.width - 2 * size.margin[1]}rem; height: ${size.height - 2 * size.margin[0]}rem; position: absolute; overflow: hidden; left: ${size.margin[1]}rem; top: ${size.margin[0]}rem; ${report.font ? styleFont(report.font, ctx) : ''} }
+    .page { width: ${printX}rem; height: ${printY}rem; position: absolute; overflow: hidden; left: ${size.margin[1]}rem; top: ${size.margin[0]}rem; ${report.font ? styleFont(report.font, ctx) : ''} }
+    .page-inner { position: absolute; width: ${printX - margin[1] - margin[3]}rem; height: ${printY - margin[0] - margin[2]}rem; left: ${margin[3]}rem; top: ${margin[0]}rem; }
     .page-back { width: ${size.width}rem; height: ${size.height}rem; }
     body { font-size: 0.83rem; }
     @media screen {
@@ -3190,11 +3329,17 @@
         let y = 0;
         let state = null;
         let width;
-        const margin = report.size && report.size.margin ? expandMargin(report.size, ctx, { x: 0, y: 0, availableX: width, maxX: width }) : [1.5, 1.5, 1.5, 1.5];
         if (report.width)
             width = report.width;
         else if (report.size)
             width = report.orientation !== 'portrait' ? report.size.height : report.size.width;
+        let margin;
+        if (report.margin != null)
+            margin = expandMargin(report, ctx, { x: 0, y: 0, availableX: width, maxX: width });
+        if (!margin && report.size && report.size.margin)
+            margin = expandMargin(report.size, ctx, { x: 0, y: 0, availableX: width, maxX: width });
+        if (!margin)
+            margin = [0, 0, 0, 0];
         // account for margins
         if (width)
             width -= (margin[1] || 0) + (margin[3] || 0);
@@ -3236,52 +3381,330 @@
         return `<html><head><style>
     html { font-size: 100%; margin: 0; padding: 0; }
     body { font-size: 0.83rem; padding: 0; margin: 0;${width ? ` width: ${width}rem;` : ''}; height: ${maxY}rem; position: relative; }
-    .page-back { ${width ? `width: ${width}rem; ` : ''}height: ${maxY}rem; padding: ${margin[0] || 0}rem ${margin[1] || 0}rem ${margin[2] || 0}rem ${margin[3] || 0}rem; position: absolute; left: 0; top: 0; }
+    .page-back { ${width ? `width: ${width}rem; ` : 'width: 100%; box-sizing: border-box; '}padding: ${margin[0] || 0}rem ${margin[1] || 0}rem ${margin[2] || 0}rem ${margin[3] || 0}rem; position: absolute; left: 0; top: 0; }
     #wrapper { height:${maxY}rem; position: relative; ${report.font ? styleFont(report.font, ctx) : ''} }
     .watermark { z-index: 0; }
     .main { z-index: 5; }
     .overlay { z-index: 10; }
     @media screen {
       body { margin: 1rem${width ? ' auto' : ''}; background-color: #fff; box-shadow: 1px 1px 10px rgba(0, 0, 0, 0.4); padding: ${margin[0]}rem ${margin[1]}rem ${margin[2]}rem ${margin[3]}rem !important; }
-      html { background-color: #999; }
     }${Object.entries(ctx.styles).map(([_k, v]) => v).join('\n')}${Object.entries(ctx.styleMap.styles).map(([style, id]) => `.${id} { ${style} }`).join('\n')}
   </style>${extras && extras.head || ''}</head><body>\n<div class=page-back><div id=wrapper>${html}</div></div>${extras && extras.foot || ''}</body></html>`;
     }
 
+    // zero width space
+    const zwsp = '&#8203;';
+    const sp = read1(' \r\n\t');
+    const ws$1 = read(' \r\n\t');
+    const hex = '0123456789abcdef';
+    const integer = map(read1('0123456789'), v => +v);
+    const number$1 = map(seq(opt(str('-')), read1('0123456789'), opt(seq(str('.'), read1('0123456789')))), ([m, n, d]) => +[m, n, d === null || d === void 0 ? void 0 : d[0], d === null || d === void 0 ? void 0 : d[1]].filter(v => v).join(''));
+    const color = map(seq(opt(str('#')), alt(chars(8, hex), chars(6, hex), chars(4, hex), chars(3, hex))), ([, color]) => `#${color}`);
+    const remOrPercent = map(seq(number$1, opt(str('%'))), ([n, p]) => `${n}${p ? '%' : 'rem'}`);
+    const places = str('left', 'right', 'top', 'bottom', 'center');
+    const align = map(seq(str('align'), opt(seq(str('='), alt(seq(str('top', 'middle', 'bottom', 'base'), opt(seq(sp, str('left', 'right', 'center')))), seq(str('left', 'right', 'center'), opt(seq(sp, str('top', 'middle', 'bottom', 'base')))))))), ([, v]) => { var _a; return ({ tag: 'align', value: v ? [v[1][0], (_a = v[1][1]) === null || _a === void 0 ? void 0 : _a[1]].filter(v => v) : null }); });
+    const valign = map(seq(str('valign'), opt(seq(str('='), str('top', 'middle', 'bottom', 'base')))), ([, v]) => ({ tag: 'valign', value: v ? v[1] : null }));
+    const pad$1 = map(seq(str('pad'), opt(seq(str('='), rep1sep(number$1, sp)))), ([, v]) => ({ tag: 'pad', value: v ? v[1] : null }));
+    const margin = map(seq(str('margin'), opt(seq(str('='), rep1sep(number$1, sp)))), ([, v]) => ({ tag: 'margin', value: v ? v[1] : null }));
+    const width = map(seq(str('width', 'w'), opt(seq(str('='), remOrPercent))), ([, v]) => ({ tag: 'width', value: v ? v[1] : null }));
+    const height = map(seq(str('height', 'h'), opt(seq(str('='), remOrPercent))), ([, v]) => ({ tag: 'height', value: v ? v[1] : null }));
+    const line = map(seq(str('line'), opt(seq(str('='), number$1))), ([, v]) => ({ tag: 'line', value: v ? v[1] : null }));
+    const fg = map(seq(str('fg', 'color', 'fore'), opt(seq(str('='), color))), ([, v]) => ({ tag: 'fg', value: v ? v[1] : null }));
+    const bg = map(seq(str('bg', 'background', 'back'), opt(seq(str('='), color))), ([, v]) => ({ tag: 'bg', value: v ? v[1] : null }));
+    const size = map(seq(str('size'), opt(seq(str('='), number$1))), ([, v]) => ({ tag: 'size', value: v ? v[1] : null }));
+    const font = map(seq(str('font'), opt(seq(str('='), read1To(',|')))), ([, v]) => ({ tag: 'font', value: v ? v[1] : null }));
+    const rotate = map(seq(str('rotate'), opt(seq(str('='), number$1, ws$1, opt(str('left', 'right')), opt(seq(sp, alt(remOrPercent, places), sp, alt(remOrPercent, places)))))), ([, v]) => ({ tag: 'rotate', value: v ? { turn: v[1] * (v[3] === 'left' ? -1 : 1), origin: v[4] ? [v[4][1], v[4][3]] : undefined } : null }));
+    const move = map(seq(str('move'), opt(seq(str('='), remOrPercent, sp, remOrPercent))), ([, v]) => ({ tag: 'move', value: v ? { x: v[1], y: v[3] } : null }));
+    const trash = map(readTo(',|'), v => ({ tag: 'trash', value: v }));
+    const border = map(seq(str('border'), opt(seq(str('='), opt(str('solid', 'dot', 'dash', 'double')), ws$1, rep1sep(integer, sp), ws$1, opt(seq(str('/'), ws$1, rep1sep(number$1, sp))), ws$1, opt(color)))), ([, v]) => { var _a; return ({ tag: 'border', value: v ? { style: v[1] || 'solid', width: v[3], radius: (_a = v[5]) === null || _a === void 0 ? void 0 : _a[2], color: v[7] } : null }); });
+    const bools = map(alt(str('sub', 'sup', 'bold', 'italic', 'underline', 'strike', 'overline', 'overflow', 'nowrap', 'pre', 'br', 'b', 'i', 'u')), tag => ({ tag }));
+    const tag = map(seq(str('|'), ws$1, rep1sep(alt(border, align, fg, bg, valign, size, line, font, pad$1, margin, width, height, bools, rotate, move, trash), seq(ws$1, str(','), ws$1), 'allow'), readTo('|'), str('|')), ([, , tags]) => tags.filter(t => t.tag !== 'trash'));
+    const text = map(rep1(alt(read1To('\\|', true), map(str('\\|'), () => '|'))), txts => txts.join(''));
+    const all = rep(alt(text, tag));
+    const parser = parser$1(all, { consumeAll: true, undefinedOnError: true });
+    const blocks = ['border', 'width', 'height', 'pad', 'margin', 'align', 'overflow', 'nowrap', 'rotate', 'move'];
+    const aliases = {
+        b: 'bold',
+        i: 'italic',
+        u: 'underline',
+    };
+    function process(stuff) {
+        let res = '';
+        let open = false;
+        const state = { bool: {}, value: {} };
+        const blockstack = [];
+        for (const s of stuff) {
+            if (typeof s === 'string') {
+                if (!state.bool.pre && /^\s/.test(s))
+                    res += zwsp;
+                res += s;
+                if (!state.bool.pre && /\s$/.test(s))
+                    res += zwsp;
+            }
+            else {
+                let drop = false;
+                let block;
+                for (const style of s) {
+                    const tag = aliases[style.tag] || style.tag;
+                    if ('value' in style) {
+                        if (style.value !== null) {
+                            (state.value[tag] || (state.value[tag] = [])).push(style.value);
+                            if (blocks.includes(tag) || block && tag === 'bg')
+                                (block || (block = [])).push(tag);
+                        }
+                        else {
+                            if (blocks.includes(tag))
+                                drop = true;
+                            else if (tag === 'bg' && (drop || blockstack && blockstack.length && blockstack[blockstack.length - 1].includes('bg')))
+                                drop = true;
+                            else
+                                (state.value[tag] || (state.value[tag] = [])).pop();
+                        }
+                    }
+                    else {
+                        if (tag === 'br')
+                            res += '<br/>';
+                        else if (blocks.includes(tag) && block.length)
+                            block.push(tag);
+                        else
+                            state.bool[tag] = !state.bool[tag];
+                    }
+                }
+                if (open)
+                    res += `</span>`;
+                open = true;
+                if (drop) {
+                    const frame = blockstack.pop();
+                    if (frame) {
+                        res += '</span>';
+                        for (const b of frame)
+                            (state.value[b] || (state.value[b] = [])).pop();
+                    }
+                }
+                if (block) {
+                    blockstack.push(block);
+                    res += `<span style="${getStyle(state, block)}">`;
+                }
+                res += `<span style="${getStyle(state, 'inline')}">`;
+            }
+        }
+        if (open)
+            res += `</span>`;
+        for (const f of blockstack)
+            res += '</span>';
+        return res;
+    }
+    function style(str) {
+        const parsed = parser(str);
+        if (Array.isArray(parsed))
+            return process(parsed);
+        return str;
+    }
+    const flexAlign = { top: 'start', middle: 'center', bottom: 'end', base: 'baseline' };
+    const borderStyle = { dot: 'dotted', dash: 'dashed' };
+    function getStyle(state, which) {
+        let res = '';
+        if (which === 'inline') {
+            const bs = state.bool;
+            if (bs.underline || bs.overline || bs.strike)
+                res += `text-decoration-line:${[bs.underline && 'underline', bs.overline && 'overline', bs.strike && 'line-through'].filter(v => v).join(' ')};`;
+            if (bs.sup || bs.sub) {
+                res += `font-size:70%;`;
+                if (bs.sup)
+                    res += `vertical-align:super;`;
+                if (bs.sub)
+                    res += `vertical-align:sub;`;
+            }
+            if (bs.italic)
+                res += `font-style:italic;`;
+            if (bs.bold)
+                res += `font-weight:bold;`;
+            if (bs.pre)
+                res += `white-space:pre-wrap;`;
+            const vs = state.value;
+            if (Array.isArray(vs.valign)) {
+                const v = vs.valign[vs.valign.length - 1];
+                if (v)
+                    res += `vertical-align:${v === 'base' ? 'baseline' : v};`;
+            }
+            if (Array.isArray(vs.fg)) {
+                const v = vs.fg[vs.fg.length - 1];
+                if (v)
+                    res += `color:${v};`;
+            }
+            if (Array.isArray(vs.bg)) {
+                const v = vs.bg[vs.bg.length - 1];
+                if (v)
+                    res += `background-color:${v};`;
+            }
+            if (Array.isArray(vs.size)) {
+                const v = vs.size[vs.size.length - 1];
+                if (v != null)
+                    res += `font-size:${v}rem;`;
+            }
+            if (Array.isArray(vs.font)) {
+                const v = vs.font[vs.font.length - 1];
+                if (v != null)
+                    res += `font-family:${v};`;
+            }
+            if (Array.isArray(vs.line)) {
+                const v = vs.line[vs.line.length - 1];
+                if (v != null)
+                    res += `line-height:${v}rem;`;
+            }
+        }
+        else {
+            res += `display:inline-flex;box-sizing:content-box;overflow:hidden;`;
+            const vs = state.value;
+            let transforms;
+            if (which.includes('align') && Array.isArray(vs.align)) {
+                const v = vs.align[vs.align.length - 1];
+                if (Array.isArray(v)) {
+                    let vv = v.find(v => ['top', 'middle', 'bottom', 'base'].includes(v));
+                    if (vv)
+                        res += `align-items:${flexAlign[vv]};`;
+                    vv = v.find(v => ['left', 'right', 'center'].includes(v));
+                    if (vv)
+                        res += `justify-content:${vv};`;
+                }
+            }
+            if (which.includes('width') && Array.isArray(vs.width)) {
+                const v = vs.width[vs.width.length - 1];
+                if (v != null)
+                    res += `width:${v};`;
+            }
+            if (which.includes('height') && Array.isArray(vs.height)) {
+                const v = vs.height[vs.height.length - 1];
+                if (v != null)
+                    res += `height:${v};`;
+            }
+            if (which.includes('pad') && Array.isArray(vs.pad)) {
+                const v = vs.pad[vs.pad.length - 1];
+                if (Array.isArray(v) && v.length) {
+                    res += `padding:${v[0]}rem`;
+                    if (v.length > 1)
+                        res += ` ${v[1]}rem`;
+                    if (v.length > 2)
+                        res += ` ${v[2]}rem`;
+                    if (v.length > 3)
+                        res += ` ${v[3]}rem`;
+                    res += ';';
+                }
+            }
+            if (which.includes('margin') && Array.isArray(vs.margin)) {
+                const v = vs.margin[vs.margin.length - 1];
+                if (Array.isArray(v) && v.length) {
+                    res += `margin:${v[0]}rem`;
+                    if (v.length > 1)
+                        res += ` ${v[1]}rem`;
+                    if (v.length > 2)
+                        res += ` ${v[2]}rem`;
+                    if (v.length > 3)
+                        res += ` ${v[3]}rem`;
+                    res += ';';
+                }
+            }
+            if (which.includes('border') && Array.isArray(vs.border)) {
+                const v = vs.border[vs.border.length - 1];
+                if (v) {
+                    res += `border-style:${borderStyle[v.style] || v.style};border-width:${v.width[0]}px`;
+                    if (v.width.length > 1)
+                        res += ` ${v.width[1]}px`;
+                    if (v.width.length > 2)
+                        res += ` ${v.width[2]}px`;
+                    if (v.width.length > 3)
+                        res += ` ${v.width[3]}px`;
+                    res += ';';
+                    if (v.color)
+                        res += `border-color:${v.color};`;
+                    if (v.radius) {
+                        res += `border-radius:${v.radius[0]}rem`;
+                        if (v.radius.length > 1)
+                            res += ` ${v.radius[1]}rem`;
+                        if (v.radius.length > 2)
+                            res += ` ${v.radius[2]}rem`;
+                        if (v.radius.length > 3)
+                            res += ` ${v.radius[3]}rem`;
+                        res += ';';
+                    }
+                }
+            }
+            if (which.includes('bg') && Array.isArray(vs.bg)) {
+                const v = vs.bg[vs.bg.length - 1];
+                if (v)
+                    res += `background-color:${v};`;
+            }
+            if (which.includes('rotate') && Array.isArray(vs.rotate)) {
+                const v = vs.rotate[vs.rotate.length - 1];
+                if (v) {
+                    if (v.origin)
+                        res += `transform-origin:${v.origin[0]} ${v.origin[1]};`;
+                    (transforms || (transforms = []))[which.indexOf('rotate')] = `rotate(${v.turn}turn)`;
+                }
+            }
+            if (which.includes('move') && Array.isArray(vs.move)) {
+                const v = vs.move[vs.move.length - 1];
+                if (v)
+                    (transforms || (transforms = []))[which.indexOf('move')] = `translate(${v.x}, ${v.y})`;
+            }
+            if (transforms)
+                res += `transform:${transforms.filter(v => v).join(' ')};`;
+            if (which.includes('nowrap'))
+                res += `white-space:nowrap;`;
+            if (which.includes('overflow'))
+                res += `overflow:visible;`;
+        }
+        return res;
+    }
+
+    function onCommit(ctx, key, value) {
+        let c = ctx;
+        while (c) {
+            if (c.commit) {
+                c.commit[key] = value;
+                return;
+            }
+            c = c.parent;
+        }
+    }
+    function commitContext(ctx) {
+        for (const k in ctx.commit) {
+            let l = ctx.context;
+            while (l) {
+                if (l.special && l.special.values)
+                    (l.special.values[k] || (l.special.values[k] = [])).push(ctx.commit[k]);
+                l = l.parent;
+            }
+        }
+    }
     registerRenderer('label', (w, ctx, placement) => {
-        addStyle(ctx, 'label', `.label {position:absolute;box-sizing:border-box;}`);
+        addStyle(ctx, 'label', `.label {position:absolute;box-sizing:border-box;white-space:normal;}`);
         let str = '';
         let sval;
         let val = (Array.isArray(w.text) ? w.text : [w.text]).map(v => {
             let val = evaluate(ctx, typeof v === 'object' && 'text' in v ? v.text : v);
-            if (typeof v === 'object' && 'id' in v) {
-                let c = ctx.context;
-                while (c) {
-                    if (c.special && c.special.values)
-                        (c.special.values[v.id] || (c.special.values[v.id] = [])).push(val);
-                    c = c.parent;
-                }
-            }
+            if (typeof val === 'string')
+                val = escapeHTML(val);
+            if (typeof v === 'object' && 'id' in v)
+                onCommit(ctx, v.id, val);
             str += val;
             sval = val;
-            if (typeof v === 'object' && 'text' in v)
+            if (w.styled)
+                val = style(val);
+            if (typeof v === 'object' && 'text' in v) {
                 return `<span${styleClass(ctx, [], [styleFont(v.font, ctx) + styleExtra(v, ctx), ''])}>${val}</span>`;
-            else
-                return val;
-        }).join('');
-        if (w.id) {
-            let c = ctx.context;
-            while (c) {
-                if (c.special && c.special.values)
-                    (c.special.values[w.id] || (c.special.values[w.id] = [])).push(str);
-                c = c.parent;
             }
-        }
+            else {
+                return val;
+            }
+        }).join('');
+        if (w.id)
+            onCommit(ctx, w.id, str);
         if (w.format && w.format.name) {
             const args = [{ v: !Array.isArray(w.text) || w.text.length === 1 ? sval : val }, { v: w.format.name }];
             val = evaluate(ctx, { op: 'format', args: args.concat(w.format.args || []) });
         }
-        return `<span${styleClass(ctx, ['label'], style(w, placement, ctx, { lineSize: true }))}>${escapeHTML(val)}</span>`;
+        return `<span${styleClass(ctx, ['label'], style$1(w, placement, ctx, { lineSize: true }))}>${val}</span>`;
     });
     registerRenderer('container', (w, ctx, placement, state) => {
         addStyle(ctx, 'container', `.container {position:absolute;box-sizing:border-box;}`);
@@ -3290,11 +3713,18 @@
             w.height = 'auto';
         else if (w.height !== 'auto')
             h = getHeightWithMargin(w, placement, ctx);
-        const wctx = w.context ? extend(ctx, { value: evaluate(ctx, w.context) }) : ctx;
+        const wctx = ((state || {}).state || {}).ctx ? Object.assign({}, ctx, { context: state.state.ctx }) : ctx;
+        if (w.context && !((state || {}).state || {}).ctx) {
+            if (!wctx.context.locals)
+                wctx.context.locals = {};
+            const value = evaluate(extend(wctx, { special: { placement, widget: w }, locals: wctx.context.locals }), w.context);
+            if (value)
+                wctx.context = extend$1(wctx.context, { value, special: { placement, widget: w } });
+        }
         const cw = getWidth(w, placement, ctx) || placement.availableX;
-        const r = renderWidgets(w, wctx, { x: 0, y: 0, availableX: cw, availableY: h || placement.availableY, maxX: cw, maxY: h != null ? h : placement.maxY }, state, w.layout);
+        const r = renderWidgets(w, wctx, { x: 0, y: 0, availableX: cw, availableY: h || placement.availableY, maxX: cw, maxY: h != null && !isNaN(h) ? h : placement.maxY }, state, w.layout);
         if (!r.cancel) {
-            r.output = `<div${styleClass(ctx, ['container'], style(w, placement, ctx, { computedHeight: h || r.height, container: true }))}>${r.output}</div>`;
+            r.output = `<div${styleClass(ctx, ['container'], style$1(w, placement, ctx, { computedHeight: h || r.height, container: true }))}>${r.output}</div>`;
             r.height = h || r.height;
             r.width = getWidthWithMargin(w, placement, ctx);
         }
@@ -3303,10 +3733,16 @@
             state.offset = 0;
             // must start over
             delete state.last;
+            state.attempt = (state.attempt || 0) + 1;
+            if (state.attempt > 1)
+                return error(ctx, placement);
             return { continue: state, output: '' };
         }
-        else if (r.continue)
+        else if (r.continue) {
+            if (w.context)
+                r.continue.state = { ctx: wctx.context };
             r.continue.offset = 0;
+        }
         return r;
     }, { container: true });
     registerRenderer('repeater', (w, ctx, placement, state) => {
@@ -3320,9 +3756,13 @@
         let commit = false;
         const m = expandMargin(w, ctx, placement);
         let y = !state || !state.state || state.state.part === 'header' ? m[0] : 0;
-        availableY -= y;
+        if (availableY != null) {
+            availableY -= y;
+            availableY = +availableY.toFixed(6);
+        }
         let group;
         let groupNo = false;
+        const newPage = state && state.state && state.state.newPage;
         let src = state && state.state && state.state.src;
         if (!src) {
             if (!w.source)
@@ -3345,39 +3785,73 @@
         else {
             arr = src;
         }
-        if (group && (!state || !state.state || state.state.part === 'group')) {
-            if (groupNo !== false)
-                r = renderWidget(w.group[groupNo], extend(ctx, { value: group, special: { source: group && group.grouped ? group.all : arr, level: group && group.level, grouped: true, group: group.group } }), { x: 0, y, availableX: placement.availableX, maxX: placement.maxX, maxY: placement.maxY });
-            if (r) {
-                if (r.height > availableY)
-                    return { output: '', height: 0, continue: { offset: 0, state: { part: 'group', src, current: 0 } } };
+        if ((w.header || w.group) && (newPage || !state || !state.state || state.state.part === 'header' || state.state.part === 'group')) {
+            const hctx = state && state.state && state.state.context && state.state.context.context;
+            if (group) {
+                const c = extend(ctx, { special: { source: group && group.grouped ? group.all : arr, level: group && group.level, grouped: groupNo !== false, group: group && group.group, values: (hctx && hctx.special || {}).values } });
+                if (w.group && groupNo !== false && (!state || !state.state || state.state.part === 'group')) {
+                    r = renderWidget(w.group[groupNo], extend(ctx, { value: group, special: { source: group && group.grouped ? group.all : arr, level: group && group.level, grouped: true, group: group.group } }), { x: 0, y, availableX: placement.availableX, maxX: placement.maxX, maxY: placement.maxY });
+                    if (r) {
+                        if (r.height > availableY) {
+                            if (html)
+                                html = `<div${styleClass(ctx, ['container', 'repeat'], style$1(w, placement, ctx, { computedHeight: y, container: true }))}>\n${html}</div>`;
+                            return { output: html, height: y, continue: { offset: 0, state: { part: 'group', src, current: 0, newPage: true } } };
+                        }
+                        else if (availableY != null) {
+                            availableY -= r.height;
+                            availableY = +availableY.toFixed(6);
+                        }
+                        html += r.output;
+                        y += r.height;
+                    }
+                }
+                if (w.header && (w.groupHeaders && w.groupHeaders[group.grouped] && (!state || !state.state || !state.state.current) || newPage && w.headerPerPage !== false))
+                    r = renderWidget(w.header, c, { x: 0, y, availableX: placement.availableX, maxX: placement.maxX, maxY: placement.maxY });
                 else
+                    r = { output: '', height: 0 };
+                if (r.height > availableY)
+                    return { output: `<div${styleClass(ctx, ['container', 'repeat'], style$1(w, placement, ctx, { computedHeight: y, container: true }))}>\n${html}</div>`, height: y, continue: { offset: y, state: { part: 'header', src, current: 0, context: ctx, newPage: true } } };
+                else if (availableY != null) {
                     availableY -= r.height;
+                    availableY = +availableY.toFixed(6);
+                }
+                html += r.output;
+                y += r.height;
+            }
+            else if (w.header) {
+                if (!state || newPage && w.headerPerPage !== false)
+                    r = renderWidget(w.header, ctx, { x: 0, y, availableX: placement.availableX, maxX: placement.maxX, maxY: placement.maxY });
+                else
+                    r = { output: '', height: 0 };
+                if (r.height > availableY)
+                    return { output: `<div${styleClass(ctx, ['container', 'repeat'], style$1(w, placement, ctx, { computedHeight: y, container: true }))}>\n${html}</div>`, height: y, continue: { offset: y, state: { part: 'header', src, current: 0, context: ctx, newPage: true } } };
+                else if (availableY != null) {
+                    availableY -= r.height;
+                    availableY = +availableY.toFixed(6);
+                }
                 html += r.output;
                 y += r.height;
             }
         }
-        if (w.header && ((state && state.state && state.state.part === 'body' && w.headerPerPage !== false && (!group || !group.grouped)) || (!group || !group.grouped) && (!state || !state.state || state.state.part === 'header' || state.state.part === 'group'))) {
-            r = renderWidget(w.header, ctx, { x: 0, y, availableX: placement.availableX, maxX: placement.maxX, maxY: placement.maxY });
-            if (r.height > availableY)
-                return { output: '', height: 0, continue: { offset: 0, state: { part: 'header', src, current: 0 } } };
-            else
-                availableY -= r.height;
-            html += r.output;
-            y += r.height;
-        }
+        if (newPage)
+            state.state.newPage = false;
+        if (state && state.child && state.child.state)
+            state.child.state.newPage = false;
         let rctx = state && state.state && state.state.context || extend(ctx, { special: { source: group && group.grouped ? group.all : arr, level: group && group.level, grouped: groupNo !== false, group: group && group.group, values: {}, last: arr.length - 1, count: arr.length } });
+        const elide = w.row && (isComputed(w.row.elide) ? evaluate(extend(rctx, { special: { placement, widget: w } }), w.row.elide.x) : w.row.elide);
         if (!state || !state.state || state.state.part !== 'footer') {
             let usedX = 0;
             let usedY = 0;
             let initY = y;
-            if (!arr.length && w.alternate) {
+            if (!elide && !arr.length && w.alternate) {
                 if (w.alternate) {
                     r = renderWidget(w.alternate, rctx, { x: usedX, y, availableX: availableX - usedX, maxX: placement.maxX, availableY, maxY: placement.maxY }, state ? state.child : undefined);
                     if (r.height > availableY)
-                        return { output: html, height: 0, continue: { offset: 0, state: { part: 'body', src, current: 0 } } };
-                    else
+                        return { output: html, height: 0, continue: { offset: 0, state: { part: 'body', src, current: 0, newPage: true } } };
+                    else if (availableY != null) {
                         availableY -= r.height;
+                        availableY = +availableY.toFixed(6);
+                    }
                     html += r.output;
                     y += r.height;
                 }
@@ -3385,25 +3859,40 @@
             else {
                 for (let i = (state && state.state && state.state.current) || 0; i < arr.length; i++) {
                     const c = group && group.grouped ?
-                        extend(rctx, { value: arr[i], special: { index: i, values: {} } }) :
+                        extend(rctx, { value: arr[i], special: { index: i, values: {} }, commit: {} }) :
                         extend(rctx, { value: arr[i], special: { index: i } });
                     if (group && group.grouped) {
                         const s = (state && state.child) || { offset: 0, state: { current: 0, src: arr[i], part: 'group' } };
                         r = renderWidget(w, c, { x: 0, y, availableX: availableX - usedX, availableY, maxX: placement.maxX, maxY: placement.maxY }, s);
                     }
-                    else
-                        r = renderWidget(w.row, c, { x: usedX, y, availableX: availableX - usedX, maxX: placement.maxX, availableY, maxY: placement.maxY }, state ? state.child : undefined);
+                    else {
+                        c.commit = {};
+                        if (elide) {
+                            renderWidget(w.row, c, { x: 0, y: 0, availableX: placement.maxX, maxX: placement.maxX, availableY: placement.maxY, maxY: placement.maxY }, state ? state.child : undefined);
+                            commitContext(c);
+                            continue;
+                        }
+                        else {
+                            r = renderWidget(w.row, c, { x: usedX, y, availableX: availableX - usedX, maxX: placement.maxX, availableY, maxY: placement.maxY }, state ? state.child : undefined);
+                        }
+                    }
                     if (state)
                         state.child = null;
                     if (r.width && r.width <= availableX - usedX && r.width !== availableX) {
                         usedX += r.width;
-                        if (r.height > usedY)
+                        if (r.height > usedY) {
                             usedY = r.height;
+                            if (r.height > availableY)
+                                initY -= r.height;
+                        }
                     }
                     else if (r.width && usedX && r.width > availableX - usedX) {
                         y += usedY;
                         initY = y;
-                        availableY -= usedY;
+                        if (availableY != null) {
+                            availableY -= usedY;
+                            availableY = +availableY.toFixed(6);
+                        }
                         usedY = 0;
                         usedX = 0;
                         i--;
@@ -3413,21 +3902,27 @@
                         if (initY === y && usedY)
                             y += usedY;
                         if (commit)
-                            return { output: `<div${styleClass(ctx, ['container', 'repeat'], style(w, placement, ctx, { computedHeight: y, container: true }))}>\n${html}</div>`, height: y, continue: { offset: y, state: { part: 'body', src, current: i, context: rctx }, child: r.continue } };
+                            return { output: `<div${styleClass(ctx, ['container', 'repeat'], style$1(w, placement, ctx, { computedHeight: y, container: true }))}>\n${html}</div>`, height: y, continue: { offset: y, state: { part: 'body', src, current: i, context: rctx, newPage: !group || groupNo === false }, child: r.continue } };
                         else
-                            return { output: '', height: y, continue: { offset: y, state: { part: state && state.state && state.state.part || 'body', src, current: i, context: rctx }, child: r.continue } };
+                            return { output: '', height: y, continue: { offset: y, state: { part: state && state.state && state.state.part || 'body', src, current: i, context: rctx, newPage: !group || groupNo === false }, child: r.continue } };
                     }
                     if (!usedY) {
                         y += r.height;
-                        availableY -= r.height;
+                        if (availableY != null) {
+                            availableY -= r.height;
+                            availableY = +availableY.toFixed(6);
+                        }
                     }
                     html += r.output;
                     commit = true;
                     if (r.continue) {
                         if (initY === y && usedY)
                             y += usedY;
-                        return { output: `<div${styleClass(ctx, ['container', 'repeat'], style(w, placement, ctx, { computedHeight: y, container: true }))}>\n${html}</div>`, height: y, continue: { offset: y, state: { part: 'body', src, current: i, context: rctx }, child: r.continue } };
+                        if (w.row.bridge)
+                            commitContext(c);
+                        return { output: `<div${styleClass(ctx, ['container', 'repeat'], style$1(w, placement, ctx, { computedHeight: y, container: true }))}>\n${html}</div>`, height: y, continue: { offset: y, state: { part: 'body', src, current: i, context: rctx, newPage: !group || groupNo === false }, child: w.row.bridge || (group && group.grouped) ? r.continue : undefined } };
                     }
+                    commitContext(c);
                 }
             }
             if (initY === y && usedY)
@@ -3435,41 +3930,47 @@
         }
         if (w.footer) {
             const fctx = (rctx && rctx.context) || (state && state.state && state.state.context && state.state.context.context);
-            const c = extend(ctx, { special: { source: group && group.grouped ? group.all : arr, level: group && group.level, grouped: groupNo !== false, group: group && group.group, values: (fctx && fctx.special || {}).values } });
+            const c = extend(ctx, { special: { source: group && group.grouped ? group.all : arr, level: group && group.level, grouped: groupNo !== false, group: group && group.group, values: (fctx && fctx.special || {}).values }, commit: {} });
             if (group) {
                 if (w.groupEnds && w.groupEnds[group.grouped])
-                    r = renderWidget(w.footer, c, { x: 0, y, availableX: placement.availableX, maxX: placement.maxX, maxY: placement.maxY });
+                    r = renderWidget(w.footer, c, { x: 0, y, availableX: placement.availableX, maxX: placement.maxX, maxY: placement.maxY, availableY });
                 else
                     r = { output: '', height: 0 };
             }
             else
-                r = renderWidget(w.footer, c, { x: 0, y, availableX: placement.availableX, maxX: placement.maxX, maxY: placement.maxY });
+                r = renderWidget(w.footer, c, { x: 0, y, availableX: placement.availableX, maxX: placement.maxX, maxY: placement.maxY, availableY });
             if (r.height > availableY)
-                return { output: `<div${styleClass(ctx, ['container', 'repeat'], style(w, placement, ctx, { computedHeight: y, container: true }))}>\n${html}</div>`, height: y, continue: { offset: y, state: { part: 'footer', src, current: 0, context: rctx } } };
+                return { output: `<div${styleClass(ctx, ['container', 'repeat'], style$1(w, placement, ctx, { computedHeight: y, container: true }))}>\n${html}</div>`, height: y, continue: { offset: y, state: { part: 'footer', current: 0, src, context: rctx, newPage: true } } };
+            else if (r.continue) {
+                if (w.footer.bridge)
+                    commitContext(c);
+                return { output: `<div${styleClass(ctx, ['container', 'repeat'], style$1(w, placement, ctx, { computedHeight: y, container: true }))}>\n${html}</div>`, height: y, continue: { offset: y, state: { part: 'footer', src, current: 0, context: rctx, newPage: true }, child: w.footer.bridge ? r.continue : undefined } };
+            }
+            commitContext(c);
             html += r.output;
             y += r.height;
         }
-        return { output: `<div${styleClass(ctx, ['container', 'repeat'], style(w, placement, ctx, { computedHeight: y, container: true }))}>\n${html}</div>`, height: y };
+        return { output: `<div${styleClass(ctx, ['container', 'repeat'], style$1(w, placement, ctx, { computedHeight: y, container: true }))}>\n${html}</div>`, height: y };
     }, { container: true });
     registerRenderer('image', (w, ctx, placement) => {
         addStyle(ctx, 'image', `.image {position:absolute;box-sizing:border-box;} .image .inner {background-repeat:no-repeat;height:100%;}`);
         const fit = w.fit && typeof w.fit === 'object' ? evaluate(ctx, w.fit.x) : w.fit;
         if (fit === 'stretch') {
-            return `<img src="${evaluate(ctx, w.url)}" ${styleClass(ctx, ['image'], style(w, placement, ctx))} />`;
+            return `<img src="${evaluate(ctx, w.url)}" ${styleClass(ctx, ['image'], style$1(w, placement, ctx))} />`;
         }
         else {
-            return `<div ${styleClass(ctx, ['image'], style(w, placement, ctx))}><div ${styleClass(ctx, ['inner'], styleImage(fit), `background-image:url('${evaluate(ctx, w.url)}');`)}></div></div>`;
+            return `<div ${styleClass(ctx, ['image'], style$1(w, placement, ctx))}><div ${styleClass(ctx, ['inner'], styleImage(fit), `background-image:url('${evaluate(ctx, w.url)}');`)}></div></div>`;
         }
     });
     registerRenderer('measured', (w, ctx, placement, state) => {
-        addStyle(ctx, 'measured', `.measured {position:absolute;box-sizing:border-box;white-space:pre-wrap;word-break:break-all;font-family:serif;font-size:0.83rem}`);
+        addStyle(ctx, 'measured', `.measured {position:absolute;box-sizing:border-box;white-space:pre-wrap;font-family:serif;font-size:0.83rem;word-break:break-word;}`);
         const text = evaluate(ctx, w.text);
         const height = measure(text, getWidth(w, placement, ctx) || placement.availableX, ctx, w.font);
         if (!state && height > placement.availableY) {
             return { output: '', height: 0, continue: { state: {}, offset: 0 } };
         }
         else {
-            let s = style(w, placement, ctx, { computedHeight: height, container: true });
+            let s = style$1(w, placement, ctx, { computedHeight: height, container: true });
             s[0] = `line-height:1em;` + s[0];
             return {
                 height, output: `<span${styleClass(ctx, ['measured', 'label'], s)}>${escapeHTML(text)}</span>`
@@ -3478,8 +3979,8 @@
     });
     registerRenderer('html', (w, ctx, placement) => {
         addStyle(ctx, 'html', `.html {position:absolute;box-sizing:border-box;overflow:hidden;line-height:1rem;}`);
-        const html = evaluate(extend(ctx, { parser: parse$1 }), w.html);
-        return `<div${styleClass(ctx, ['html'], style(w, placement, ctx, { container: true }))}>${html}</div>`;
+        const html = evaluate(extend(ctx, { parser: parse$2 }), w.html);
+        return `<div${styleClass(ctx, ['html'], style$1(w, placement, ctx, { container: true }))}>${html}</div>`;
     });
 
     const decRE = /(\d)(?=(\d{3})+\.)/g;
@@ -3512,7 +4013,9 @@
         }
     }
     function phone(v) {
-        if (typeof v === 'number')
+        if (!v)
+            v = '';
+        if (typeof v !== 'string')
             v = v.toString();
         v = v || '';
         v = v.replace(/[^\d]/g, '');
@@ -3735,11 +4238,11 @@
         return res;
     }
     function _stringify(value) {
-        if (value == null)
-            return '';
         if (typeof value === 'string')
             return value;
         let stringed;
+        if (value == null || typeof value === 'number' || typeof value === 'boolean')
+            return `${value}`;
         if (_tpl && ('op' in value || 'r' in value)) {
             if ('op' in value) {
                 if (value.op === 'if' || value.op === 'with' || value.op === 'unless' || value.op === 'each') {
@@ -4512,21 +5015,48 @@
         return fin;
     }
 
-    const parseSchema = parser(map(seq(opt(str('@[')), ws, schema(), ws, opt(str(']'))), ([, , schema]) => schema), { trim: true, consumeAll: true });
+    const parseSchema = parser$1(map(seq(opt(str('@[')), ws$2, schema(), ws$2, opt(str(']'))), ([, , schema]) => schema), { trim: true, consumeAll: true });
 
     const space$1 = ' \t\r\n';
     const num$2 = map(seq(opt(str('-')), read1(digits)), ([neg, num]) => neg ? -num : +num);
     const num_range = map(seq(num$2, str('-', ':'), num$2), ([start, , end]) => [start, end]);
-    const sign_range = map(seq(str('<', '>'), ws, num$2), ([sign, , num]) => sign === '<' ? [-Infinity, num - 1] : [num + 1, Infinity]);
+    const sign_range = map(seq(str('<', '>'), ws$2, num$2), ([sign, , num]) => sign === '<' ? [-Infinity, num - 1] : [num + 1, Infinity]);
     const star_range = map(str('*'), () => [-Infinity, Infinity]);
-    const _range = rep1sep(alt(star_range, num_range, sign_range, num$2), read1(space$1 + ',;'), 'allow');
-    const range = parser(_range, { trim: true });
+    const not_range = map(seq(str('!'), alt(num_range, sign_range, num$2)), ([, range]) => ({ not: range }));
+    const _range = rep1sep(alt(star_range, num_range, sign_range, num$2, not_range), read1(space$1 + ',;'), 'allow');
+    const range = parser$1(_range, { trim: true });
 
     function join(...strs) {
         return strs.filter(s => s).join('.');
     }
     const looseEqual = (v1, v2) => v1 == v2;
     const strictEqual = (v1, v2) => v1 === v2;
+    const isNum$1 = /^[\d.]+$/;
+    const trueStrings = /^(true|on|yes)$/i;
+    const falseStrings = /^(false|off|no)$/i;
+    const sqlEqual = (v1, v2) => {
+        var _a, _b;
+        let tmp1, tmp2;
+        if ((typeof v1 === 'number' || typeof v1 === 'string' && isNum$1.test(v1)) && (typeof v2 === 'number' || typeof v2 === 'string' && isNum$1.test(v2))) {
+            return +v1 === +v2;
+        }
+        else if ((typeof v1 === 'boolean' || typeof v2 === 'boolean') && (typeof v1 === 'string' || typeof v2 === 'string')) {
+            return trueStrings.test(v1) && trueStrings.test(v2) || falseStrings.test(v1) && falseStrings.test(v2);
+        }
+        else if ((v1 instanceof Date || typeof v1 === 'string' && Array.isArray((_a = (tmp1 = parseDate(v1))) === null || _a === void 0 ? void 0 : _a.f)) && (v2 instanceof Date || typeof v2 === 'string' && Array.isArray((_b = (tmp2 = parseDate(v2))) === null || _b === void 0 ? void 0 : _b.f))) {
+            if (tmp1)
+                tmp1 = dateRelToDate(tmp1);
+            else
+                tmp1 = v1;
+            if (tmp2)
+                tmp2 = dateRelToDate(tmp2);
+            else
+                tmp2 = v2;
+            return +tmp1 === +tmp2;
+        }
+        else
+            return v1 == v2;
+    };
     const fullnum = /^\d+$/;
     function checkIdentity(map, path) {
         const p = path.split('.').reduce((a, c) => fullnum.test(c) ? `${a}[]` : `${a}${a.length ? '.' : ''}${c}`, '');
@@ -4534,7 +5064,7 @@
     }
     function diff(v1, v2, equal) {
         const type = equal && typeof equal === 'object' ? equal.type : equal;
-        const eq = typeof type === 'function' ? type : type === 'strict' ? strictEqual : looseEqual;
+        const eq = typeof type === 'function' ? type : type === 'strict' ? strictEqual : type === 'sql' ? sqlEqual : looseEqual;
         return _diff(v1, v2, '', {}, eq, typeof equal === 'object' ? equal.identity : undefined);
     }
     function _diff(v1, v2, path, diff, equal, ident) {
@@ -4591,12 +5121,14 @@
         return diff;
     }
     function deepEqual(v1, v2, equal) {
-        const eq = typeof equal === 'function' ? equal : equal === 'strict' ? strictEqual : looseEqual;
+        const eq = typeof equal === 'function' ? equal : equal === 'strict' ? strictEqual : equal === 'sql' ? sqlEqual : looseEqual;
         return _deepEqual(v1, v2, eq);
     }
     function _deepEqual(v1, v2, equal) {
         if (typeof v1 !== 'object' || typeof v2 !== 'object')
             return equal(v1, v2);
+        if ((!v1 || !v2) && v1 != v2)
+            return false; // eslint-ignore-line eqeqeq
         const ks = Object.keys(v1 || {});
         for (const k of Object.keys(v2 || {}))
             if (!~ks.indexOf(k))
@@ -4919,7 +5451,7 @@
         const field = alt(quotedField, unquotedField);
         const record = verify(rep1sep(field, seq(ws, str(opts.field), ws)), s => s.length > 1 || s[0].length > 0 || 'empty record');
         const csv = repsep(record, str(opts.record), 'allow');
-        const _parse = parser(csv, { consumeAll: true });
+        const _parse = parser$1(csv, { consumeAll: true });
         return function parse(input, options) {
             const res = _parse(input, options);
             if (Array.isArray(res) && res.length > 0) {
@@ -4958,7 +5490,7 @@
                 (res.quote = k, max = qs[k]);
         return res;
     }
-    function parse(data, options) {
+    function parse$1(data, options) {
         const base = csv(Object.assign({}, options, { header: false }))(data);
         if ('message' in base)
             return [];
@@ -4968,6 +5500,86 @@
             return base.map(v => header.reduce((a, c) => (a[c[0]] = v[c[1]], a), {}));
         }
         return base;
+    }
+
+    const ws = read(' \r\n\t');
+    const endTxt = '&<';
+    const entities = { amp: '&', gt: '>', lt: '<' };
+    const entity = map(seq(str('&'), str('amp', 'gt', 'lt'), str(';')), ([, which]) => entities[which] || '', 'entity');
+    const name = read1('abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-_:$', 'name');
+    const attr = map(seq(name, opt(seq(ws, str('='), ws, alt(name, quoted('"'), quoted("'"))))), ([name, rest]) => ({ name, value: rest ? rest[3] : true }), 'attr');
+    function quoted(quote) {
+        return map(seq(str(quote), readTo(quote), str(quote)), ([, str]) => str);
+    }
+    const open = map(seq(str('<'), ws, name, ws, repsep(attr, ws, 'allow'), opt(str('/')), str('>')), ([, , name, , attrs, close]) => ({ open: true, name, attrs, empty: !!close }), 'open');
+    const close = map(seq(str('</'), ws, name, ws, str('>')), ([, , name]) => ({ close: true, name }), 'close');
+    const content = map(rep1(alt(read1To(endTxt, true), entity), 'content'), txts => txts.join('').trim());
+    const stream = rep(alt(open, content, close));
+    const _parse = parser$1(stream, { trim: true, consumeAll: true, undefinedOnError: true });
+    function put(target, prop, value) {
+        if (prop in target) {
+            if (Array.isArray(target[prop]))
+                target[prop].push(value);
+            else
+                target[prop] = [target[prop], value];
+        }
+        else {
+            target[prop] = value;
+        }
+    }
+    function parse(str, strict) {
+        const stack = [];
+        const names = [];
+        const res = [];
+        let content = '';
+        const stream = _parse(str);
+        if (!stream || 'error' in stream)
+            return undefined;
+        function close(end) {
+            const val = stack.pop();
+            if (!val)
+                return;
+            const name = names.pop();
+            if (!stack.length) {
+                res.push(val);
+            }
+            else {
+                if (!Object.keys(val).length)
+                    put(stack[stack.length - 1], name, content || '');
+                else
+                    put(stack[stack.length - 1], name, val);
+            }
+            if (end !== name)
+                close(end);
+        }
+        for (const p of stream) {
+            if (typeof p === 'string') {
+                if (p)
+                    content += p;
+            }
+            else if ('open' in p) {
+                content = '';
+                const val = p.attrs.reduce((a, c) => (put(a, c.name, c.value), a), {});
+                if (p.empty) {
+                    if (stack.length)
+                        put(stack[stack.length - 1], p.name, val);
+                    else
+                        res.push(val);
+                }
+                else {
+                    names.push(p.name);
+                    stack.push(val);
+                }
+            }
+            else if ('close' in p) {
+                if (strict && p.name !== names[names.length - 1])
+                    return;
+                close(p.name);
+            }
+        }
+        if (names.length && !strict)
+            close(names[0]);
+        return res.length > 1 ? res : res.length === 1 ? res[0] : undefined;
     }
 
     function simple(names, apply) {
@@ -4980,6 +5592,131 @@
         M: [1, 30],
         d: [2, 24],
     };
+    const generateDefaults = {
+        max: 10000,
+    };
+    const roundDefaults = {
+        places: 2,
+        'all-numeric': false,
+        method: 'half-even',
+    };
+    function round(amt, settings) {
+        var _a, _b;
+        const place = (_a = settings === null || settings === void 0 ? void 0 : settings.places) !== null && _a !== void 0 ? _a : roundDefaults.places;
+        const type = (_b = settings === null || settings === void 0 ? void 0 : settings.method) !== null && _b !== void 0 ? _b : roundDefaults.method;
+        if (place > 0) {
+            let str = (+amt || 0).toString();
+            const point = str.indexOf('.');
+            if (!~point)
+                return (+str).toFixed(place);
+            let dec = str.slice(point + 1);
+            if (dec.length <= place)
+                return (+str).toFixed(place);
+            str += '0';
+            dec += '0';
+            const l = +`${str.slice(place - dec.length, place - dec.length + 1)}` || 0;
+            if (+l < 5)
+                return str.slice(0, place - dec.length);
+            else if (+l > 5 || +`${str.slice(1 + place - dec.length)}`)
+                return (+amt).toFixed(place);
+            else {
+                const pre = `${str.slice(0, place - dec.length)}`;
+                const f = +str.slice(place - dec.length - 1, place - dec.length);
+                if (type === 'half-odd')
+                    return (+`${pre}${f % 2 === 0 ? 6 : 4}`).toFixed(place);
+                else if (type === 'half-up')
+                    return (+`${pre}${+pre > 0 ? 6 : 4}`).toFixed(place);
+                else if (type === 'half-down')
+                    return (+`${pre}${+pre > 0 ? 4 : 6}`).toFixed(place);
+                else if (type === 'to-0')
+                    return (+`${pre}4`).toFixed(place);
+                else if (type === 'from-0')
+                    return (+`${pre}6`).toFixed(place);
+                else
+                    return (+`${pre}${f % 2 === 0 ? 4 : 6}`).toFixed(place);
+            }
+        }
+        else if (place === 0) {
+            let str = (+amt || 0).toString();
+            const point = str.indexOf('.');
+            if (!~point)
+                return str;
+            str = `${str}00`;
+            const p = +str.slice(point - 1, point);
+            const n = +str.slice(point + 1, point + 2);
+            if (n < 5)
+                return str.slice(0, point);
+            else if (n > 5 || n === 5 && +str.slice(point + 2))
+                return (+`${str.slice(0, point - 1)}0` + (p + 1) * (+str < 0 ? -1 : 1)).toString();
+            else {
+                const base = +`${str.slice(0, point - 1)}0`;
+                if (type === 'half-odd')
+                    return (base + (p % 2 === 0 ? p + 1 : p) * (+str < 0 ? -1 : 1)).toString();
+                else if (type === 'half-up')
+                    return (base + (+str > 0 ? p + 1 : p) * (+str < 0 ? -1 : 1)).toString();
+                else if (type === 'half-down')
+                    return (base + (+str < 0 ? p + 1 : p) * (+str < 0 ? -1 : 1)).toString();
+                else if (type === 'to-0')
+                    return base.toString();
+                else if (type === 'from-0')
+                    return (base + 1).toString();
+                else
+                    return (base + (p % 2 === 0 ? p : p + 1) * (+str < 0 ? -1 : 1)).toString();
+            }
+        }
+        else {
+            let str = `${+amt < 0 ? Math.floor(+amt || 0) : Math.ceil(+amt || 0)}`;
+            if (0 - place > str.length)
+                return `0`;
+            const n = +str.slice(place, place === -1 ? undefined : place + 1);
+            let p = str.slice(place - 1, place);
+            if (p === '-')
+                p = '';
+            const zeroes = `${Math.pow(10, 0 - place).toString().slice(1)}`;
+            if (!p) {
+                const big = `${+str < 0 ? '-' : ''}1${zeroes}`;
+                if (+str > 0 && +str < 5 || +str < 0 && +str > -5)
+                    return '0';
+                else if (+str > 0 && +str > 5 || +str < 0 && +str < -5)
+                    return big;
+                else {
+                    if (type === 'half-odd')
+                        return big;
+                    else if (type === 'half-up')
+                        return +str > 0 ? big : '0';
+                    else if (type === 'half-down')
+                        return +str > 0 ? '0' : big;
+                    else if (type === 'to-0')
+                        return '0';
+                    else if (type === 'from-0')
+                        return big;
+                    else
+                        return '0';
+                }
+            }
+            else {
+                if (n < 5)
+                    return `${str.slice(0, place)}${zeroes}`;
+                else if (n > 5 || place < -1 && +`${str.slice(place + 1)}`)
+                    return (+`${+str.slice(0, place - 1) || 0}${0}${zeroes}` + +`${+p + 1}${zeroes}` * (+str < 0 ? -1 : 1)).toString();
+                else {
+                    const base = +`${str.slice(0, place - 1) || 0}0${zeroes}`;
+                    if (type === 'half-odd')
+                        return (base + +`${+p % 2 === 0 ? +p + 1 : +p}${zeroes}` * (+str < 0 ? -1 : 1)).toString();
+                    else if (type === 'half-up')
+                        return (base + +`${+str > 0 ? +p + 1 : +p}${zeroes}` * (+str < 0 ? -1 : 1)).toString();
+                    else if (type === 'half-down')
+                        return (base + +`${+str < 0 ? +p + 1 : +p}${zeroes}` * (+str < 0 ? -1 : 1)).toString();
+                    else if (type === 'to-0')
+                        return (base + +`${+p}${zeroes}` * (+str < 0 ? -1 : 1)).toString();
+                    else if (type === 'from-0')
+                        return (base + +`${+p + 1}${zeroes}` * (+str < 0 ? -1 : 1)).toString();
+                    else
+                        return (base + +`${+p % 2 === 0 ? +p : +p + 1}${zeroes}` * (+str < 0 ? -1 : 1)).toString();
+                }
+            }
+        }
+    }
     const hasNum = /^[^\d]*(\d+(?:\.\d*)?)/;
     const space = /^\s*$/;
     function isNum(v) {
@@ -4991,7 +5728,13 @@
         return +v;
     }
     function equals(l, r) {
-        return l == r; // eslint-disable-line eqeqeq
+        if (l === r || l == r)
+            return true; // eslint-disable-line eqeqeq
+        if (isDateRel(l) && isDateRel(r))
+            return +dateRelToDate(l) === +dateRelToDate(r);
+        if (typeof l === 'number' && typeof r === 'number')
+            return isNaN(l) && isNaN(r);
+        return false;
     }
     /**
      * Find a the first overlapping substring that contains threshhold percent characters of the smallest string length.
@@ -5084,6 +5827,23 @@
             }
         }
     }
+    function inRange(v, range) {
+        let found = false;
+        let excluded = false;
+        for (const r of range) {
+            if (Array.isArray(r) && v >= r[0] && v <= r[1])
+                found = true;
+            else if (typeof r === 'object' && 'not' in r) {
+                if (Array.isArray(r.not) && v >= r.not[0] && v <= r.not[1])
+                    excluded = true;
+                else if (v == r.not)
+                    excluded = true;
+            }
+            else if (v == r)
+                found = true;
+        }
+        return found && !excluded;
+    }
     // basic ops
     registerOperator(simple(['is', 'is-not', '==', '!='], (name, values) => {
         const [l, r] = values;
@@ -5097,8 +5857,8 @@
         if (!res && isSchema(r))
             res = validate(l, r, 'strict') === true;
         return name === 'strict-is' ? res : !res;
-    }), simple(['deep-is', 'deep-is-not', '===', '!=='], (name, values, _opts, ctx) => {
-        let [l, r, equal] = values;
+    }), simple(['deep-is', 'deep-is-not', '===', '!=='], (name, [l, r, equal], opts, ctx) => {
+        equal = equal || (opts === null || opts === void 0 ? void 0 : opts.equal);
         if (equal && isApplication(equal)) {
             const eq = equal;
             equal = (l, r) => evalApply(ctx, eq, [l, r]);
@@ -5182,7 +5942,7 @@
             return name === 'in' ? found : !found;
         }
         else if (typeof r === 'string' && isNum(l) && (range = _parseRange(ctx, r), Array.isArray(range))) {
-            const found = range.reduce((a, c) => a || (Array.isArray(c) ? l >= c[0] && l <= c[1] : l == c), false);
+            const found = inRange(+l, range);
             return name === 'in' ? found : !found;
         }
         else if (isApplication(l)) {
@@ -5234,9 +5994,57 @@
         const c = extend$1(ctx, { value: l });
         if (isKeypath(r))
             return safeGet(c, r);
+        else if (typeof r === 'number')
+            return safeGet(c, '' + r);
         else
             return evaluate(c, r);
-    }), simple(['array'], (_name, values) => {
+    }), simple(['generate'], (_name, [apply], opts, ctx) => {
+        if (apply && isApplication(apply)) {
+            const res = [];
+            let state = opts;
+            let it;
+            for (let i = 0; i < generateDefaults.max; i++) {
+                it = evalApply(ctx, apply, [state, it, i], { index: i, last: it, state });
+                if (Array.isArray(it))
+                    it.forEach(v => res.push(v));
+                else if (it && typeof it === 'object') {
+                    const keys = Object.keys(it);
+                    if (keys.find(k => k !== 'value' && k !== 'state'))
+                        res.push(it);
+                    else {
+                        res.push(it.value);
+                        state = it.state || state;
+                        it = it.value;
+                    }
+                }
+                else if (it === undefined)
+                    break;
+                else
+                    res.push(it);
+            }
+            return res;
+        }
+        return [];
+    }), simple(['array'], (_name, values, opts) => {
+        if (values.length === 1 && (opts === null || opts === void 0 ? void 0 : opts.range)) {
+            let range$1 = values[0];
+            if (typeof range$1 === 'string')
+                range$1 = range(range$1);
+            if (Array.isArray(range$1)) {
+                const bounds = Array.isArray(opts.bounds) && opts.bounds.length === 2 && opts.bounds.filter(b => typeof b === 'number').length === 2 ? opts.bounds : [-100, 200];
+                bounds.slice().sort((l, r) => l < r ? -1 : l > r ? 1 : 0);
+                let [lower, upper] = bounds;
+                if (upper - lower > 10000)
+                    lower = upper - 10000;
+                const res = [];
+                for (let i = lower; i <= upper; i++)
+                    if (inRange(i, range$1))
+                        res.push(i);
+                return res;
+            }
+            else
+                return [];
+        }
         return values;
     }), simple(['object'], (_name, values) => {
         const res = {};
@@ -5294,7 +6102,7 @@
         }
         if (!sorts)
             sorts = [{ a: { r: { k: ['_'] } } }];
-        return sort(ctx, arr, sorts);
+        return sort(ctx, arr.slice(), sorts);
     }), simple(['time-span', 'time-span-ms'], (_name, args, opts) => {
         const namedArgs = opts || {};
         const span = isDateRel(args[0]) && isDateRel(args[1]) ? datesDiff(dateRelToDate(args[0]), dateRelToDate(args[1])) : isTimespan(args[0]) ? args[0] : 0;
@@ -5338,6 +6146,15 @@
                         to.setMonth(from.getMonth() + span.d[1]);
                         const m = to.getMonth();
                         to.setDate(from.getDate());
+                        // watch out for last day of month next to longer month
+                        const end = new Date(+from);
+                        const endM = end.getMonth();
+                        end.setDate(end.getDate() + 1);
+                        if (endM !== end.getMonth()) {
+                            // make sure target date is last day of month
+                            to.setMonth(to.getMonth() + 1);
+                            to.setDate(0);
+                        }
                         if (to.getMonth() !== m)
                             to.setDate(0);
                         to.setDate(to.getDate() + span.d[2]);
@@ -5444,24 +6261,32 @@
             else
                 return span;
         }
-    }), simple(['string', 'unparse'], (name, args) => {
+    }), simple(['string', 'unparse'], (name, args, opts) => {
         const [value] = args;
-        let opts = args.slice(-1)[0] || {};
+        opts = opts || args[1] || {};
+        if (!opts || typeof opts !== 'object')
+            opts = {};
         if (name === 'unparse')
             opts = Object.assign({}, opts, { raport: 1 });
         if (opts.raport && opts.tpl)
             opts.template = 1;
         if (!opts && (value === null || value === undefined))
             return '';
-        if (typeof opts === 'object' && opts.json)
-            return JSON.stringify(value);
-        if (typeof opts === 'object' && opts.schema)
-            return stringifySchema(value);
-        else if (typeof opts === 'object' && opts.raport) {
-            let v = stringify(value, opts);
-            if (v === undefined)
-                v = stringify({ v: value }, opts);
-            return v;
+        if (typeof opts === 'object') {
+            if (opts.json)
+                return JSON.stringify(value);
+            if (opts.schema)
+                return stringifySchema(value);
+            else if (opts.raport) {
+                let v = stringify(value, opts);
+                if (v === undefined)
+                    v = stringify({ v: value }, opts);
+                return v;
+            }
+            else if (typeof value === 'string' && opts.styled)
+                return style(value);
+            else if (value == null)
+                return '';
         }
         if (Array.isArray(value))
             return value.join(', ');
@@ -5519,7 +6344,8 @@
             return stringifySchema(inspect(v, opts === null || opts === void 0 ? void 0 : opts.flat));
         else
             return inspect(v);
-    }), simple(['diff'], (_, [left, right, equal], _opts, ctx) => {
+    }), simple(['diff'], (_, [left, right, equal], opts, ctx) => {
+        equal = equal || (opts === null || opts === void 0 ? void 0 : opts.equal);
         if (equal && isApplication(equal)) {
             const eq = equal;
             equal = (l, r) => evalApply(ctx, eq, [l, r]);
@@ -5529,7 +6355,8 @@
         return labelDiff(diff, label, opts);
     }));
     // math
-    registerOperator(simple(['+', 'add'], (_name, values) => {
+    registerOperator(simple(['+', 'add'], (_name, values, _opts, ctx) => {
+        var _a;
         if (values.length === 1) {
             if (isDateRel(values[0]))
                 return +dateRelToDate(values[0]);
@@ -5547,7 +6374,10 @@
             return Object.assign.apply(Object, [{}].concat(values));
         const num = values.reduce((a, c) => a && isNum(c), true);
         if (num) {
-            return values.reduce((a, c) => a + +c, 0);
+            if ((_a = ctx.special) === null || _a === void 0 ? void 0 : _a.round)
+                return +values.reduce((a, c) => +round(a + +c, ctx.special.round), 0);
+            else
+                return values.reduce((a, c) => a + +c, 0);
         }
         else {
             return values.reduce((a, c) => a + (c === undefined || c === null ? '' : c), '');
@@ -5557,48 +6387,75 @@
         if (match = hasNum.exec(v))
             return +match[1];
         return parseInt(v);
-    }), simple(['-', 'subtract'], (_name, values) => {
+    }), simple(['-', 'subtract'], (_name, values, _opts, ctx) => {
+        var _a;
         const first = values.shift();
+        if (!values.length)
+            return -first;
         if (isDateRel(first)) {
             if (values.reduce((a, c) => a && isDateRel(c), true))
                 return values.reduce((a, c) => a - +dateRelToDate(c), +dateRelToDate(first));
             if (values.reduce((a, c) => a && isTimespan(c), true))
                 return values.reduce((a, c) => dateAndTimespan(a, c, -1), dateRelToDate(first));
         }
-        return values.reduce((a, c) => a - (!isNum(c) ? 0 : +c), !isNum(first) ? 0 : +first);
-    }), simple(['*', 'multiply'], (_name, values) => {
+        if ((_a = ctx.special) === null || _a === void 0 ? void 0 : _a.round)
+            return values.reduce((a, c) => +round(a - (!isNum(c) ? 0 : +c), ctx.special.round), !isNum(first) ? 0 : +first);
+        else
+            return values.reduce((a, c) => a - (!isNum(c) ? 0 : +c), !isNum(first) ? 0 : +first);
+    }), simple(['*', 'multiply'], (_name, values, _opts, ctx) => {
         const first = values.shift();
         if (!isNum(first)) {
-            if (typeof first === 'string' && values.length === 1 && isNum(values[0]) && +values[0] > 0) {
-                let s = '';
-                for (let i = 0; i < values[0]; i++)
-                    s += first;
-                return s;
+            if (values.length === 1 && isNum(values[0]) && +values[0] > 0) {
+                if (typeof first === 'string') {
+                    let s = '';
+                    for (let i = 0; i < values[0]; i++)
+                        s += first;
+                    return s;
+                }
+                else if (Array.isArray(first) && +values[0] < 10000 && first.length < 1000) {
+                    const res = [];
+                    for (let i = 0; i < values[0]; i++)
+                        res.push.apply(res, first);
+                    return res;
+                }
             }
             return 0;
         }
-        return values.reduce((a, c) => a * (!isNum(c) ? 0 : +c), +first);
-    }), simple(['/', '/%', 'divide', 'intdiv'], (name, values) => {
+        if (ctx.special.round)
+            return values.reduce((a, c) => +round(a * (!isNum(c) ? 0 : +c), ctx.special.round), +first);
+        else
+            return values.reduce((a, c) => a * (!isNum(c) ? 0 : +c), +first);
+    }), simple(['/', '/%', 'divide', 'intdiv'], (name, values, _opts, ctx) => {
+        var _a;
         const first = values.shift();
         if (isNaN(first))
             return 0;
         if (name.length > 1 || name === 'intdiv')
             return values.reduce((a, c) => Math.floor(a / (isNaN(c) ? 1 : +c)), +first);
+        if ((_a = ctx.special) === null || _a === void 0 ? void 0 : _a.round)
+            return values.reduce((a, c) => +round(a / (isNaN(c) ? 1 : +c), ctx.special.round), +first);
         else
             return values.reduce((a, c) => a / (isNaN(c) ? 1 : +c), +first);
     }), simple(['%', 'modulus'], (_name, values) => {
         const first = values.shift();
         return values.reduce((a, c) => a % (isNaN(c) ? 1 : +c), isNaN(first) ? 0 : +first);
-    }), simple(['pow', '**'], (_name, values) => {
+    }), simple(['pow', '**'], (_name, values, _opts, ctx) => {
+        var _a;
         const pow = values.pop();
         const first = Math.pow(values.pop(), pow);
-        return values.reverse().reduce((a, c) => Math.pow(c, a), first);
+        if ((_a = ctx.special) === null || _a === void 0 ? void 0 : _a.round)
+            return values.reverse().reduce((a, c) => +round(Math.pow(c, a), ctx.special.round), first);
+        else
+            return values.reverse().reduce((a, c) => Math.pow(c, a), first);
     }), simple(['abs'], (_name, values) => {
         if (typeof values[0] !== 'number')
             return values[0];
         return Math.abs(values[0]);
-    }), simple(['round'], (_name, values) => {
-        return Math.round(values[0]);
+    }), simple(['round'], (_name, [num, precision, method]) => {
+        if (precision !== undefined || roundDefaults['all-numeric'])
+            return +round(num, { places: precision, method: method });
+        else
+            return Math.round(num);
     }), simple(['floor'], (_name, values) => {
         return Math.floor(values[0]);
     }), simple(['ceil'], (_name, values) => {
@@ -5644,8 +6501,11 @@
     const triml = /^\s*/;
     const trimr = /\s*$/;
     const escapeRe = /([\.\[\]\{\}\(\)\^\$\*\+\-])/g;
-    registerOperator(simple(['eval'], (_name, [v], _opts, ctx) => {
-        return evaluate(ctx, v);
+    registerOperator(simple(['eval'], (_name, [v], opts, ctx) => {
+        if (opts === null || opts === void 0 ? void 0 : opts.template)
+            return template((opts === null || opts === void 0 ? void 0 : opts.context) || ctx, v);
+        else
+            return evaluate((opts === null || opts === void 0 ? void 0 : opts.context) || ctx, v);
     }), simple(['padl', 'padr', 'pad'], (name, args) => {
         let [str, count, val] = args;
         return pad(name === 'padl' ? 'l' : name === 'padr' ? 'r' : 'c', str, count, val);
@@ -5666,7 +6526,7 @@
                 return `${op.apply('string', [src], undefined, ctx)}`.slice(start, end);
         }
     }), simple(['len', 'length'], (_name, [src]) => {
-        if (src && 'length' in src)
+        if (typeof src === 'string' || src && 'length' in src)
             return src.length;
         return 0;
     }), simple(['replace', 'replace-all'], (name, [str, find, rep, flags]) => {
@@ -5686,8 +6546,35 @@
             return r;
         }
         else if (Array.isArray(src)) {
-            return src.reverse();
+            return src.slice().reverse();
         }
+    }), simple(['wrap-count'], (_name, [str, width, font], opts, ctx) => {
+        var _a;
+        let w = width || (opts === null || opts === void 0 ? void 0 : opts.width);
+        const avail = safeGet(ctx, '@placement.availableX') || 48;
+        if ((_a = ctx.special) === null || _a === void 0 ? void 0 : _a.widget) {
+            const ww = ctx.special.widget.width;
+            if (ww) {
+                if (ww === 'grow')
+                    w = avail;
+                else if (typeof ww === 'number')
+                    w = ww;
+                else if (typeof ww === 'object' && typeof ww.percent === 'number')
+                    w = (ww.percent / 100) * avail;
+                else if (typeof ww === 'object' && typeof ww.x === 'string')
+                    w = evaluate(ctx, ww.x);
+            }
+        }
+        if (!w)
+            w = avail;
+        font = font || (opts === null || opts === void 0 ? void 0 : opts.font) || safeGet(ctx, '@widget.font');
+        if (opts) {
+            font = Object.assign({}, font);
+            for (const k of ['family', 'size', 'line', 'metric', 'break-word'])
+                if (k in opts)
+                    font[k] = opts[k];
+        }
+        return measure(str, w, { context: ctx }, font);
     }), simple(['keys'], (_name, [src, proto]) => {
         if (!src)
             return [];
@@ -5806,34 +6693,73 @@
             }
             res = rdt;
         }
+        if (res instanceof Date && isNaN(+res))
+            return undefined;
         return res;
     }), simple(['interval'], (_name, [v], _opts, ctx) => {
         return evaluate(ctx, ~v.indexOf('#') ? v : `#${v}#`);
     }), simple(['upper', 'lower'], (name, [v]) => {
         v = v == null ? '' : v;
         return name === 'upper' ? `${v}`.toUpperCase() : `${v}`.toLowerCase();
-    }), simple(['format', 'fmt'], (_name, args, opts) => {
-        let [n, v, ...s] = args;
-        const fmt = formats[v];
-        if (!fmt)
-            return `${n}`;
+    }), simple(['format', 'fmt'], (_name, args, opts, ctx) => {
+        let [v, fmt, ...s] = args;
+        const op = formats[fmt];
+        if (!op) {
+            const op = getOperator(fmt);
+            if (op) {
+                const args = [v, ...s];
+                if (op.type === 'aggregate')
+                    return op.apply(fmt, Array.isArray(v) ? v : [v], s.map(v => ({ v })), (opts || virtualFormats[fmt]), ctx);
+                if (op.type === 'checked') {
+                    for (let i = 0; i < args.length; i++) {
+                        const res = op.checkArg(fmt, i, args.length - 1, args[i], (opts || virtualFormats[fmt]), ctx, { v: args[i] });
+                        if (typeof res !== 'object' || !('result' in res))
+                            continue;
+                        else
+                            return res.result;
+                    }
+                    return op.apply(fmt, args, (opts || virtualFormats[fmt]), ctx);
+                }
+                return op.apply(fmt, args, (opts || virtualFormats[fmt]), ctx);
+            }
+            else
+                return `${v}`;
+        }
         else
-            return fmt.apply(n, s, opts);
-    }), simple(['set-defaults'], (_name, [type, name], opts) => {
+            return op.apply(v, s, (opts || op.defaults));
+    }), simple(['set-defaults'], (_name, [type, name], opts, ctx) => {
         if (type === 'format' && typeof name === 'string') {
             const fmt = formats[name];
             if (fmt)
                 return Object.assign(fmt.defaults, opts);
+            const vfmt = virtualFormats[name];
+            if (vfmt)
+                return Object.assign(vfmt.defaults, opts);
         }
-    }), simple(['parse'], (_name, args) => {
-        let opts = args.slice(-1)[0] || {};
-        if (typeof opts !== 'object')
+        else if (type === 'round') {
+            if (opts === null || opts === void 0 ? void 0 : opts.context) {
+                if (opts === null || opts === void 0 ? void 0 : opts.unset) {
+                    if (ctx.special)
+                        delete ctx.special.round;
+                }
+                else
+                    (ctx.special || (ctx.special = {})).round = Object.assign({}, opts, { context: undefined });
+            }
+            else
+                Object.assign(roundDefaults, opts);
+        }
+        else if (type === 'generate') {
+            Object.assign(generateDefaults, opts);
+        }
+    }), simple(['parse'], (_name, args, opts) => {
+        opts = opts || args[1] || {};
+        if (!opts || typeof opts !== 'object')
             opts = {};
         const [v] = args;
         if (opts.date)
             return parseDate(v, opts);
         else if (opts.template || opts.tpl)
-            return parse$1(v, opts);
+            return parse$2(v, opts);
         else if (opts.time)
             return parseTime(v, opts);
         else if (opts.expr)
@@ -5842,13 +6768,17 @@
             return parseSchema(v);
         else if (opts.range)
             return range(v, opts);
+        else if (opts.xml)
+            return parse(v, opts.strict);
         else if (opts.csv) {
             if (opts.detect)
                 opts = Object.assign(detect(v), opts);
-            return parse(v, opts);
+            return parse$1(v, opts);
         }
+        else if (opts.base64)
+            return atob(v);
         else
-            return parse$2(v, opts);
+            return parse$3(v, opts);
     }), simple(['detect-delimiters'], (_name, [data]) => {
         if (typeof data !== 'string')
             return {};
@@ -6002,13 +6932,21 @@
         type: 'aggregate',
         names: ['avg'],
         apply(_name, arr, args, _opts, ctx) {
-            return arr.reduce((a, c) => a + num(args[0] ? evalApply(ctx, args[0], [c]) : c), 0) / arr.length;
+            var _a;
+            if ((_a = ctx.special) === null || _a === void 0 ? void 0 : _a.round)
+                return +round(arr.reduce((a, c) => +round(a + num(args[0] ? evalApply(ctx, args[0], [c]) : c)), 0) / arr.length);
+            else
+                return arr.reduce((a, c) => a + num(args[0] ? evalApply(ctx, args[0], [c]) : c), 0) / arr.length;
         },
     }, {
         type: 'aggregate',
         names: ['sum'],
         apply(_name, arr, args, _opts, ctx) {
-            return arr.reduce((a, c) => a + num(args[0] ? evalApply(ctx, args[0], [c]) : c), 0);
+            var _a;
+            if ((_a = ctx.special) === null || _a === void 0 ? void 0 : _a.round)
+                return arr.reduce((a, c) => +round(a + num(args[0] ? evalApply(ctx, args[0], [c]) : c)), 0);
+            else
+                return arr.reduce((a, c) => a + num(args[0] ? evalApply(ctx, args[0], [c]) : c), 0);
         }
     }, {
         type: 'aggregate',
@@ -6064,11 +7002,19 @@
                 v = arr, app = evalParse(ctx, args[0]);
             else if (isApplication(args[1]))
                 v = evalParse(ctx, args[0]), app = evalParse(ctx, args[1]);
-            if ((Array.isArray(v) || v && '0' in v) && isApplication(app))
-                return Array.prototype.map.call(v, (e, i) => evalApply(ctx, app, [e, i], { index: i, key: i }));
+            if ((Array.isArray(v) || v && '0' in v) && isApplication(app)) {
+                const res = Array.prototype.map.call(v, (e, i) => evalApply(ctx, app, [e, i], { index: i, key: i }));
+                if (opts && opts.flat)
+                    return flatten(res, opts.flat);
+                return res;
+            }
             else if (v && typeof v === 'object' && isApplication(app)) {
-                if (opts && opts.array)
-                    return Object.entries(v).map((p, i) => evalApply(ctx, app, [p[1], i, p[0]], { index: i, key: p[0] }));
+                if (opts && opts.array) {
+                    const res = Object.entries(v).map((p, i) => evalApply(ctx, app, [p[1], i, p[0]], { index: i, key: p[0] }));
+                    if (opts && opts.flat)
+                        return flatten(res, opts.flat);
+                    return res;
+                }
                 if (opts && opts.entries)
                     return Object.entries(v).reduce((a, p, i) => {
                         const r = evalApply(ctx, app, [p[1], i, p[0]], { index: i, key: p[0] });
@@ -6100,29 +7046,7 @@
             if (!args[0])
                 return {};
             const many = opts && opts.many;
-            return arr.reduce((a, c, i) => {
-                const pair = evalApply(ctx, args[0], [c, i], { index: i, all: a });
-                let k, v = c;
-                if (Array.isArray(pair)) {
-                    if (pair.length === 0)
-                        return a;
-                    else if (pair.length === 1)
-                        k = pair[0];
-                    else
-                        (k = pair[0], v = pair[1]);
-                }
-                else
-                    k = pair;
-                if (many) {
-                    if (k in a)
-                        a[k].push(v);
-                    else
-                        a[k] = [v];
-                }
-                else
-                    a[k] = v;
-                return a;
-            }, {});
+            return arr.reduce((a, c, i) => _indexPair(a, evalApply(ctx, args[0], [c, i], { index: i, all: a }), c, many), {});
         },
     }, {
         type: 'aggregate',
@@ -6186,18 +7110,38 @@
         }
     }, {
         type: 'aggregate',
+        names: ['flatten'],
+        apply(_name, arr, args, opts, ctx) {
+            return flatten(arr, (args.length > 0 ? evalParse(ctx, args[0]) : 0) || (opts === null || opts === void 0 ? void 0 : opts.flat));
+        }
+    }, {
+        type: 'aggregate',
         names: ['block'],
-        apply(_name, _arr, args, _opts, ctx) {
+        apply(_name, _arr, args, opts, ctx) {
             const last = args.length - 1;
             if (last < 0)
                 return;
-            const c = extend$1(ctx, { locals: {}, fork: !ctx.locals });
+            const c = extend$1(ctx, { locals: opts && opts.implicit ? ctx.locals || {} : {}, fork: !ctx.locals });
             for (let i = 0; i < last; i++)
                 evalParse(c, args[i]);
-            return evalParse(c, args[last]);
+            const res = evalParse(c, args[last]);
+            if (opts && opts.implicit)
+                ctx.locals = c.locals;
+            return res;
         },
         value: true,
     });
+    function flatten(n, levels = 1) {
+        let res = n || [];
+        const count = typeof levels !== 'number' ? 1 : levels;
+        for (let i = 0; i < count; i++) {
+            if (res.find(v => Array.isArray(v)))
+                res = [].concat(...res);
+            else
+                return res;
+        }
+        return res;
+    }
     function fmtDate(n, fmt) {
         if (typeof n === 'string') {
             const d = parseDate(n);
@@ -6211,6 +7155,56 @@
         if (range$1 in map)
             return map[range$1];
         return (map[range$1] = range(range$1));
+    }
+    function _indexPair(res, value, current, many) {
+        if (Array.isArray(value)) {
+            if (value.length === 0)
+                return res;
+            else if (value.length === 2) {
+                const [k, v] = value;
+                if (Array.isArray(k)) {
+                    for (const kk of k) {
+                        if (many) {
+                            if (kk in res)
+                                res[kk].push(v);
+                            else
+                                res[kk] = [v];
+                        }
+                        else
+                            res[kk] = v;
+                    }
+                }
+                else {
+                    if (many) {
+                        if (k in res)
+                            res[k].push(v);
+                        else
+                            res[k] = [v];
+                    }
+                    else
+                        res[k] = v;
+                }
+            }
+        }
+        else if (typeof value === 'object') {
+            const v = value;
+            if ('many' in v && Array.isArray(v.many))
+                for (const i of v.many)
+                    _indexPair(res, i, current, many);
+            else if ('key' in v || 'keys' in v)
+                _indexPair(res, [v.key || v.keys, v.value || current], current, many);
+        }
+        else {
+            if (many) {
+                if (value in res)
+                    res[value].push(current);
+                else
+                    res[value] = [current];
+            }
+            else
+                res[value] = current;
+        }
+        return res;
     }
     // basic formats
     registerFormat('dollar', function (n, [dec, group, sign, neg], opts) {
@@ -6251,26 +7245,8 @@
     registerFormat('phone', n => {
         return phone(n);
     });
-    registerFormat('or', (n, [v]) => {
-        return n || v;
-    });
-    registerFormat('padl', function (n, [count, val], opts) {
-        var _a;
-        return pad('l', n, count !== null && count !== void 0 ? count : opts === null || opts === void 0 ? void 0 : opts.len, (_a = val !== null && val !== void 0 ? val : opts === null || opts === void 0 ? void 0 : opts.pad) !== null && _a !== void 0 ? _a : this.defaults.pad);
-    }, { pad: ' ' });
-    registerFormat('padr', function (n, [count, val], opts) {
-        var _a;
-        return pad('r', n, count !== null && count !== void 0 ? count : opts === null || opts === void 0 ? void 0 : opts.len, (_a = val !== null && val !== void 0 ? val : opts === null || opts === void 0 ? void 0 : opts.pad) !== null && _a !== void 0 ? _a : this.defaults.pad);
-    }, { pad: ' ' });
-    registerFormat('pad', function (n, [count, val], opts) {
-        var _a;
-        return pad('c', n, count !== null && count !== void 0 ? count : opts === null || opts === void 0 ? void 0 : opts.len, (_a = val !== null && val !== void 0 ? val : opts === null || opts === void 0 ? void 0 : opts.pad) !== null && _a !== void 0 ? _a : this.defaults.pad);
-    }, { pad: ' ' });
-    registerFormat('trim', n => {
-        if (!n)
-            return n;
-        else
-            return `${n}`.trim();
+    registerFormat('styled', n => {
+        return style(n);
     });
     {
         const space = /\s+/g;
@@ -6312,6 +7288,62 @@
             return str;
         });
     }
+    registerFormat('hex', val => {
+        if (typeof val === 'number')
+            return val.toString(16);
+        else {
+            const str = `${val}`;
+            const te = new TextEncoder();
+            return Array.from(te.encode(str)).map(c => c.toString(16).padStart(2, '0')).join('');
+        }
+    });
+    registerFormat('base', (val, [n]) => {
+        try {
+            return val.toString(n);
+        }
+        catch (_a) {
+            return val;
+        }
+    });
+    registerFormat('noxml', val => escapeHTML(`${val}`));
+    registerFormat('xml', (val, [n]) => {
+        if (val && typeof val === 'object')
+            return objectToXML(val, n);
+        else
+            return val;
+    });
+    function objectToXML(object, indent = undefined) {
+        if (Array.isArray(object))
+            return _objectToXML({ values: { value: object } }, 0, indent);
+        const keys = Object.keys(object);
+        if (keys.length > 1)
+            return _objectToXML({ root: object }, 0, indent);
+        if (keys.length < 1)
+            return '<root />';
+        if (Array.isArray(object[keys[0]]))
+            return _objectToXML({ root: object }, 0, indent);
+        return _objectToXML(object, 0, indent);
+    }
+    function _objectToXML(val, depth, indent, propname = undefined) {
+        if (Array.isArray(val)) {
+            return val.reduce((xml, entry) => {
+                const val = _objectToXML(entry, depth + 1, indent, propname);
+                const tag = val === '' || val === undefined ? `<${propname} />` : `<${propname}>${val}${indent && /\n/.test(val) ? '\n' + pad('l', '', depth * indent, ' ') : ''}</${propname}>`;
+                return `${xml}${indent && depth ? '\n' + pad('l', '', depth * indent, ' ') : ''}${tag}`;
+            }, '');
+        }
+        if (val && typeof val === 'object') {
+            return Object.entries(val).reduce((xml, [name, value]) => {
+                const val = _objectToXML(value, depth + (Array.isArray(value) ? 0 : 1), indent, name);
+                const tag = val === '' ? `${indent && depth ? '\n' + pad('l', '', depth * indent, ' ') : ''}<${name} />` : Array.isArray(value) ? val : `${indent && depth ? '\n' + pad('l', '', depth * indent, ' ') : ''}<${name}>${val}${indent && /\n/.test(val) ? '\n' + pad('l', '', depth * indent, ' ') : ''}</${name}>`;
+                return `${xml}${tag}`;
+            }, '');
+        }
+        return escapeHTML(val);
+    }
+    registerFormat('base64', val => {
+        return btoa(`${val}`);
+    });
 
     exports.CSV_DEFAULTS = DEFAULTS;
     exports.PageSizes = PageSizes;
@@ -6337,14 +7369,15 @@
     exports.join = join$1;
     exports.labelDiff = labelDiff;
     exports.overlap = overlap;
-    exports.parse = parse$2;
+    exports.parse = parse$3;
     exports.parseCSV = csv;
     exports.parseDate = parseDate;
     exports.parsePath = parsePath;
     exports.parseRange = range;
     exports.parseSchema = parseSchema;
-    exports.parseTemplate = parse$1;
+    exports.parseTemplate = parse$2;
     exports.parseTime = parseTime;
+    exports.parseXML = parse;
     exports.registerFormat = registerFormat;
     exports.registerLayout = registerLayout;
     exports.registerOperator = registerOperator;
@@ -6354,6 +7387,7 @@
     exports.similar = similar;
     exports.similarity = similarity;
     exports.stringify = stringify;
+    exports.styled = style;
     exports.template = template;
     exports.toDataSet = toDataSet;
     exports.unparseSchema = stringifySchema;

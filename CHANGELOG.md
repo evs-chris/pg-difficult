@@ -1,3 +1,27 @@
+## 1.8.0
+
+2024-06-13
+
+This release makes reports considerably more useful with single and multi-database queries, including applying query parameters from defined report parameters. There is still a lot of work to be done with reports to make them more useful, like typed parameter support and automatic CSV reports for queries.
+
+### Features
+
+* There is now support for dark mode, along with an override setting.
+* Reports and saved queries can now be reordered and sent to top and bottom with a shift/ctrl + click.
+* There are now scratch pads, which store text in browser storage.
+* There is a new Host Explorer that shows all available databases on a server, if possible.
+  * Individual databases can be queried by switching selected databases and rerunning an entered query.
+  * Individual database schemas can be browsed by switching selected databases.
+  * The list of databases can be filtered using properties of the connection and database.
+  * The each of visible databases can be queried using a query all facility that can be used for reports or to add data to use to filter the database list further.
+  * Reports can specify a query source to target individual databases or a query all source to target all visible databases.
+* The split diff entries buttons now have guidance for what exactly will happen when the diff is split.
+
+### Bugs
+
+* Reloaded diff entries will no longer offer to undo segments if undoing segments is enabled by default.
+
+
 ## 1.7.1
 
 2023-08-18
