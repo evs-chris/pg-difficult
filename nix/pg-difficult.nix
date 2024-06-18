@@ -2,7 +2,7 @@
 
 stdenv.mkDerivation rec {
   pname = "pg-difficult";
-  version = "1.7.1";
+  version = "1.8.0";
   meta = with lib; {
     homepage = "https://github.com/evs-chris/pg-difficult";
     changelog = "https://github.com/evs-chris/pg-difficult/releases/tag/v${version}";
@@ -14,7 +14,7 @@ stdenv.mkDerivation rec {
 
   src = fetchurl {
     url = "https://github.com/evs-chris/pg-difficult/releases/download/v${version}/pg-difficult_deno.zip";
-    sha256 = "sha256-Nl126e2wZn6YMJMT71lh+WUaA3PMPpgUu9unxiOOX7I=";
+    sha256 = "sha256-vyHfhiGxU4vT0N9RJGFeFSfZk63/yf7ONKVUNacBMYY=";
   };
 
   nativeBuildInputs = [ unzip makeWrapper ];
