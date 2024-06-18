@@ -291,7 +291,7 @@
 </script>
 
 <script type=text/ractive id=control-panel>
-  <tabs pad style="overflow: hidden;">
+  <tabs pad style="overflow: hidden; height: 100%;">
     <tab title="Connections" hidden="@global.clientOnly">
       <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.3em;">
         <div>Connections are saved in browser storage and can be used to start diffs and run queries.<br/><br/><span style="color: #ca3c3c; font-weight: bold;">WARNING:</span> Starting a diff on a database will create two tables, create a function, and a then set the function as a trigger for each existing table in the database. A running diff in a database <em>will</em> cause performance degradation, especially if left to collect thousands of changes.</div>
@@ -457,7 +457,7 @@
       </div>
     </tab>
     <tab title="Settings">
-      <div style="display: flex; flex-direction: column;">
+      <div style="display: flex; flex-direction: column; height: 100%;">
         <label as-field>Theme<select value="{{~/settings.theme}}">
           <option value="{{undefined}}">Auto</option>
           <option value="dark">Dark</option>
@@ -470,6 +470,10 @@
         {{/if}}
         <label as-field class=inline><input type=checkbox bind-checked="~/settings.hideBlankFields" /> Hide empty string fields in diff records by default?</label>
         <label as-field class=inline><input type=checkbox bind-checked="~/settings.hideDefaultFields" /> Hide defaulted fields in diff records by default?</label>
+        <div style="margin-top: auto;">
+          <button on-click="@.exportSettings()">Export Settings</button>
+          <button on-click="@.importSettings()">Import Settings</button>
+        </div>
       </div>
     </tab>
   </tabs>

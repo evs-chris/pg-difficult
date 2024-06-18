@@ -541,6 +541,19 @@ class ControlPanel extends Window {
   exploreHosts() {
     app.exploreHosts();
   }
+  exportSettings() {
+    const json = {};
+    json.settings = app.get('settings');
+    json.connections = app.get('connections');
+    json.savedQueries = app.get('savedQueries');
+    json.savedReports = app.get('savedReports');
+    json.scratchPads = app.get('scratchPads');
+    download(`${window.location.host} ${evaluate('@date#timestamp')} settings.pgdconf`.replace(/:/g, '-'), JSON.stringify(json), 'application/pg-difficult-config');
+  }
+  async importSettings() {
+    const file = (await load('.pgdconf', false)).text;
+    app.set(JSON.parse(file));
+  }
 }
 Window.extendWith(ControlPanel, {
   template: '#control-panel',
