@@ -560,8 +560,8 @@ Window.extendWith(ControlPanel, {
   css: `
 .record { display: flex; align-items: center; justify-content: space-between; }
 .connection { display: flex; flex-direction: column; }
-.connection .constr { display: flex; flex-grow: 1; min-width: 20em; align-items: center; justify-content: space-between; }
-.connection .actions { display: flex; justify-content: space-between; }
+.connection .constr { display: flex; flex-grow: 1; min-width: 20em; align-items: center; }
+.connection .actions { display: flex; flex-shrink: 0; justify-content: space-between; }
 .query { display: flex; align-items: center; }
 .query .name { width: 15%; }
 .query .sql { width: 60%; }
