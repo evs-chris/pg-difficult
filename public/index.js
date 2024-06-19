@@ -690,6 +690,7 @@ class Query extends Window {
     const str = val && typeof val === 'object' ? JSON.stringify(val) : val;
     Ractive.helpers.copyToClipboard(str, msg);
   }
+  downloadQuery = downloadQuery;
 }
 Window.extendWith(Query, {
   template: '#query',
@@ -1106,9 +1107,11 @@ class Schema extends Window {
     super(opts);
     this.config = config;
   }
-  compareSchema() {
+  schemaMatchCount(matches) {
+    return Object.values(matches || {}).reduce((a, c) => a + (c?.length || 0), 0);
+  }
+  compareSchema(local, config) {
     const target = this.get('compareSchema');
-    const local = this.get('schema');
     if (target && target.schema !== local) {
       this.set('compareSchema', undefined);
       const left = target.schema.reduce((a, t) => (a[t.name] = { schema: t.schema }, t.columns.reduce((a, c) => (a[`${t.name}.${c.name}`] = c, a), a), a), {});
@@ -1116,35 +1119,39 @@ class Schema extends Window {
       const w = new SchemaCompare({ data: { diff: evaluate({ left, right }, 'diff(left right)') } });
       this.host.addWindow(w, { title: `Comparing schema ${constr(target.config)} to ${constr(this.config || 'Local File')}` });
     } else {
-      this.set('compareSchema', { config: this.config || 'Local File', schema: local });
+      this.set('compareSchema', { config: config || 'Local File', schema: local });
       this.host.toast('Click Compare on another schema to compare', { type: 'info', timeout: 4000 });
     }
+  }
+  colCount(schema) {
+    const tables = schema || [];
+    return tables.reduce((a, c) => a + c.columns.length, 0);
   }
   colsFor(name) {
     const schema = this.get('schema');
     for (const t of schema) if (t.name === name) return t.columns.length;
     return 0;
   }
-  download() {
+  downloadSchema(schema) {
     const db = this.config ? `${this.config.host || 'localhost'}-${this.config.port || 5432}-${this.config.database || 'postgres'}` : `Local File`;
-    download(`schema ${db} ${evaluate(`#now##date,'yyyy-MM-dd HH mm'`)}.pgds`, JSON.stringify(this.get('schema')), 'application/pg-difficult-schema');
+    download(`schema ${db} ${evaluate(`#now##date,'yyyy-MM-dd HH mm'`)}.pgds`, JSON.stringify(schema), 'application/pg-difficult-schema');
   }
 }
 Window.extendWith(Schema, {
   template: '#schema',
   options: { flex: true, resizable: true, width: '50em', height: '35em' },
-  data() { return { expanded: {} }; },
+  data() { return { schemaexpanded: { table: {} } }; },
   helpers: {
     escapeKey: Ractive.escapeKey,
   },
   computed: {
     entries() {
       const res = [];
-      let tables = this.get('schema');
-      const filter = this.get('filter');
-      const expr = this.get('expr');
-      const expanded = this.get('expanded');
-      const sort = this.get('sort');
+      let tables = this.get('schema') || [];
+      const filter = this.get('schemafilter');
+      const expr = this.get('schemaexpr');
+      const expanded = this.get('schemaexpanded.table');
+      const sort = this.get('schemasort');
 
       if (filter) tables = evaluate({ tables, filter }, `filter(tables =>[name] + map(columns =>name) ilike '%{~filter}%')`);
       if (expr) tables = evaluate({ tables }, `filter(tables =>find(columns |column| => (${expr})))`);
@@ -1162,17 +1169,9 @@ Window.extendWith(Schema, {
         if (cols) for (const c of cols) res.push(c);
       }
 
-      setTimeout(() => this.set('matches', matches));
+      setTimeout(() => this.set('schemaMatches', matches));
 
       return res;
-    },
-    colCount() {
-      const tables = this.get('schema');
-      return tables.reduce((a, c) => a + c.columns.length, 0);
-    },
-    matchCount() {
-      const matches = this.get('matches');
-      return Object.values(matches || {}).reduce((a, c) => a + (c?.length || 0), 0);
     },
   },
   on: {
@@ -1251,6 +1250,7 @@ class HostExplore extends Window {
   constructor(opts) { super(opts); }
 
   async refreshHost(con) {
+    const dbs = this.get('hosts.' + Ractive.escapeKey(con.constr));
     this.blocked = true;
     try {
       const res = await request({ action: 'query', query: [listDBQuery], client: con.config });
@@ -1259,6 +1259,12 @@ class HostExplore extends Window {
       this.set('hosts.' + Ractive.escapeKey(con.constr), { error: e.message || e.error });
     }
     this.blocked = false;
+    if (dbs) {
+      const schemas = this.get('schemas');
+      for (const d of dbs) {
+        if (schemas[`${con.constr}@${d.database}`]) this.set(`schemas.${Ractive.escapeKey(`${con.constr}@${d.database}`)}`, undefined);
+      }
+    }
   }
 
   async refreshSchema(selected) {
@@ -1469,11 +1475,12 @@ class HostExplore extends Window {
     });
   }
 
-  entries(tables) {
+  schemaEntries(tables) {
+    tables = tables || [];
     const res = [];
     const filter = this.get('schemafilter');
     const expr = this.get('schemaexpr');
-    const expanded = this.get('schemaexpanded') || {};
+    const expanded = this.get('schemaexpanded.table') || {};
     const sort = this.get('schemasort');
 
     if (filter) tables = evaluate({ tables, filter }, `filter(tables =>[name] + map(columns =>name) ilike '%{~filter}%')`);
@@ -1492,11 +1499,10 @@ class HostExplore extends Window {
       if (cols) for (const c of cols) res.push(c);
     }
 
-    setTimeout(() => this.set('schemamatches', matches));
+    setTimeout(() => this.set('schemaMatches', matches));
 
     return res;
   }
-
   colsFor(name) {
     const selected = this.get('selectedDB');
     if (!selected) return;
@@ -1505,20 +1511,30 @@ class HostExplore extends Window {
     for (const t of schema) if (t.name === name) return t.columns.length;
     return 0;
   }
-
   colCount(tables) {
-    return tables.reduce((a, c) => a + c.columns.length, 0);
+    return (tables || []).reduce((a, c) => a + c.columns.length, 0);
   }
-
-  matchCount(obj) {
+  schemaMatchCount(obj) {
     return Object.values(obj || {}).reduce((a, c) => a + (c?.length || 0), 0);
   }
-
-  download() {
+  downloadSchema() {
     const selected = this.get('selectedDB');
     if (!selected) return;
     const db = `${selected.connection.host || 'localhost'}-${selected.connection.port || 5432}-${selected.entry.database || 'postgres'}`;
     download(`schema ${db} ${evaluate(`#now##date,'yyyy-MM-dd HH mm'`)}.pgds`, JSON.stringify(this.get(`schemas.${Ractive.escapeKey(selected.connection.constr + '@' + selected.entry.database)}.schema`)), 'application/pg-difficult-schema');
+  }
+  compareSchema(local, config) {
+    const target = this.get('compareSchema');
+    if (target && target.schema !== local) {
+      this.set('compareSchema', undefined);
+      const left = target.schema.reduce((a, t) => (a[t.name] = { schema: t.schema }, t.columns.reduce((a, c) => (a[`${t.name}.${c.name}`] = c, a), a), a), {});
+      const right = local.reduce((a, t) => (a[t.name] = { schema: t.schema }, t.columns.reduce((a, c) => (a[`${t.name}.${c.name}`] = c, a), a), a), {});
+      const w = new SchemaCompare({ data: { diff: evaluate({ left, right }, 'diff(left right)') } });
+      this.host.addWindow(w, { title: `Comparing schema ${constr(target.config)} to ${constr(config || 'Local File')}` });
+    } else {
+      this.set('compareSchema', { config: config || 'Local File', schema: local });
+      this.host.toast('Click Compare on another schema to compare', { type: 'info', timeout: 4000 });
+    }
   }
 
   clicked(ev, col, rec) {
@@ -1529,6 +1545,8 @@ class HostExplore extends Window {
     const str = val && typeof val === 'object' ? JSON.stringify(val) : val;
     Ractive.helpers.copyToClipboard(str, msg);
   }
+
+  downloadQuery = downloadQuery;
 }
 Window.extendWith(HostExplore, {
   template: '#host-explore',
@@ -1551,6 +1569,7 @@ dd { white-space: pre-wrap; }
       this.set('settings', Object.assign({}, app.get('settings')));
       this.link('loadedQuery', 'loadedQuery', { instance: app });
       this.link('@', 'app', { instance: app });
+      this.link('compareSchema', 'compareSchema', { instance: app });
     },
   },
   computed: {
@@ -1566,7 +1585,7 @@ dd { white-space: pre-wrap; }
     },
   },
   data() {
-    return { meta: {}, expanded: {} };
+    return { meta: {}, expanded: {}, schemaexpanded: { table: {} } };
   },
   observe: {
     'hosts filter'() {
@@ -1928,6 +1947,19 @@ function load(ext, multi) {
   };
   file.click();
   return res;
+}
+
+async function downloadQuery(result) {
+  const settings = app.get('settings');
+  const field = settings.csv.field || ',';
+  const record = settings.csv.record || '\n';
+  const quote = settings.csv.quote || undefined;
+  const ext = field === ',' ? 'csv' : field === '\\t' ? 'tsv' : 'txt';
+  const name = await app.ask('Please enter a file name:', 'Query Result File Name', `${evaluate('@date#timestamp')} query.${ext}`);
+  if (name) {
+    const txt = run({ type: 'delimited', sources: [{ name: 'results' }], field, record, quote, source: 'results' }, { results: result });
+    download(name, txt, 'text/plain');
+  }
 }
 
 function cloneDeep(any) {

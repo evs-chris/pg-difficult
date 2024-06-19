@@ -3156,7 +3156,7 @@
         if (!fields || !fields.length && values.length) {
             fields = Object.keys(values[0]);
             if (!headers || !headers.length)
-                headers = Object.keys(values[0]).map(k => `'${k.replace(/'/g, '\\\'')}'`);
+                headers = Object.keys(values[0]);
         }
         let res = '';
         if (headers) {
