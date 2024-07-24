@@ -1,5 +1,5 @@
 import * as oak from 'https://deno.land/x/oak@v12.5.0/mod.ts';
-import postgres from 'https://deno.land/x/postgresjs@v3.4.3/mod.js';
+import postgres from 'https://deno.land/x/postgresjs@v3.4.4/mod.js';
 import * as diff from './diff.ts';
 import { decode } from 'https://deno.land/std@0.190.0/encoding/base64url.ts'
 import { open } from 'https://deno.land/x/deno_open@v0.0.6/index.ts';
@@ -35,6 +35,7 @@ interface Connection {
 const config = {
   port: 1999,
   pollingInterval: 10000,
+  monitorInterval: 30000,
   listen: '127.0.0.1',
   noui: false,
   ssl: undefined as any,
@@ -49,6 +50,10 @@ for (let i = 0; i < Deno.args.length; i++) {
 
     case '--interval': case '-t':
       config.pollingInterval = +Deno.args[++i] || 10000;
+      break;
+
+    case '--monitor': case '-m':
+      config.monitorInterval = +Deno.args[++i] || 30000;
       break;
 
     case '--listen': case '-l':
@@ -102,6 +107,7 @@ interface Client {
   config: DatabaseConfig;
   client: postgres.Sql<Record<string, unknown>>;
   lock?: boolean;
+  pong?: { id: number; callback: () => void };
 }
 
 interface State {
@@ -169,6 +175,7 @@ router.get('/ws', ctx => {
   ws.addEventListener('message', ev => {
     message.call(ws, JSON.parse(ev.data));
   });
+  checkDiffListeners();
 });
 
 let dev = false;
@@ -346,6 +353,7 @@ async function reconnectDiff(client: Client) {
     await client.client.end();
   } catch { /* probably already dead */ }
   client.client = postgres(client.config);
+  await client.client`select 1 as x`;
   await connectedDiff(client);
 }
 
@@ -363,8 +371,7 @@ async function connectedDiff(rec: Client) {
       try {
         await rec.client.end();
       } catch {
-        console.log(`Failed to disconnected listener for stopped diff ${source(rec.config)}.`);
-
+        console.log(`Failed to disconnect listener for stopped diff ${source(rec.config)}.`);
       }
       console.log('notifying about remotely stopped diff');
       delete state.diffs[rec.id];
@@ -374,10 +381,33 @@ async function connectedDiff(rec: Client) {
     } else if (v === 'segment') {
       if (req && req.segment) state.segment = req.segment;
       status();
+    } else if (v === 'ping') {
+      if (rec.pong && req.id === rec.pong.id) rec.pong.callback();
     } else if (!v || v === 'record') {
       throttleCheck();
     }
   });
+}
+
+async function listenerPing(client: Client) {
+  if (client.pong) return;
+  const id = Math.floor(Math.random() * 10000);
+  let ok: () => void;
+  let fail: (err: Error) => void;
+  const pr = new Promise<void>((y, n) => {
+    ok = y;
+    fail = n;
+  });
+  const tm = setTimeout(() => {
+    client.pong = undefined;
+    console.log('ping timeout on ', id);
+    fail(new Error('timeout'));
+  }, 5000);
+  client.pong = { id, callback: () => { clearTimeout(tm); ok(); } };
+  await client.client.notify('__pg_difficult', JSON.stringify({ action: 'ping', id }));
+  await pr;
+  client.pong = undefined;
+  return;
 }
 
 async function stop(id: number, save?: true) {
@@ -448,6 +478,11 @@ async function check(ws: WebSocket, client: string|number, id: string, since?: s
   for (const k in state.diffs) {
     if (+client === +k) {
       const client = state.diffs[k];
+      try {
+        await listenerPing(client);
+      } catch {
+        await reconnectDiff(client);
+      }
       const src = source(client.config);
       let res: diff.Entry[];
       try {
@@ -671,7 +706,28 @@ app.addEventListener('listen', ({ secure, hostname, port }) => {
   }
 });
 
+async function checkDiffListeners() {
+  let recon = 0;
+  for (const id in state.diffs) {
+    const d = state.diffs[id];
+    try {
+      await listenerPing(d);
+    } catch (e) {
+      console.error(`listener ping failed, reconnecting...`, e);
+      try {
+        await reconnectDiff(d);
+        recon++;
+      } catch (e) {
+        console.error('failed to reconnect listener for diff', e);
+      }
+    }
+  }
+  if (recon > 0) notify({ action: 'check' });
+}
+const checkInt = setInterval(checkDiffListeners, config.monitorInterval);
+
 async function halt() {
+  clearInterval(checkInt);
   for (const k in state.diffs) {
     const client = state.diffs[k];
     try {
