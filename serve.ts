@@ -500,7 +500,7 @@ async function check(ws: WebSocket, client: string|number, id: string, since?: s
 }
 
 async function schema(ws: WebSocket, client?: string|number|DatabaseConfig, id?: string) {
-  const res: { [id: number]: diff.Table[] } = {};
+  const res: { [id: number]: diff.Schema } = {};
   if (typeof client === 'number' || typeof client === 'string') {
     const c = state.diffs[+client];
     if (!c) return error(`Cannot retrieve schema for unknown client ${client}.`, ws, { id });

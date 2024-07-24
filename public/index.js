@@ -415,13 +415,15 @@ const app = globalThis.app = new App({
   },
   async loadSchema() {
     const file = await load('.pgds,.pgdd');
-    const data = JSON.parse(file.text);
+    let data = JSON.parse(file.text);
     if ('schemas' in data) {
-      for (const [id, schema] of Object.entries(data.schemas)) {
+      for (let [id, schema] of Object.entries(data.schemas)) {
+        if (Array.isArray(schema)) schema = { tables: schema };
         const win = new Schema(undefined, { data: { schema } });
         app.host.addWindow(win, { title: `Loaded diff schema ${id} from ${file.name}` });
       }
     } else {
+      if (Array.isArray(data)) data = { tables: data };
       const win = new Schema(undefined, { data: { schema: data } });
       app.host.addWindow(win, { title: `Loaded schema from ${file.name}` });
     }
@@ -736,13 +738,13 @@ function reverseEntry(entry, schema) {
   if (entry.old && !entry.new) {
     return [`insert into "${entry.schema}"."${entry.table}" (${Object.keys(entry.old).map(k => `"${k}"`).join(', ')}) values (${Object.keys(entry.old).map((_k, i) => `$${i + 1}`).join(', ')})`, Object.values(entry.old)];
   } else if (entry.new && !entry.old) {
-    const tbl = schema.find(t => t.schema === entry.schema && t.name === entry.table);
+    const tbl = schema.tables.find(t => t.schema === entry.schema && t.name === entry.table);
     if (!tbl) return;
     const keys = tbl.columns.filter(c => c.pkey);
     if (keys.length) return [`delete from "${entry.schema}"."${entry.table}" where ${keys.map((k, i) => `"${k.name}" = $${i + 1}`).join(' and ')}`, keys.map(k => entry.new[k.name])];
     else return [`delete from "${entry.schema}"."${entry.table}" where ${tbl.columns.map((c, i) => `"${c.name}" = $${i + 1}`).join(' and ')}`, tbl.columns.map(c => entry.new[c.name])];
   } else {
-    const tbl = schema.find(t => t.schema === entry.schema && t.name === entry.table);
+    const tbl = schema.tables.find(t => t.schema === entry.schema && t.name === entry.table);
     if (!tbl) return;
     const keys = tbl.columns.filter(c => c.pkey);
     // TODO: maybe diff this down to only the changed fields at some point
@@ -1020,7 +1022,7 @@ Window.extendWith(Entries, {
     }
   },
   observe: {
-    'entries.length'() {
+    'tables.length'() {
       if (this.scroller) {
         const s = this.scroller;
         if (s.scrollTop + s.clientHeight >= s.scrollHeight - 10) setTimeout(() => s.scrollTo({ top: s.scrollHeight, behavior: 'smooth', block: 'end' }), 100);
@@ -1102,6 +1104,31 @@ Window.extendWith(Leaks, {
   },
 });
 
+function schemaEntries(schema, which, filter, expr, expanded, sort) {
+  const items = [];
+  let tables = schema?.[which] || [];
+  expanded = expanded || {};
+  expanded = (which === 'views' ? expanded.view : expanded.table) || {};
+
+  if (filter) tables = evaluate({ tables, filter }, `filter(tables =>[name description definition] + map(columns =>name) ilike '%{~filter}%')`);
+  if (expr) tables = evaluate({ tables }, `filter(tables =>find(columns |column| => (${expr})))`);
+
+  const matches = {};
+
+  for (const t of tables) {
+    let cols;
+    if (filter) cols = evaluate({ cols: t.columns, filter }, `filter(cols =>name ilike '%{~filter}%')`);
+    if (expr) cols = evaluate({ cols: cols || t.columns }, `filter(cols |column| => (${expr}))`);
+    matches[t.name] = cols;
+    items.push(t);
+    if (expanded[t.name]) cols = t.columns;
+    if (cols && sort === 'position') cols = evaluate({ cols: cols.slice() }, 'sort(cols =>position)');
+    if (cols) for (const c of cols) items.push(c);
+  }
+
+  return { matches, items };
+}
+
 class Schema extends Window {
   constructor(config, opts) {
     super(opts);
@@ -1114,8 +1141,8 @@ class Schema extends Window {
     const target = this.get('compareSchema');
     if (target && target.schema !== local) {
       this.set('compareSchema', undefined);
-      const left = target.schema.reduce((a, t) => (a[t.name] = { schema: t.schema }, t.columns.reduce((a, c) => (a[`${t.name}.${c.name}`] = c, a), a), a), {});
-      const right = local.reduce((a, t) => (a[t.name] = { schema: t.schema }, t.columns.reduce((a, c) => (a[`${t.name}.${c.name}`] = c, a), a), a), {});
+      const left = target.schema.tables.reduce((a, t) => (a[t.name] = { schema: t.schema }, t.columns.reduce((a, c) => (a[`${t.name}.${c.name}`] = c, a), a), a), {});
+      const right = local.tables.reduce((a, t) => (a[t.name] = { schema: t.schema }, t.columns.reduce((a, c) => (a[`${t.name}.${c.name}`] = c, a), a), a), {});
       const w = new SchemaCompare({ data: { diff: evaluate({ left, right }, 'diff(left right)') } });
       this.host.addWindow(w, { title: `Comparing schema ${constr(target.config)} to ${constr(this.config || 'Local File')}` });
     } else {
@@ -1123,13 +1150,13 @@ class Schema extends Window {
       this.host.toast('Click Compare on another schema to compare', { type: 'info', timeout: 4000 });
     }
   }
-  colCount(schema) {
-    const tables = schema || [];
+  colCount(schema, which) {
+    const tables = schema?.[which] || [];
     return tables.reduce((a, c) => a + c.columns.length, 0);
   }
-  colsFor(name) {
-    const schema = this.get('schema');
-    for (const t of schema) if (t.name === name) return t.columns.length;
+  colsFor(name, which) {
+    const tables = this.get(`schema.${which}`);
+    for (const t of tables) if (t.name === name) return t.columns.length;
     return 0;
   }
   downloadSchema(schema) {
@@ -1145,34 +1172,23 @@ Window.extendWith(Schema, {
     escapeKey: Ractive.escapeKey,
   },
   computed: {
-    entries() {
-      const res = [];
-      let tables = this.get('schema') || [];
-      const filter = this.get('schemafilter');
-      const expr = this.get('schemaexpr');
-      const expanded = this.get('schemaexpanded.table');
-      const sort = this.get('schemasort');
+    tables() {
+      const { matches, items } = schemaEntries(this.get('schema'), 'tables', this.get('schemafilter'), this.get('schemaexpr'), this.get('schemaexpanded'), this.get('schemasort'));
 
-      if (filter) tables = evaluate({ tables, filter }, `filter(tables =>[name] + map(columns =>name) ilike '%{~filter}%')`);
-      if (expr) tables = evaluate({ tables }, `filter(tables =>find(columns |column| => (${expr})))`);
+      setTimeout(() => this.set('schemaMatches.tables', matches));
 
-      const matches = {};
-
-      for (const t of tables) {
-        let cols;
-        if (filter) cols = evaluate({ cols: t.columns, filter }, `filter(cols =>name ilike '%{~filter}%')`);
-        if (expr) cols = evaluate({ cols: cols || t.columns }, `filter(cols |column| => (${expr}))`);
-        matches[t.name] = cols;
-        res.push(t);
-        if (expanded[t.name]) cols = t.columns;
-        if (cols && sort === 'position') cols = evaluate({ cols: cols.slice() }, 'sort(cols =>position)');
-        if (cols) for (const c of cols) res.push(c);
-      }
-
-      setTimeout(() => this.set('schemaMatches', matches));
-
-      return res;
+      return items;
     },
+    views() {
+      const { matches, items } = schemaEntries(this.get('schema'), 'views', this.get('schemafilter'), this.get('schemaexpr'), this.get('schemaexpanded'), this.get('schemasort'));
+
+      setTimeout(() => this.set('schemaMatches.views', matches));
+
+      return items;
+    },
+    functions() {
+      return this.get('schema.functions') || [];
+    }
   },
   on: {
     init() {
@@ -1475,44 +1491,23 @@ class HostExplore extends Window {
     });
   }
 
-  schemaEntries(tables) {
-    tables = tables || [];
-    const res = [];
-    const filter = this.get('schemafilter');
-    const expr = this.get('schemaexpr');
-    const expanded = this.get('schemaexpanded.table') || {};
-    const sort = this.get('schemasort');
+  schemaEntries(schema, which) {
+    const { items, matches } = schemaEntries(schema, which, this.get('schemafilter'), this.get('schemaexpr'), this.get('schemaexpanded'), this.get('schemasort'));
 
-    if (filter) tables = evaluate({ tables, filter }, `filter(tables =>[name] + map(columns =>name) ilike '%{~filter}%')`);
-    if (expr) tables = evaluate({ tables }, `filter(tables =>find(columns |column| => (${expr})))`);
+    setTimeout(() => this.set(`schemaMatches.${which}`, matches));
 
-    const matches = {};
-
-    for (const t of tables) {
-      let cols;
-      if (filter) cols = evaluate({ cols: t.columns, filter }, `filter(cols =>name ilike '%{~filter}%')`);
-      if (expr) cols = evaluate({ cols: cols || t.columns }, `filter(cols |column| => (${expr}))`);
-      matches[t.name] = cols;
-      res.push(t);
-      if (expanded[t.name]) cols = t.columns;
-      if (cols && sort === 'position') cols = evaluate({ cols: cols.slice() }, 'sort(cols =>position)');
-      if (cols) for (const c of cols) res.push(c);
-    }
-
-    setTimeout(() => this.set('schemaMatches', matches));
-
-    return res;
+    return items;
   }
-  colsFor(name) {
+  colsFor(name, which) {
     const selected = this.get('selectedDB');
     if (!selected) return;
     const key = selected.connection.constr + '@' + selected.entry.database;
-    const schema = this.get(`schemas.${Ractive.escapeKey(key)}.schema`);
-    for (const t of schema) if (t.name === name) return t.columns.length;
+    const tables = this.get(`schemas.${Ractive.escapeKey(key)}.schema.${which}`);
+    for (const t of tables) if (t.name === name) return t.columns.length;
     return 0;
   }
-  colCount(tables) {
-    return (tables || []).reduce((a, c) => a + c.columns.length, 0);
+  colCount(schema, which) {
+    return (schema?.[which] || []).reduce((a, c) => a + c.columns.length, 0);
   }
   schemaMatchCount(obj) {
     return Object.values(obj || {}).reduce((a, c) => a + (c?.length || 0), 0);
