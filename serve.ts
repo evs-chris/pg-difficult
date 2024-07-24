@@ -223,7 +223,7 @@ interface Ping { action: 'ping' }
 interface Start { action: 'start'; id: number; config: DatabaseConfig }
 interface Restart { action: 'restart'; id: number; config: DatabaseConfig }
 interface Resume { action: 'resume'; id: number; config: DatabaseConfig }
-interface Stop { action: 'stop', id: number; save?: true }
+interface Stop { action: 'stop', id: number; diff: number; save?: true }
 interface Status { action: 'status'; id: string }
 interface Clear { action: 'clear'; source?: string|number }
 interface Segment { action: 'segment'; segment: string; id?: string }
@@ -243,7 +243,7 @@ async function message(this: WebSocket, msg: Message) {
       case 'start': await start(msg.config, msg.id, this); break;
       case 'resume': await start(msg.config, msg.id, this, 'resume'); break;
       case 'restart': await start(msg.config, msg.id, this, 'restart'); break;
-      case 'stop': await stop(msg.id, msg.save); break;
+      case 'stop': await stop(msg.diff, msg.id, this, msg.save); break;
       case 'status': status(msg.id, this); break;
       case 'clear': await clear(msg.source ? clientForSource(msg.source) : undefined); break;
       case 'segment': await next(msg.segment, this, msg.id); break;
@@ -410,8 +410,8 @@ async function listenerPing(client: Client) {
   return;
 }
 
-async function stop(id: number, save?: true) {
-  const client = state.diffs[id];
+async function stop(did: number, msgid: number, ws: WebSocket, save?: true) {
+  const client = state.diffs[did];
   if (!client) return error('Cannot stop what is not started.');
   if (save || save !== false && Object.keys(state.diffs).length > 1) {
     const entries = await diff.entries(client.client);
@@ -421,7 +421,8 @@ async function stop(id: number, save?: true) {
   }
   await diff.stop(client.client);
   await client.client.end();
-  delete state.diffs[id];
+  delete state.diffs[did];
+  notify({ action: 'stopped', id: msgid }, ws);
   status();
 }
 

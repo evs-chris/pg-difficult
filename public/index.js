@@ -476,11 +476,11 @@ class ControlPanel extends Window {
       if (what) await request({ action: what, config });
     }
   }
-  stopDiff(config) {
+  async stopDiff(config) {
     const clients = Object.values(this.get('status.clients') || {});
     const str = constr(config);
     const client = clients.find(c => c.source === str);
-    if (client) notify({ action: 'stop', id: client.id });
+    if (client) await request({ action: 'stop', diff: client.id });
   }
   async addDiff() {
     const wnd = new Connect();
