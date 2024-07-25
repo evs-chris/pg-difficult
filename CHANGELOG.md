@@ -1,6 +1,16 @@
+## 1.9.1
+
+2024-07-25
+
+### Bugs
+
+* The diff entry view will now use the associated database schema correctly to show record primary keys and be able to hide defaulted or blank fields.
+* The connection monitor table header now displays correctly in dark mode.
+
+
 ## 1.9.0
 
-i2024-07-25
+2024-07-25
 
 ### Bugs
 

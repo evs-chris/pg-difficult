@@ -820,7 +820,7 @@ if entry.old and entry.new {
  set res.status = :removed
  set res.record = sort(entry.old)
 }
-set table = find(schema =>schema == ~entry.schema and name == ~entry.table)
+set table = find(schema.tables =>schema == ~entry.schema and name == ~entry.table)
 set keys = filter(table.columns =>pkey)
 if keys.length then set res.id = join(map(keys =>'{name} = {~entry.old[name] ?? ~entry.new[name]}') ', ')
 if hideBlank then set res.record = filter(res.record =>_ strict-is-not '')
@@ -1047,10 +1047,10 @@ class Leaks extends Window {
 Window.extendWith(Leaks, {
   template: '#leaks',
   options: { flex: true, resizable: true, width: '40em', height: '30em' },
-  css: `
+  css(data) { return `
 .leak { display: flex; flex-wrap: wrap; }
 .leak > * { box-sizing: border-box; padding: 0.2em; }
-.leak.header { font-weight: bold; position: sticky; top: -0.5em; background-color: #fff; border-bottom: 1px solid; z-index: 1; padding-top: 0.5em; }
+.leak.header { font-weight: bold; position: sticky; top: -0.5em; background-color: ${data('raui.window.host.bg') || '#fff'}; border-bottom: 1px solid; z-index: 1; padding: 0.3em; }
 .leak .user { width: 8em; }
 .leak .application { width: 12em; }
 .leak .client { width: 12em; }
@@ -1058,7 +1058,7 @@ Window.extendWith(Leaks, {
 .leak .started { width: 13em; }
 .leak .constr { width: 18em; }
 .leak .pid { width: 6em; text-align: right; }
-`,
+`; },
   computed: {
     leaks() {
       if (this.leakId != null) {
