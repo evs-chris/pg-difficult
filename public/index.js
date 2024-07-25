@@ -820,7 +820,7 @@ if entry.old and entry.new {
  set res.status = :removed
  set res.record = sort(entry.old)
 }
-set table = find(schema =>schema == ~entry.schema and name == ~entry.table)
+set table = find(schema.tables =>schema == ~entry.schema and name == ~entry.table)
 set keys = filter(table.columns =>pkey)
 if keys.length then set res.id = join(map(keys =>'{name} = {~entry.old[name] ?? ~entry.new[name]}') ', ')
 if hideBlank then set res.record = filter(res.record =>_ strict-is-not '')
