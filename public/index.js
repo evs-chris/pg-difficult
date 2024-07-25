@@ -277,6 +277,7 @@ const app = globalThis.app = new App({
         const ml = window.matchMedia('(prefers-color-scheme: dark)');
         v = ml.matches ? 'dark' : 'light';
       }
+      Ractive.styleSet('theme', v);
       if (v === 'light') {
         Ractive.styleSet({
           'raui.primary.bg': '#fff',
@@ -641,8 +642,9 @@ class Query extends Window {
     this.config = config;
   }
   async runQuery(query) {
-    if (this.queryTextArea && this.queryTextArea.selectionStart - this.queryTextArea.selectionEnd) {
-      query = this.queryTextArea.value.slice(this.queryTextArea.selectionStart, this.queryTextArea.selectionEnd);
+    if (this.ace) {
+      const sel = this.getContext(this.ace).decorators.ace.editor.getSelectedText();
+      if (sel) query = sel;
     }
     this.blocked = true;
     try {
@@ -706,6 +708,7 @@ Window.extendWith(Query, {
   on: {
     init() {
       this.set('settings', Object.assign({}, app.get('settings')));
+      this.link('settings.editor', 'editor', { instance: app });
       this.link('loadedQuery', 'loadedQuery', { instance: app });
     },
     raise() {
@@ -1228,7 +1231,7 @@ class ScratchPad extends Window {
   constructor(opts, pad) {
     super(opts);
     const id = this.get('scratchId') || ++scratchId;
-    pad = pad || { id };
+    pad = pad || { id, syntax: 'markdown' };
     setTimeout(() => this.set('pad', JSON.parse(JSON.stringify(pad))));
   }
   save() {
@@ -1243,6 +1246,11 @@ class ScratchPad extends Window {
 Window.extendWith(ScratchPad, {
   template: '#scratch-pad',
   options: { flex: true, resizable: true, minimize: false, width: '50em', height: '35em' },
+  on: {
+    init() {
+      this.link('settings.editor', 'editor', { instance: app });
+    }
+  },
   observe: {
     'pad.name'(n) {
       this.title = `Scratch Pad${n ? ` - ${n}` : ''}`;
@@ -1447,8 +1455,9 @@ class HostExplore extends Window {
     const selected = this.get('selectedDB.connection.config');
     if (!selected) return;
     const client = Object.assign({}, selected, { database: this.get('selectedDB.entry.database') });
-    if (this.queryTextArea && this.queryTextArea.selectionStart - this.queryTextArea.selectionEnd) {
-      query = this.queryTextArea.value.slice(this.queryTextArea.selectionStart, this.queryTextArea.selectionEnd);
+    if (this.ace) {
+      const sel = this.getContext(this.ace).decorators.ace.editor.getSelectedText();
+      if (sel) query = sel;
     }
     this.blocked = true;
     try {
@@ -1565,6 +1574,7 @@ dd { white-space: pre-wrap; }
       this.link('loadedQuery', 'loadedQuery', { instance: app });
       this.link('@', 'app', { instance: app });
       this.link('compareSchema', 'compareSchema', { instance: app });
+      this.link('settings.editor', 'editor', { instance: app });
     },
   },
   computed: {
