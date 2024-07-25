@@ -1,3 +1,19 @@
+## 1.9.0
+
+i2024-07-25
+
+### Bugs
+
+* The pg notification listener will now send pings to make sure the backend doesn't get closed without pg-difficult being notified. This makes it far less likely for changes to be recorded in the database without pg-difficult showing them.
+
+### Features
+
+* Schemas now include views and functions, though only tables are compared when comparing schemas for now.
+* Stopping a diff now gives visual feedback while in process and when it finishes.
+* The query and scratch editors now use Ace editor, which gives syntax highlighting, key bindings, etc. The editor has a few settings exposed in the settings control panel.
+  * Scratch pads can now set a syntax mode.
+
+
 ## 1.8.0
 
 2024-06-13
