@@ -7,7 +7,7 @@ import { fs } from './client.ts';
 
 type JSONValue = postgres.JSONValue;
 
-const VERSION = '1.9.1';
+const VERSION = '1.9.2';
 
 interface DatabaseConfig {
   host: string;

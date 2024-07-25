@@ -11,6 +11,7 @@
     <script src="./raui@0.15.6/Window.js"></script>
     <script src="./raui@0.15.6/AppBar.js"></script>
     <script src="./raui@0.15.6/Shell.js"></script>
+    <script src="./raui@0.15.6/Split.js"></script>
     <script src="./raui@0.15.6/Menu.js"></script>
     <script src="./raui@0.15.6/Popover.js"></script>
     <script src="./raui@0.15.6/Tabs.js"></script>
@@ -538,18 +539,20 @@
       <button title="Download this query result as delimited text (csv/tsv)." on-click="@.downloadQuery(~/result)">Download</button>
     {{/if}}
   </div>
-  <div class="query">
-    <div class="query-text" as-tracked=`ace` as-ace="{ bind: '~/query', syntax: 'pgsql', theme: @style.theme == 'dark' ? 'tomorrow_night_eighties' : 'github', wrap: ~/editor.wrap, highlightActive: ~/editor.highlightActive, fontSize: '1em', font: 'monospace', printMargin: ~/editor.printMargin, keymode: ~/editor.keymode }" on-keydown="@event.ctrlKey && @event.key === 'Enter' ? @.runQuery(~/query) : true" />
-    <div class="result">
-      <data-table auto-titles no-wrap fixed-header allow-select=false on-init="@.set('@.table', $1)" items="{{~/result}}">
-        <bottom>
-          <div style="display:flex; justify-content: space-between;">
-            <span>{{#if !~/result.length && ~/affected != null}}{{~/affected}} rows affected.{{/if}} {{#unless ~/error}}{{~/result.length || 'No'}} rows{{#if ~/result.length}}, {{@.table.data.columns.length}} cols{{/if}}{{/unless}}</span>
-            <span>{{#if ~/runtime != null}}Completed in {{~/runtime}}ms{{/if}}</span>
-          </div>
-        </bottom>
-      </data-table>
-    </div>
+  <div class="query" style="position: relative;">
+    <split>
+      <div size=20 class="query-text" as-tracked=`ace` as-ace="{ bind: '~/query', syntax: 'pgsql', theme: @style.theme == 'dark' ? 'tomorrow_night_eighties' : 'github', wrap: ~/editor.wrap, highlightActive: ~/editor.highlightActive, fontSize: '1em', font: 'monospace', printMargin: ~/editor.printMargin, keymode: ~/editor.keymode }" on-keydown="@event.ctrlKey && @event.key === 'Enter' ? @.runQuery(~/query) : true" />
+      <div class="result">
+        <data-table auto-titles no-wrap fixed-header allow-select=false on-init="@.set('@.table', $1)" items="{{~/result}}">
+          <bottom>
+            <div style="display:flex; justify-content: space-between;">
+              <span>{{#if !~/result.length && ~/affected != null}}{{~/affected}} rows affected.{{/if}} {{#unless ~/error}}{{~/result.length || 'No'}} rows{{#if ~/result.length}}, {{@.table.data.columns.length}} cols{{/if}}{{/unless}}</span>
+              <span>{{#if ~/runtime != null}}Completed in {{~/runtime}}ms{{/if}}</span>
+            </div>
+          </bottom>
+        </data-table>
+      </div>
+    </split>
   </div>
 </script>
 
@@ -909,6 +912,7 @@
       <option>typescript</option>
       <option>ejs</option>
       <option>handlebars</option>
+      <option>csharp</option>
     </select></label>
   </div>
   <div style="flex-grow: 1;" as-ace="{ bind: 'pad.text', syntax: pad.syntax || 'plain_text', theme: @style.theme == 'dark' ? 'tomorrow_night_eighties' : 'github', wrap: ~/editor.wrap, highlightActive: ~/editor.highlightActive, fontSize: '1em', font: 'monospace', printMargin: ~/editor.printMargin, keymode: ~/editor.keymode }" />
@@ -980,7 +984,9 @@
                 {{/if}}
               </tab>
               <tab title="Query" no-pad>
-                {{>query}}
+                <div style="position: relative; height: 100%; flex-grow: 1; display: flex; flex-direction: column;">
+                  {{>query}}
+                </div>
               </tab>
               <tab title="Reports" no-pad>
                 <div style="display: flex; height: 100%; margin-top: 2px;">

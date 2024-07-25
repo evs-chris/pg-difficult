@@ -1,3 +1,16 @@
+## 1.9.2
+
+2024-07-25
+
+### Bugs
+
+* The pg-difficult trigger will no longer be included in schemas.
+
+### Features
+
+* Query views now have a splitter between the sql and the results, allowing them to be resized.
+
+
 ## 1.9.1
 
 2024-07-25
