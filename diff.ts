@@ -217,7 +217,11 @@ export async function schema(client: Client): Promise<Schema> {
     }
   }
 
-  return { tables: tables.filter(t => !t.name.startsWith('__pgdifficult_')), functions, views };
+  return {
+    tables: tables.filter(t => !t.name.startsWith('__pgdifficult_')),
+    functions: functions.filter(f => !f.name.startsWith('__pgdifficult_')),
+    views
+  };
 }
 
 export interface Entry extends Change {
