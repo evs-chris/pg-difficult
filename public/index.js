@@ -3,7 +3,7 @@ const { Window } = RauiWindow;
 
 registerOperator({ type: 'value', names: ['log'], apply: (_name, args) => console.log.apply(console, args) });
 
-Ractive.use(RauiButton.plugin(), RauiForm.plugin({ includeStyle: true }), RauiShell.plugin(), RauiMenu.plugin(), RauiWindow.plugin(), RauiAppBar.plugin(), RauiTabs.plugin(), RauiTable.plugin({ includeGrid: true }), RauiVirtualList.plugin());
+Ractive.use(RauiButton.plugin(), RauiForm.plugin({ includeStyle: true }), RauiShell.plugin(), RauiSplit.plugin(), RauiMenu.plugin(), RauiWindow.plugin(), RauiAppBar.plugin(), RauiTabs.plugin(), RauiTable.plugin({ includeGrid: true }), RauiVirtualList.plugin());
 
 Ractive.perComponentStyleElements = true;
 
@@ -294,6 +294,10 @@ const app = globalThis.app = new App({
               bg: '#dedede',
             },
           },
+          'raui.split.handle': {
+            bg: 'rgba(0, 0, 0, 0.1)',
+            fg: 'rgba(0, 0, 0, 0.4)',
+          },
         });
       } else if (v === 'dark') {
         Ractive.styleSet({
@@ -310,7 +314,11 @@ const app = globalThis.app = new App({
             header: {
               bg: '#2a2a2a',
             },
-          }
+          },
+          'raui.split.handle': {
+            bg: 'rgba(255, 255, 255, 0.1)',
+            fg: 'rgba(255, 255, 255, 0.4)',
+          },
         });
       }
     },
@@ -701,9 +709,9 @@ Window.extendWith(Query, {
   options: { title: 'Query', flex: true, close: true, width: '50em', height: '40em', resizable: true },
   css: `
 .query { flex-grow: 1; display: flex; flex-direction: column; overflow: hidden; }
-.query .query-text { display: flex; min-height: 20%; }
+.query .query-text { height: 100%; }
 .query textarea { width: 100%; border: 0; outline: none; }
-.query .result { display: flex; border-top: 1px solid; overflow: hidden; flex-grow: 1; }
+.query .result { display: flex; border-top: 1px solid; overflow: hidden; flex-grow: 1; height: 100%; box-sizing: border-box; }
 `,
   on: {
     init() {
@@ -1558,9 +1566,9 @@ Window.extendWith(HostExplore, {
     return `div.host { background-color: ${data('raui.primary.bg') || '#fff'}; }
 .filter-pane { background-color: ${data('raui.window.host.bg') || '#eee'}; height: 3.5em; }
 .query { flex-grow: 1; display: flex; flex-direction: column; overflow: hidden; }
-.query .query-text { display: flex; min-height: 20%; }
+.query .query-text { height: 100%; }
 .query textarea { width: 100%; border: 0; outline: none; }
-.query .result { display: flex; border-top: 1px solid; overflow: hidden; flex-grow: 1; }
+.query .result { display: flex; border-top: 1px solid; overflow: hidden; flex-grow: 1; height: 100%; box-sizing: border-box; }
 .selected { background-color: rgba(128, 128, 128, 0.1); }
 dd { white-space: pre-wrap; }
 `;
