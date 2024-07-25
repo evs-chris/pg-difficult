@@ -277,6 +277,7 @@ const app = globalThis.app = new App({
         const ml = window.matchMedia('(prefers-color-scheme: dark)');
         v = ml.matches ? 'dark' : 'light';
       }
+      Ractive.styleSet('theme', v);
       if (v === 'light') {
         Ractive.styleSet({
           'raui.primary.bg': '#fff',
@@ -415,13 +416,15 @@ const app = globalThis.app = new App({
   },
   async loadSchema() {
     const file = await load('.pgds,.pgdd');
-    const data = JSON.parse(file.text);
+    let data = JSON.parse(file.text);
     if ('schemas' in data) {
-      for (const [id, schema] of Object.entries(data.schemas)) {
+      for (let [id, schema] of Object.entries(data.schemas)) {
+        if (Array.isArray(schema)) schema = { tables: schema };
         const win = new Schema(undefined, { data: { schema } });
         app.host.addWindow(win, { title: `Loaded diff schema ${id} from ${file.name}` });
       }
     } else {
+      if (Array.isArray(data)) data = { tables: data };
       const win = new Schema(undefined, { data: { schema: data } });
       app.host.addWindow(win, { title: `Loaded schema from ${file.name}` });
     }
@@ -476,11 +479,11 @@ class ControlPanel extends Window {
       if (what) await request({ action: what, config });
     }
   }
-  stopDiff(config) {
+  async stopDiff(config) {
     const clients = Object.values(this.get('status.clients') || {});
     const str = constr(config);
     const client = clients.find(c => c.source === str);
-    if (client) notify({ action: 'stop', id: client.id });
+    if (client) await request({ action: 'stop', diff: client.id });
   }
   async addDiff() {
     const wnd = new Connect();
@@ -541,14 +544,27 @@ class ControlPanel extends Window {
   exploreHosts() {
     app.exploreHosts();
   }
+  exportSettings() {
+    const json = {};
+    json.settings = app.get('settings');
+    json.connections = app.get('connections');
+    json.savedQueries = app.get('savedQueries');
+    json.savedReports = app.get('savedReports');
+    json.scratchPads = app.get('scratchPads');
+    download(`${window.location.host} ${evaluate('@date#timestamp')} settings.pgdconf`.replace(/:/g, '-'), JSON.stringify(json), 'application/pg-difficult-config');
+  }
+  async importSettings() {
+    const file = (await load('.pgdconf', false)).text;
+    app.set(JSON.parse(file));
+  }
 }
 Window.extendWith(ControlPanel, {
   template: '#control-panel',
   css: `
 .record { display: flex; align-items: center; justify-content: space-between; }
 .connection { display: flex; flex-direction: column; }
-.connection .constr { display: flex; flex-grow: 1; min-width: 20em; align-items: center; justify-content: space-between; }
-.connection .actions { display: flex; justify-content: space-between; }
+.connection .constr { display: flex; flex-grow: 1; min-width: 20em; align-items: center; }
+.connection .actions { display: flex; flex-shrink: 0; justify-content: space-between; }
 .query { display: flex; align-items: center; }
 .query .name { width: 15%; }
 .query .sql { width: 60%; }
@@ -626,8 +642,9 @@ class Query extends Window {
     this.config = config;
   }
   async runQuery(query) {
-    if (this.queryTextArea && this.queryTextArea.selectionStart - this.queryTextArea.selectionEnd) {
-      query = this.queryTextArea.value.slice(this.queryTextArea.selectionStart, this.queryTextArea.selectionEnd);
+    if (this.ace) {
+      const sel = this.getContext(this.ace).decorators.ace.editor.getSelectedText();
+      if (sel) query = sel;
     }
     this.blocked = true;
     try {
@@ -677,6 +694,7 @@ class Query extends Window {
     const str = val && typeof val === 'object' ? JSON.stringify(val) : val;
     Ractive.helpers.copyToClipboard(str, msg);
   }
+  downloadQuery = downloadQuery;
 }
 Window.extendWith(Query, {
   template: '#query',
@@ -690,6 +708,7 @@ Window.extendWith(Query, {
   on: {
     init() {
       this.set('settings', Object.assign({}, app.get('settings')));
+      this.link('settings.editor', 'editor', { instance: app });
       this.link('loadedQuery', 'loadedQuery', { instance: app });
     },
     raise() {
@@ -722,13 +741,13 @@ function reverseEntry(entry, schema) {
   if (entry.old && !entry.new) {
     return [`insert into "${entry.schema}"."${entry.table}" (${Object.keys(entry.old).map(k => `"${k}"`).join(', ')}) values (${Object.keys(entry.old).map((_k, i) => `$${i + 1}`).join(', ')})`, Object.values(entry.old)];
   } else if (entry.new && !entry.old) {
-    const tbl = schema.find(t => t.schema === entry.schema && t.name === entry.table);
+    const tbl = schema.tables.find(t => t.schema === entry.schema && t.name === entry.table);
     if (!tbl) return;
     const keys = tbl.columns.filter(c => c.pkey);
     if (keys.length) return [`delete from "${entry.schema}"."${entry.table}" where ${keys.map((k, i) => `"${k.name}" = $${i + 1}`).join(' and ')}`, keys.map(k => entry.new[k.name])];
     else return [`delete from "${entry.schema}"."${entry.table}" where ${tbl.columns.map((c, i) => `"${c.name}" = $${i + 1}`).join(' and ')}`, tbl.columns.map(c => entry.new[c.name])];
   } else {
-    const tbl = schema.find(t => t.schema === entry.schema && t.name === entry.table);
+    const tbl = schema.tables.find(t => t.schema === entry.schema && t.name === entry.table);
     if (!tbl) return;
     const keys = tbl.columns.filter(c => c.pkey);
     // TODO: maybe diff this down to only the changed fields at some point
@@ -1006,7 +1025,7 @@ Window.extendWith(Entries, {
     }
   },
   observe: {
-    'entries.length'() {
+    'tables.length'() {
       if (this.scroller) {
         const s = this.scroller;
         if (s.scrollTop + s.clientHeight >= s.scrollHeight - 10) setTimeout(() => s.scrollTo({ top: s.scrollHeight, behavior: 'smooth', block: 'end' }), 100);
@@ -1088,79 +1107,91 @@ Window.extendWith(Leaks, {
   },
 });
 
+function schemaEntries(schema, which, filter, expr, expanded, sort) {
+  const items = [];
+  let tables = schema?.[which] || [];
+  expanded = expanded || {};
+  expanded = (which === 'views' ? expanded.view : expanded.table) || {};
+
+  if (filter) tables = evaluate({ tables, filter }, `filter(tables =>[name description definition] + map(columns =>name) ilike '%{~filter}%')`);
+  if (expr) tables = evaluate({ tables }, `filter(tables =>find(columns |column| => (${expr})))`);
+
+  const matches = {};
+
+  for (const t of tables) {
+    let cols;
+    if (filter) cols = evaluate({ cols: t.columns, filter }, `filter(cols =>name ilike '%{~filter}%')`);
+    if (expr) cols = evaluate({ cols: cols || t.columns }, `filter(cols |column| => (${expr}))`);
+    matches[t.name] = cols;
+    items.push(t);
+    if (expanded[t.name]) cols = t.columns;
+    if (cols && sort === 'position') cols = evaluate({ cols: cols.slice() }, 'sort(cols =>position)');
+    if (cols) for (const c of cols) items.push(c);
+  }
+
+  return { matches, items };
+}
+
 class Schema extends Window {
   constructor(config, opts) {
     super(opts);
     this.config = config;
   }
-  compareSchema() {
+  schemaMatchCount(matches) {
+    return Object.values(matches || {}).reduce((a, c) => a + (c?.length || 0), 0);
+  }
+  compareSchema(local, config) {
     const target = this.get('compareSchema');
-    const local = this.get('schema');
     if (target && target.schema !== local) {
       this.set('compareSchema', undefined);
-      const left = target.schema.reduce((a, t) => (a[t.name] = { schema: t.schema }, t.columns.reduce((a, c) => (a[`${t.name}.${c.name}`] = c, a), a), a), {});
-      const right = local.reduce((a, t) => (a[t.name] = { schema: t.schema }, t.columns.reduce((a, c) => (a[`${t.name}.${c.name}`] = c, a), a), a), {});
+      const left = target.schema.tables.reduce((a, t) => (a[t.name] = { schema: t.schema }, t.columns.reduce((a, c) => (a[`${t.name}.${c.name}`] = c, a), a), a), {});
+      const right = local.tables.reduce((a, t) => (a[t.name] = { schema: t.schema }, t.columns.reduce((a, c) => (a[`${t.name}.${c.name}`] = c, a), a), a), {});
       const w = new SchemaCompare({ data: { diff: evaluate({ left, right }, 'diff(left right)') } });
       this.host.addWindow(w, { title: `Comparing schema ${constr(target.config)} to ${constr(this.config || 'Local File')}` });
     } else {
-      this.set('compareSchema', { config: this.config || 'Local File', schema: local });
+      this.set('compareSchema', { config: config || 'Local File', schema: local });
       this.host.toast('Click Compare on another schema to compare', { type: 'info', timeout: 4000 });
     }
   }
-  colsFor(name) {
-    const schema = this.get('schema');
-    for (const t of schema) if (t.name === name) return t.columns.length;
+  colCount(schema, which) {
+    const tables = schema?.[which] || [];
+    return tables.reduce((a, c) => a + c.columns.length, 0);
+  }
+  colsFor(name, which) {
+    const tables = this.get(`schema.${which}`);
+    for (const t of tables) if (t.name === name) return t.columns.length;
     return 0;
   }
-  download() {
+  downloadSchema(schema) {
     const db = this.config ? `${this.config.host || 'localhost'}-${this.config.port || 5432}-${this.config.database || 'postgres'}` : `Local File`;
-    download(`schema ${db} ${evaluate(`#now##date,'yyyy-MM-dd HH mm'`)}.pgds`, JSON.stringify(this.get('schema')), 'application/pg-difficult-schema');
+    download(`schema ${db} ${evaluate(`#now##date,'yyyy-MM-dd HH mm'`)}.pgds`, JSON.stringify(schema), 'application/pg-difficult-schema');
   }
 }
 Window.extendWith(Schema, {
   template: '#schema',
   options: { flex: true, resizable: true, width: '50em', height: '35em' },
-  data() { return { expanded: {} }; },
+  data() { return { schemaexpanded: { table: {} } }; },
   helpers: {
     escapeKey: Ractive.escapeKey,
   },
   computed: {
-    entries() {
-      const res = [];
-      let tables = this.get('schema');
-      const filter = this.get('filter');
-      const expr = this.get('expr');
-      const expanded = this.get('expanded');
-      const sort = this.get('sort');
+    tables() {
+      const { matches, items } = schemaEntries(this.get('schema'), 'tables', this.get('schemafilter'), this.get('schemaexpr'), this.get('schemaexpanded'), this.get('schemasort'));
 
-      if (filter) tables = evaluate({ tables, filter }, `filter(tables =>[name] + map(columns =>name) ilike '%{~filter}%')`);
-      if (expr) tables = evaluate({ tables }, `filter(tables =>find(columns |column| => (${expr})))`);
+      setTimeout(() => this.set('schemaMatches.tables', matches));
 
-      const matches = {};
-
-      for (const t of tables) {
-        let cols;
-        if (filter) cols = evaluate({ cols: t.columns, filter }, `filter(cols =>name ilike '%{~filter}%')`);
-        if (expr) cols = evaluate({ cols: cols || t.columns }, `filter(cols |column| => (${expr}))`);
-        matches[t.name] = cols;
-        res.push(t);
-        if (expanded[t.name]) cols = t.columns;
-        if (cols && sort === 'position') cols = evaluate({ cols: cols.slice() }, 'sort(cols =>position)');
-        if (cols) for (const c of cols) res.push(c);
-      }
-
-      setTimeout(() => this.set('matches', matches));
-
-      return res;
+      return items;
     },
-    colCount() {
-      const tables = this.get('schema');
-      return tables.reduce((a, c) => a + c.columns.length, 0);
+    views() {
+      const { matches, items } = schemaEntries(this.get('schema'), 'views', this.get('schemafilter'), this.get('schemaexpr'), this.get('schemaexpanded'), this.get('schemasort'));
+
+      setTimeout(() => this.set('schemaMatches.views', matches));
+
+      return items;
     },
-    matchCount() {
-      const matches = this.get('matches');
-      return Object.values(matches || {}).reduce((a, c) => a + (c?.length || 0), 0);
-    },
+    functions() {
+      return this.get('schema.functions') || [];
+    }
   },
   on: {
     init() {
@@ -1200,7 +1231,7 @@ class ScratchPad extends Window {
   constructor(opts, pad) {
     super(opts);
     const id = this.get('scratchId') || ++scratchId;
-    pad = pad || { id };
+    pad = pad || { id, syntax: 'markdown' };
     setTimeout(() => this.set('pad', JSON.parse(JSON.stringify(pad))));
   }
   save() {
@@ -1215,6 +1246,11 @@ class ScratchPad extends Window {
 Window.extendWith(ScratchPad, {
   template: '#scratch-pad',
   options: { flex: true, resizable: true, minimize: false, width: '50em', height: '35em' },
+  on: {
+    init() {
+      this.link('settings.editor', 'editor', { instance: app });
+    }
+  },
   observe: {
     'pad.name'(n) {
       this.title = `Scratch Pad${n ? ` - ${n}` : ''}`;
@@ -1238,6 +1274,7 @@ class HostExplore extends Window {
   constructor(opts) { super(opts); }
 
   async refreshHost(con) {
+    const dbs = this.get('hosts.' + Ractive.escapeKey(con.constr));
     this.blocked = true;
     try {
       const res = await request({ action: 'query', query: [listDBQuery], client: con.config });
@@ -1246,6 +1283,12 @@ class HostExplore extends Window {
       this.set('hosts.' + Ractive.escapeKey(con.constr), { error: e.message || e.error });
     }
     this.blocked = false;
+    if (dbs) {
+      const schemas = this.get('schemas');
+      for (const d of dbs) {
+        if (schemas[`${con.constr}@${d.database}`]) this.set(`schemas.${Ractive.escapeKey(`${con.constr}@${d.database}`)}`, undefined);
+      }
+    }
   }
 
   async refreshSchema(selected) {
@@ -1412,8 +1455,9 @@ class HostExplore extends Window {
     const selected = this.get('selectedDB.connection.config');
     if (!selected) return;
     const client = Object.assign({}, selected, { database: this.get('selectedDB.entry.database') });
-    if (this.queryTextArea && this.queryTextArea.selectionStart - this.queryTextArea.selectionEnd) {
-      query = this.queryTextArea.value.slice(this.queryTextArea.selectionStart, this.queryTextArea.selectionEnd);
+    if (this.ace) {
+      const sel = this.getContext(this.ace).decorators.ace.editor.getSelectedText();
+      if (sel) query = sel;
     }
     this.blocked = true;
     try {
@@ -1456,56 +1500,45 @@ class HostExplore extends Window {
     });
   }
 
-  entries(tables) {
-    const res = [];
-    const filter = this.get('schemafilter');
-    const expr = this.get('schemaexpr');
-    const expanded = this.get('schemaexpanded') || {};
-    const sort = this.get('schemasort');
+  schemaEntries(schema, which) {
+    const { items, matches } = schemaEntries(schema, which, this.get('schemafilter'), this.get('schemaexpr'), this.get('schemaexpanded'), this.get('schemasort'));
 
-    if (filter) tables = evaluate({ tables, filter }, `filter(tables =>[name] + map(columns =>name) ilike '%{~filter}%')`);
-    if (expr) tables = evaluate({ tables }, `filter(tables =>find(columns |column| => (${expr})))`);
+    setTimeout(() => this.set(`schemaMatches.${which}`, matches));
 
-    const matches = {};
-
-    for (const t of tables) {
-      let cols;
-      if (filter) cols = evaluate({ cols: t.columns, filter }, `filter(cols =>name ilike '%{~filter}%')`);
-      if (expr) cols = evaluate({ cols: cols || t.columns }, `filter(cols |column| => (${expr}))`);
-      matches[t.name] = cols;
-      res.push(t);
-      if (expanded[t.name]) cols = t.columns;
-      if (cols && sort === 'position') cols = evaluate({ cols: cols.slice() }, 'sort(cols =>position)');
-      if (cols) for (const c of cols) res.push(c);
-    }
-
-    setTimeout(() => this.set('schemamatches', matches));
-
-    return res;
+    return items;
   }
-
-  colsFor(name) {
+  colsFor(name, which) {
     const selected = this.get('selectedDB');
     if (!selected) return;
     const key = selected.connection.constr + '@' + selected.entry.database;
-    const schema = this.get(`schemas.${Ractive.escapeKey(key)}.schema`);
-    for (const t of schema) if (t.name === name) return t.columns.length;
+    const tables = this.get(`schemas.${Ractive.escapeKey(key)}.schema.${which}`);
+    for (const t of tables) if (t.name === name) return t.columns.length;
     return 0;
   }
-
-  colCount(tables) {
-    return tables.reduce((a, c) => a + c.columns.length, 0);
+  colCount(schema, which) {
+    return (schema?.[which] || []).reduce((a, c) => a + c.columns.length, 0);
   }
-
-  matchCount(obj) {
+  schemaMatchCount(obj) {
     return Object.values(obj || {}).reduce((a, c) => a + (c?.length || 0), 0);
   }
-
-  download() {
+  downloadSchema() {
     const selected = this.get('selectedDB');
     if (!selected) return;
     const db = `${selected.connection.host || 'localhost'}-${selected.connection.port || 5432}-${selected.entry.database || 'postgres'}`;
     download(`schema ${db} ${evaluate(`#now##date,'yyyy-MM-dd HH mm'`)}.pgds`, JSON.stringify(this.get(`schemas.${Ractive.escapeKey(selected.connection.constr + '@' + selected.entry.database)}.schema`)), 'application/pg-difficult-schema');
+  }
+  compareSchema(local, config) {
+    const target = this.get('compareSchema');
+    if (target && target.schema !== local) {
+      this.set('compareSchema', undefined);
+      const left = target.schema.reduce((a, t) => (a[t.name] = { schema: t.schema }, t.columns.reduce((a, c) => (a[`${t.name}.${c.name}`] = c, a), a), a), {});
+      const right = local.reduce((a, t) => (a[t.name] = { schema: t.schema }, t.columns.reduce((a, c) => (a[`${t.name}.${c.name}`] = c, a), a), a), {});
+      const w = new SchemaCompare({ data: { diff: evaluate({ left, right }, 'diff(left right)') } });
+      this.host.addWindow(w, { title: `Comparing schema ${constr(target.config)} to ${constr(config || 'Local File')}` });
+    } else {
+      this.set('compareSchema', { config: config || 'Local File', schema: local });
+      this.host.toast('Click Compare on another schema to compare', { type: 'info', timeout: 4000 });
+    }
   }
 
   clicked(ev, col, rec) {
@@ -1516,6 +1549,8 @@ class HostExplore extends Window {
     const str = val && typeof val === 'object' ? JSON.stringify(val) : val;
     Ractive.helpers.copyToClipboard(str, msg);
   }
+
+  downloadQuery = downloadQuery;
 }
 Window.extendWith(HostExplore, {
   template: '#host-explore',
@@ -1538,6 +1573,8 @@ dd { white-space: pre-wrap; }
       this.set('settings', Object.assign({}, app.get('settings')));
       this.link('loadedQuery', 'loadedQuery', { instance: app });
       this.link('@', 'app', { instance: app });
+      this.link('compareSchema', 'compareSchema', { instance: app });
+      this.link('settings.editor', 'editor', { instance: app });
     },
   },
   computed: {
@@ -1553,7 +1590,7 @@ dd { white-space: pre-wrap; }
     },
   },
   data() {
-    return { meta: {}, expanded: {} };
+    return { meta: {}, expanded: {}, schemaexpanded: { table: {} } };
   },
   observe: {
     'hosts filter'() {
@@ -1915,6 +1952,19 @@ function load(ext, multi) {
   };
   file.click();
   return res;
+}
+
+async function downloadQuery(result) {
+  const settings = app.get('settings');
+  const field = settings.csv.field || ',';
+  const record = settings.csv.record || '\n';
+  const quote = settings.csv.quote || undefined;
+  const ext = field === ',' ? 'csv' : field === '\\t' ? 'tsv' : 'txt';
+  const name = await app.ask('Please enter a file name:', 'Query Result File Name', `${evaluate('@date#timestamp')} query.${ext}`);
+  if (name) {
+    const txt = run({ type: 'delimited', sources: [{ name: 'results' }], field, record, quote, source: 'results' }, { results: result });
+    download(name, txt, 'text/plain');
+  }
 }
 
 function cloneDeep(any) {

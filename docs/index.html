@@ -5,6 +5,7 @@
     <link rel="shortcut icon" href="./icon.png" />
     <script src="./ractive@1.4.2.js"></script>
     <script src="./raport@0.24.7.js"></script>
+    <script src="./raui@0.15.6/ace-editor.js"></script>
     <script src="./raui@0.15.6/button.js"></script>
     <script src="./raui@0.15.6/form.js"></script>
     <script src="./raui@0.15.6/Window.js"></script>
@@ -20,6 +21,17 @@
     margin: 0;
     padding: 0;
     font-family: sans-serif;
+    width: 100%;
+    height: 100%;
+    box-sizing: border-box;
+  }
+  #target {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    box-sizing: border-box;
   }
   h1, h2, h3 {
     margin: 0;
@@ -182,11 +194,16 @@
   .schema-row { padding: 0.2em; position: relative; display: flex; flex-wrap: no-wrap; }
   .table { cursor: pointer; position: sticky; top: 0; z-index: 10; }
   .column .name { padding-left: 1.7em; box-sizing: border-box; }
-  .schema-row > * { overflow: hidden; text-overflow: ellipsis; }
+  .schema-row > * { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
   .schema-row .name { width: 55%; }
   .schema-row.table { display: flex; }
   .schema-row.table .name { width: auto; flex-grow: 1; }
   .schema-row.table .details { opacity: 0.5; }
+  .schema-row.fn { display: flex; }
+  .schema-row.fn .name { width: 20%; cursor: pointer; }
+  .schema-row.fn .lang { width: 11%; }
+  .schema-row.fn .args { width: 47%; }
+  .schema-row.fn .result { width: 22%; }
   .schema-row .name.pkey { font-weight: bold; }
   .schema-row .type { width: 20%; }
   .schema-row .nullable { width: 7%; text-align: center; }
@@ -291,7 +308,7 @@
 </script>
 
 <script type=text/ractive id=control-panel>
-  <tabs pad style="overflow: hidden;">
+  <tabs pad style="overflow: hidden; height: 100%;">
     <tab title="Connections" hidden="@global.clientOnly">
       <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.3em;">
         <div>Connections are saved in browser storage and can be used to start diffs and run queries.<br/><br/><span style="color: #ca3c3c; font-weight: bold;">WARNING:</span> Starting a diff on a database will create two tables, create a function, and a then set the function as a trigger for each existing table in the database. A running diff in a database <em>will</em> cause performance degradation, especially if left to collect thousands of changes.</div>
@@ -301,12 +318,12 @@
         {{#each connections}}
           <div class="connection striped">
             <div class="constr">
-              <div>{{constr(.)}}</div>
-              <div>
+              <div style="flex-grow: 1;">{{#if .label}}<strong>{{.label}}</strong> ({{constr(.)}}){{else}}{{constr(.)}}{{/if}}</div>
+              <div style="width: 9em; flex-shrink: 0;">
                 <button class=flat disabled="{{@index === 0}}" on-click="moveUp(@context, @event.shiftKey || @event.ctrlKey)" title="Move up, hold shift or ctrl to move to top">&#9650;</button>
                 <button class=flat disabled="{{@index === @last}}" on-click="moveDown(@context, @event.shiftKey || @event.ctrlKey)" title="Move down, hold shift or ctrl to move to bottom">&#9660;</button>
               </div>
-              <div>
+              <div style="width: 13em; flex-shrink: 0;">
                 <button class=flat on-click="@.editConnection(@index)" {{#if @.hasDiff(.) || @.hasLeak(.)}}disabled title="Stop active watchers to modify this connection"{{else}}title="Edit this saved connection."{{/if}}>Edit</button>
                 <button class=flat on-click="@.splice('connections', @index, 1)" {{#if @.hasDiff(.) || @.hasLeak(.)}}disabled title="Stop active watchers to modify this connection"{{else}}title="Remove this saved connection."{{/if}}>Remove</button><br/>
               </div>
@@ -470,6 +487,30 @@
         {{/if}}
         <label as-field class=inline><input type=checkbox bind-checked="~/settings.hideBlankFields" /> Hide empty string fields in diff records by default?</label>
         <label as-field class=inline><input type=checkbox bind-checked="~/settings.hideDefaultFields" /> Hide defaulted fields in diff records by default?</label>
+        <fieldset style="margin-top: 1em;">
+          <legend>Editor Options</legend>
+          <label as-field class=inline><input type=checkbox checked="{{~/settings.editor.highlightActive}}" /> Highlight active line?</label>
+          <label as-field class=inline><input type=checkbox checked="{{~/settings.editor.wrap}}" /> Word wrap?</label>
+          <label as-field class=inline><input type=checkbox checked="{{~/settings.editor.printMargin}}" /> Show print margin?</label>
+          <div class=break />
+          <label as-field>Input Mode<select value="{{~/settings.editor.keymode}}">
+            <option value="{{undefined}}">default</option>
+            <option>emacs</option>
+            <option>sublime</option>
+            <option>vim</option>
+            <option>vscode</option>
+          </select></label>
+        </fieldset>
+        <fieldset style="margin-top: 1em;">
+          <legend>Delimited Text Options</legend>
+          <label as-field title="The delimiter to use between fields when rendering a data set as delimited text e.g. , (comma), \t (tab), | (pipe). Defaults to ,">Field Delimiter<input value="{{~/settings.csv.field}}" placeholder="," /></label>
+          <label as-field title="The delimiter to use between records when rendering a data set as delimited text e.g. \n (line feed), \r (carriage return), \r\n (carriage return, line feed). Defaults to \n">Record Delimiter<input value="{{~/settings.csv.record}}" placeholder="\n" /></label>
+          <label as-field title="The quote to use around fields when rendering a data set as delimited text e.g. ' (single quote), &quot; (double quote), $$ (dollar, dollar). Defaults to none">Field Quote<input value="{{~/settings.csv.quote}}" /></label>
+        </fieldset>
+        <div style="margin-top: 1em;">
+          <button on-click="@.exportSettings()">Export Settings</button>
+          <button on-click="@.importSettings()">Import Settings</button>
+        </div>
       </div>
     </tab>
   </tabs>
@@ -483,19 +524,22 @@
 
 <script type=text/ractive id=query>
   <div style="border-bottom: 1px solid; display: flex; justify-content: space-between;">
-    <button on-click="@.runQuery(~/query)" title="Execute this query and return the result. (ctrl+Enter)">Run</button>
+    <button on-click="@.runQuery(~/query)" title="Execute this query and return the result. (ctrl+Enter){{'\n\n'}}Highlight text to execute only the highlighted portion as a query.">Run</button>
     <label as-field class=inline><input type=checkbox bind-checked="~/settings.queryOrderColumns" /> Order query result columns alphabetically?</label>
     {{#if ~/loadedQuery}}
       <button on-click="@.loadQuery()" title="Load the selected saved query in this window.">Load Query</button>
     {{elseif ~/query}}
       <div>
-        <button on-click="@.saveQuery()">Save</button>
+        <button on-click="@.saveQuery()" title="Save this query to the control panel Saved Queries.">Save</button>
         {{#if ~/name}}<button on-click="@.set('name', undefined)" title="This query is currently saved as {{~/name}}. Click here to disconnect this query from that named query. When the query is disconnected, it may be saved with a different name.">Unload</button>{{/if}}
       </div>
     {{/if}}
+    {{#if ~/result.length}}
+      <button title="Download this query result as delimited text (csv/tsv)." on-click="@.downloadQuery(~/result)">Download</button>
+    {{/if}}
   </div>
   <div class="query">
-    <div class="query-text"><textarea as-tracked=`queryTextArea` value="{{~/query}}" on-keydown="@event.ctrlKey && @event.key === 'Enter' ? @.runQuery(~/query) : true" /></div>
+    <div class="query-text" as-tracked=`ace` as-ace="{ bind: '~/query', syntax: 'pgsql', theme: @style.theme == 'dark' ? 'tomorrow_night_eighties' : 'github', wrap: ~/editor.wrap, highlightActive: ~/editor.highlightActive, fontSize: '1em', font: 'monospace', printMargin: ~/editor.printMargin, keymode: ~/editor.keymode }" on-keydown="@event.ctrlKey && @event.key === 'Enter' ? @.runQuery(~/query) : true" />
     <div class="result">
       <data-table auto-titles no-wrap fixed-header allow-select=false on-init="@.set('@.table', $1)" items="{{~/result}}">
         <bottom>
@@ -673,63 +717,161 @@
 
 <script type=text/ractive id=schema>
   <div class=content-wrapper>
-    <virtual-list bind-items="~/entries" size=34 style="flex-grow: 1;">
-      <header>
-        <div style="border-bottom: 1px solid;">
-          <div class="stretch-fields">
-            <label as-field>Search<input value="{{~/filter}}" lazy=500 /></label>
-            <label as-field title="Available fields are column.{name, default, enum, type, pgtype, nullable, length, precision, pkey, schema, table}">Expression<input value="{{~/expr}}" lazy=500 /></label>
-            {{#if !~/compareSchema || ~/compareSchema.schema !== ~/schema}}
-              <label as-field style="flex-grow: 0;"><button on-click="@.compareSchema()" title="Compare this schema to another database's schema.">Compare</button></label>
-            {{else}}
-              <label as-field style="flex-grow: 0;"><button on-click="@.set('compareSchema', undefined)" title="Cancel eaiting for another schema to be selected to compare to this schema.">Cancel</button></label>
-            {{/if}}
-            <label as-field style="flex-grow: 0;"><button on-click="@.download()" title="Download a file containing this schema.">Download</button></label>
-          </div>
-          <div class="schema-row" style="font-weight: bold;">
-            <div class="name" style="cursor: pointer;" title="Click to sort columns by {{~/sort === 'position' ? 'name' : 'position'}}" on-click="@.set('sort', ~/sort === 'position' ? 'name' : 'position')">Name ({{~/sort === 'position' ? '#' : 'A'}})</div>
-            <div class="nullable">Null</div>
-            <div class="default">Default</div>
-            <div class="type">Type</div>
-            <div class="size">Size</div>
-          </div>
-        </div>
-        {{#if index}}
-          <div class="schema-row table" style="padding: 0.5em;" on-click="@.toggle('expanded.' + escapeKey(.table || .name))">
-            <div class="name">{{.table || .name}}</div>
-            <div class="details">({{@.colsFor(.table || .name)}} cols{{#if ~/filter || ~/expr}}, {{~/matches[.table || .name].length}} match{{/if}})</div>
-          </div>
-        {{/if}}
-      </header>
-      <item class="striped-{{index % 2 ? 'odd' : 'even'}}">
-        {{#if !.table}}
-          <div class="schema-row table" on-click="@.toggle('expanded.' + escapeKey(.name))">
-            <div class="name">{{.name}}</div>
-            <div class="details">({{.columns.length}} cols{{#if ~/filter || ~/expr}}, {{matches[.name].length}} match{{/if}})</div>
-          </div>
-        {{else}}
-          <div class="schema-row column">
-            <div class="name {{#if .pkey}}pkey{{/if}}" {{#if .default}}title="Default: {{.default}}"{{/if}}>
-              <div class=expand-indicator class-expanded class-matched />
-              {{.name}}
-            </div>
-            <div class="nullable">{{.nullable ? 'Y' : 'N'}}</div>
-            <div class="default" {{#if .default}}title="{{.default}}"{{/if}}>{{.default ? 'Y' : 'N'}}</div>
-            <div class="type" {{#if .enum}}title="Values: {{.enum.join(', ')}}"{{/if}}>{{.pgtype}}</div>
-            <div class="size">{{#if .length != null}}{{.length}}{{elseif .precision != null}}{{.precision}}{{/if}}</div>
-          </div>
-        {{/if}}
-      </item>
-      <else>
-        <div class="schema-row">
-          No {{#if ~/filter || ~/expr}}matching{{/if}} tables or columns.
-        </div>
-      </else>
-    </virtual-list>
-    <div style="padding: 0.5em; border-top: 1px solid;">
-      {{~/schema.length}} tables, {{~/colCount}} columns{{#if ~/filter || ~/expr}}, {{~/matchCount}} match{{/if}}
-    </div>
+    {{#with ~/entries as entries, ~/schema as _schema, @.config as _config}}
+      {{>schema-inner}}
+    {{/with}}
   </div>
+</script>
+
+<script type=text/ractive id=schema-inner>
+  <tabs style="height: calc(100% - 2px); margin-top: 2px;">
+    <tab title=Tables>
+      <virtual-list bind-items="tables" size=34 style="flex-grow: 1;">
+        <header>
+          <div style="border-bottom: 1px solid;">
+            <div class="stretch-fields">
+              <label as-field>Search<input value="{{~/schemafilter}}" lazy=500 /></label>
+              <label as-field title="Available fields are column.{name, default, enum, type, pgtype, nullable, length, precision, pkey, schema, table, description}">Expression<input value="{{~/schemaexpr}}" lazy=500 /></label>
+              {{#if !~/compareSchema || ~/compareSchema.schema !== _schema}}
+                <label as-field style="flex-grow: 0;"><button on-click="@.compareSchema(_schema, _config)" title="Compare this schema to another database's schema.">Compare</button></label>
+              {{else}}
+                <label as-field style="flex-grow: 0;"><button on-click="@.set('compareSchema', undefined)" title="Cancel waiting for another schema to be selected to compare to this schema.">Cancel</button></label>
+              {{/if}}
+              <label as-field style="flex-grow: 0;"><button on-click="@.downloadSchema(_schema)" title="Download a file containing this schema.">Download</button></label>
+            </div>
+            <div class="schema-row" style="font-weight: bold;">
+              <div class="name" style="cursor: pointer;" title="Click to sort columns by {{~/schemasort === 'position' ? 'name' : 'position'}}" on-click="@.set('schemasort', ~/schemasort === 'position' ? 'name' : 'position')">Name ({{~/schemasort === 'position' ? '#' : 'A'}})</div>
+              <div class="nullable">Null</div>
+              <div class="default">Default</div>
+              <div class="type">Type</div>
+              <div class="size">Size</div>
+            </div>
+          </div>
+          {{#if index}}
+            <div class="schema-row table" style="padding: 0.5em;" on-click="@.toggle('schemaexpanded.table.' + escapeKey(.table || .name))">
+              <div class="name">{{.table || .name}}</div>
+              <div class="details">({{@.colsFor(.table || .name, 'tables')}} cols{{#if ~/schemafilter || ~/schemaexpr}}, {{~/schemaMatches.tables[.table || .name].length}} match{{/if}})</div>
+            </div>
+          {{/if}}
+        </header>
+        <item class="striped-{{index % 2 ? 'odd' : 'even'}}">
+          {{#if !.table}}
+            <div class="schema-row table" on-click="@.toggle('schemaexpanded.table.' + escapeKey(.name))">
+              <div class="name" {{#if .description}}title="{{.description}}"{{/if}}>{{.name}}</div>
+              <div class="details">({{.columns.length}} cols{{#if ~/schemafilter || ~/schemaexpr}}, {{~/schemaMatches.tables[.name].length}} match{{/if}})</div>
+            </div>
+          {{else}}
+            <div class="schema-row column">
+              <div class="name {{#if .pkey}}pkey{{/if}}" {{#if .description}}title="{{.description}}"{{/if}}>
+                <div class=expand-indicator class-expanded class-matched />
+                {{.name}}
+              </div>
+              <div class="nullable">{{.nullable ? 'Y' : 'N'}}</div>
+              <div class="default" {{#if .default}}title="{{.default}}"{{/if}}>{{.default ? 'Y' : 'N'}}</div>
+              <div class="type" {{#if .enum}}title="Values: {{.enum.join(', ')}}"{{/if}}>{{.pgtype}}</div>
+              <div class="size">{{#if .length != null}}{{.length}}{{elseif .precision != null}}{{.precision}}{{/if}}</div>
+            </div>
+          {{/if}}
+        </item>
+        <else>
+          <div class="schema-row">
+            No {{#if ~/schemafilter || ~/schemaexpr}}matching{{/if}} tables or columns.
+          </div>
+        </else>
+      </virtual-list>
+      <div style="padding: 0.5em; border-top: 1px solid;">
+        {{_schema.tables.length}} tables, {{@.colCount(_schema, 'tables')}} columns{{#if ~/schemafilter || ~/schemaexpr}}, {{@.schemaMatchCount(~/schemaMatches.tables)}} match{{/if}}
+      </div>
+    </tab>
+    <tab title=Views>
+      <virtual-list bind-items="views" size=34 style="flex-grow: 1;">
+        <header>
+          <div style="border-bottom: 1px solid;">
+            <div class="stretch-fields">
+              <label as-field>Search<input value="{{~/schemafilter}}" lazy=500 /></label>
+              <label as-field title="Available fields are column.{name, default, enum, type, pgtype, nullable, length, precision, pkey, schema, table}">Expression<input value="{{~/schemaexpr}}" lazy=500 /></label>
+              {{#if !~/compareSchema || ~/compareSchema.schema !== _schema}}
+                <label as-field style="flex-grow: 0;"><button on-click="@.compareSchema(_schema, _config)" title="Compare this schema to another database's schema.">Compare</button></label>
+              {{else}}
+                <label as-field style="flex-grow: 0;"><button on-click="@.set('compareSchema', undefined)" title="Cancel waiting for another schema to be selected to compare to this schema.">Cancel</button></label>
+              {{/if}}
+              <label as-field style="flex-grow: 0;"><button on-click="@.downloadSchema(_schema)" title="Download a file containing this schema.">Download</button></label>
+            </div>
+            <div class="schema-row" style="font-weight: bold;">
+              <div class="name" style="cursor: pointer;" title="Click to sort columns by {{~/schemasort === 'position' ? 'name' : 'position'}}" on-click="@.set('schemasort', ~/schemasort === 'position' ? 'name' : 'position')">Name ({{~/schemasort === 'position' ? '#' : 'A'}})</div>
+              <div class="nullable">Null</div>
+              <div class="default">Default</div>
+              <div class="type">Type</div>
+              <div class="size">Size</div>
+            </div>
+          </div>
+          {{#if index}}
+            <div class="schema-row table" style="padding: 0.5em;" on-click="@.toggle('schemaexpanded.view.' + escapeKey(.table || .name))">
+              <div class="name">{{.table || .name}}</div>
+              <div class="details">({{@.colsFor(.table || .name, 'views')}} cols{{#if ~/schemafilter || ~/schemaexpr}}, {{~/schemaMatches.tables[.table || .name].length}} match{{/if}})</div>
+            </div>
+          {{/if}}
+        </header>
+        <item class="striped-{{index % 2 ? 'odd' : 'even'}}">
+          {{#if !.table}}
+            <div class="schema-row table" on-click="@.toggle('schemaexpanded.view.' + escapeKey(.name))">
+              <div class="name" {{#if .description}}title="{{.description}}"{{/if}}>{{.name}}</div>
+              <div class="details">({{.columns.length}} cols{{#if ~/schemafilter || ~/schemaexpr}}, {{~/schemaMatches.views[.name].length}} match{{/if}})</div>
+            </div>
+          {{else}}
+            <div class="schema-row column">
+              <div class="name {{#if .pkey}}pkey{{/if}}" {{#if .description}}title="{{.description}}"{{/if}}>
+                <div class=expand-indicator class-expanded class-matched />
+                {{.name}}
+              </div>
+              <div class="nullable">{{.nullable ? 'Y' : 'N'}}</div>
+              <div class="default" {{#if .default}}title="{{.default}}"{{/if}}>{{.default ? 'Y' : 'N'}}</div>
+              <div class="type" {{#if .enum}}title="Values: {{.enum.join(', ')}}"{{/if}}>{{.pgtype}}</div>
+              <div class="size">{{#if .length != null}}{{.length}}{{elseif .precision != null}}{{.precision}}{{/if}}</div>
+            </div>
+          {{/if}}
+        </item>
+        <else>
+          <div class="schema-row">
+            No {{#if ~/schemafilter || ~/schemaexpr}}matching{{/if}} views or columns.
+          </div>
+        </else>
+      </virtual-list>
+      <div style="padding: 0.5em; border-top: 1px solid;">
+        {{_schema.views.length}} views, {{@.colCount(_schema, 'views')}} columns{{#if ~/schemafilter || ~/schemaexpr}}, {{@.schemaMatchCount(~/schemaMatches.views)}} match{{/if}}
+      </div>
+    </tab>
+    <tab title=Functions>
+      <virtual-list bind-items="functions" size=34 style="flex-grow: 1;">
+        <header>
+          <div style="border-bottom: 1px solid; margin-top: 0.25em;">
+            <div class="schema-row fn" style="font-weight: bold;">
+              <div class="name">Name</div>
+              <div class="lang">Language</div>
+              <div class="args">Arguments</div>
+              <div class="result">Result</div>
+            </div>
+          </div>
+        </header>
+        <item class="striped-{{index % 2 ? 'odd' : 'even'}}">
+          <div class="schema-row fn">
+            <div class="name" title="{{.type}} {{.name}}({{.arguments}}): {{.result}}{{'\n--------\n'}}{{.source}}" on-click="copyToClipboard(@event.shiftKey ? `${.type} ${.name}(${.arguments}): ${.result}\n--------\n${.source}` : .source, `Copied ${.name} source to clipboard.`)">{{.name}}</div>
+            <div class="lang" title="{{.language}}">{{.language}}</div>
+            <div class="args" title="{{.arguments}}">{{.arguments}}</div>
+            <div class="result" title="{{.result}}">{{.result}}</div>
+          </div>
+        </item>
+        <else>
+          <div class="schema-row">
+            No funtions
+          </div>
+        </else>
+      </virtual-list>
+      <div style="padding: 0.5em; border-top: 1px solid;">
+        {{_schema.functions.length}} functions
+      </div>
+    </tab>
+  </tabs>
 </script>
 
 <script type=text/ractive id=schema-compare>
@@ -758,8 +900,18 @@
 <script type=text/ractive id=scratch-pad>
   <div style="display: flex; justify-content: space-between; flex-shrink: 0;">
     <label as-field class=inline><input value="{{pad.name}}" placeholder="Name..." lazy=1000 /></label>
+    <label as-field class=inline><select value="{{pad.syntax}}" lazy=1000>
+      <option value="{{undefined}}">plain text</option>
+      <option>markdown</option>
+      <option>json</option>
+      <option>pgsql</option>
+      <option>javascript</option>
+      <option>typescript</option>
+      <option>ejs</option>
+      <option>handlebars</option>
+    </select></label>
   </div>
-  <label as-field class=inline style="flex-grow: 1; display: flex; flex-direction: column; border: none; box-shadow: none;"><textarea style="flex-grow: 1; overflow: auto;" lazy=2000>{{pad.text}}</textarea></label>
+  <div style="flex-grow: 1;" as-ace="{ bind: 'pad.text', syntax: pad.syntax || 'plain_text', theme: @style.theme == 'dark' ? 'tomorrow_night_eighties' : 'github', wrap: ~/editor.wrap, highlightActive: ~/editor.highlightActive, fontSize: '1em', font: 'monospace', printMargin: ~/editor.printMargin, keymode: ~/editor.keymode }" />
 </script>
 
 <script type=text/ractive id=host-explore>
@@ -811,64 +963,16 @@
               <tab title="Schema" on-enter="@.set('showSchema', true)" on-leave="@.set('showSchema', false)" no-pad>
                 {{#if ~/showSchema}}
                   {{#if ~/schemas[.connection.constr + '@' + .entry.database]}}
-                    {{#with ~/schemas[.connection.constr + '@' + .entry.database]}}
-                      {{#if .error}}
-                        <div style="padding: 0.5em;">Error loading schema...</div>
-                      {{else}}
-                        {{#with @.entries(.schema) as entries}}
-                          <virtual-list bind-items="entries" size=34 style="flex-grow: 1;">
-                            <header>
-                              <div style="border-bottom: 1px solid;">
-                                <div class="stretch-fields">
-                                  <label as-field>Search<input value="{{~/schemafilter}}" lazy=500 /></label>
-                                  <label as-field title="Available fields are column.{name, default, enum, type, pgtype, nullable, length, precision, pkey, schema, table}">Expression<input value="{{~/schemaexpr}}" lazy=500 /></label>
-                                  <label as-field style="flex-grow: 0;"><button on-click="@.download()" title="Download a file containing this schema.">Download</button></label>
-                                </div>
-                                <div class="schema-row" style="font-weight: bold;">
-                                  <div class="name" style="cursor: pointer;" title="Click to sort columns by {{~/schemasort === 'position' ? 'name' : 'position'}}" on-click="@.set('schemasort', ~/schemasort === 'position' ? 'name' : 'position')">Name ({{~/schemasort === 'position' ? '#' : 'A'}})</div>
-                                  <div class="nullable">Null</div>
-                                  <div class="default">Default</div>
-                                  <div class="type">Type</div>
-                                  <div class="size">Size</div>
-                                </div>
-                              </div>
-                              {{#if index}}
-                                <div class="schema-row table" style="padding: 0.5em;" on-click="@.toggle('schemaexpanded.' + escapeKey(.table || .name))">
-                                  <div class="name">{{.table || .name}}</div>
-                                  <div class="details">({{@.colsFor(.table || .name)}} cols{{#if ~/schemafilter || ~/expr}}, {{~/schemamatches[.table || .name].length}} match{{/if}})</div>
-                                </div>
-                              {{/if}}
-                            </header>
-                            <item class="striped-{{index % 2 ? 'odd' : 'even'}}">
-                              {{#if !.table}}
-                                <div class="schema-row table" on-click="@.toggle('schemaexpanded.' + escapeKey(.name))">
-                                  <div class="name">{{.name}}</div>
-                                  <div class="details">({{.columns.length}} cols{{#if ~/schemafilter || ~/schemaexpr}}, {{schemamatches[.name].length}} match{{/if}})</div>
-                                </div>
-                              {{else}}
-                                <div class="schema-row column">
-                                  <div class="name {{#if .pkey}}pkey{{/if}}" {{#if .default}}title="Default: {{.default}}"{{/if}}>
-                                    <div class=expand-indicator class-expanded class-matched />
-                                    {{.name}}
-                                  </div>
-                                  <div class="nullable">{{.nullable ? 'Y' : 'N'}}</div>
-                                  <div class="default" {{#if .default}}title="{{.default}}"{{/if}}>{{.default ? 'Y' : 'N'}}</div>
-                                  <div class="type" {{#if .enum}}title="Values: {{.enum.join(', ')}}"{{/if}}>{{.pgtype}}</div>
-                                  <div class="size">{{#if .length != null}}{{.length}}{{elseif .precision != null}}{{.precision}}{{/if}}</div>
-                                </div>
-                              {{/if}}
-                            </item>
-                            <else>
-                              <div class="schema-row">
-                                No {{#if ~/schemafilter || ~/schemaexpr}}matching{{/if}} tables or columns.
-                              </div>
-                            </else>
-                          </virtual-list>
-                          <div style="padding: 0.5em; border-top: 1px solid;">
-                            {{.schema.length}} tables, {{@.colCount(.schema)}} columns{{#if ~/schemafilter || ~/schemaexpr}}, {{@.matchCount(~/schemamatches)}} match{{/if}}
-                          </div>
-                        {{/with}}
-                      {{/if}}
+                    {{#with Object.assign({}, .connection.config, { database: .entry.database }) as _config}}
+                      {{#with ~/schemas[.connection.constr + '@' + .entry.database]}}
+                        {{#if .error}}
+                          <div style="padding: 0.5em;">Error loading schema...</div>
+                        {{else}}
+                          {{#with @.schemaEntries(.schema, 'tables') as tables, @.schemaEntries(.schema, 'views') as views, .schema.functions as functions, .schema as _schema}}
+                            {{>schema-inner}}
+                          {{/with}}
+                        {{/if}}
+                      {{/with}}
                     {{/with}}
                   {{else}}
                     <div style="padding: 0.5em;">[[@.refreshSchema(.) && 'Loading...']]</div>
@@ -1115,5 +1219,9 @@
 <div id=target />
 
 <script src="./index.js"></script>
+<script src="./ace@1.35.4/ace.js"></script>
+<script>
+  Ractive.use(RauiAceEditor.default({ name: 'ace' }));
+</script>
   </body>
 </html>
