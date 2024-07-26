@@ -8,7 +8,7 @@ pg-difficult is a database data diff-er for PostgreSQL (9.5+) that aims to be ea
 
 ### Diff
 
-The titular tool on this bat-database bat-tool bat-belt. Diffs can be started on multiple databases, and the server will record changes, sending them to the client as they stream in. Diffs are recorded in groups called segments. Changing the segment name from the control panel will start a new segment.
+The titular tool on this bat-database bat-tool bat-belt. Diffs can be started on multiple databases, and the server will record changes, sending them to the client as they stream in. Diffs are recorded in groups called segments. Changing the segment name from the control panel will start a new segment, and all running diffs share the segment name.
 
 As long as there is at least one diff running, previously started and stopped diffs will be retained on the server. Entries can be cleared from the control panel while diffs are still running to reset saved and active state.
 
@@ -20,23 +20,51 @@ When testing something that changes things in a database, it is often useful to 
 
 ### Schema
 
-Next up is the schema tool. This lists every table and column in the database in an expandable, searchable list. The search can be done by name or using a Raport expression. There's also a comparison function, so if you happen to have a few different test databases and need to quickly see what schema changes may have been applied to one and not another, you can get a diff of the entire database schema relatively quickly.
+Next up is the schema tool. This lists every table, view, and column in the database in expandable, searchable lists. The search can be done by name or using a Raport expression. There's also a comparison function for tables, so if you happen to have a few different test databases and need to quickly see what schema changes may have been applied to one and not another, you can get a diff of the entire database schema relatively quickly.
+
+Functions are also in the schema and viewable in a list.
 
 ### Query
 
-If you're looking at changes in a database and how the schema is laid out, chances are you'll also need to run a query or two at some point. `psql`, `pgAdmin`, and a legion of other tools can help you out with that, but you're already here with connections configured, so why not have a way to fire off a quick query or two.
+If you're looking at changes in a database and how the schema is laid out, chances are you'll also need to run a query or two at some point. `psql`, `pgAdmin`, and a legion of other tools can help you out with that, but you're already here with connections configured, so why not have a way to fire off a quick query or two. You can run a query using ctrl+enter or the run button, and if there is a highlighted selection in the query editor, only the highlighted text will be used as the query.
 
 Queries can be saved to browser storage and recalled into a particular query window by clicking the Load button on the Saved Queries tab of the control panel and then the Load button on the target query window.
 
+Query results can also be downloaded as a delimited text file with delimiters based on settings from the Control Panel.
+
+### Scratch Pads
+
+Sometimes you just need a place to write a few things down so that you can organize them or adjust them for use elsewhere. Scratch pads are a tool that can help with that. They are also stored in browser storage and have a name and a syntax type.
+
+### Reporting
+
+Reporting is sort of the other side of the CRUD coin when it comes to databases, and there happens to be a reporting library already included in pg-difficult to handle diffing and advanced filtering. It just kind of makes sense to allow hooking up the reporting engine to the exposed database connections, and so pg-difficult has a few different ways of reporting built in. The designer also has docs and a handy evaluation console for working with the Raport expressions that are used in advanced filtering.
+
+### Host Explorer
+
+If you're connected to a database with a user of sufficient privileges, chances are you can access more than one database managed by the postmaster. If you're doing development, you may also have access to more than one server. The Host Explorer will let you peruse each connection you have defined to see all of the databases on the host. It will also give you details of each database, let you view the schema, run queries, and run reports. It can replace some usage of pgAdmin if you mostly only need pgAdmin to connect to databases, look at the schema, and run queries.
+
+The database tree will allow you to filter the databases in the tree, and the Query All tool will allow you to aggregate queries across all databases that are in the tree. A report can also be set up on top of the Query All tool, which can be quite useful in a number of ways.
+
+You can run multiple host explorers to allow for different sets of hosts to be targeted for simultaneous cross-host querying.
+
 ## Running
 
-The easiest way would be to download a release from the GitHub releases. The safest way is to clone this repo and run manually with your local Deno, so you can have compplete control over what it gets to access.
+The easiest way would be to download a release from the GitHub releases. The safest way is to clone this repo and run manually with your local Deno, so you can have complete control over what it gets to access.
 
 To run pg-difficult, you'll need a recent version of [Deno](https://deno.land) for your platform and the source.
 
 pg-difficult will try to connect using a tls encrypted connection by default, but if that fails, it will fall back to an unencrypted connection. If your PostgreSQL cluster is not configured to allow plain host connections, and you don't have a properly signed certificate, you'll probably have issues connecting to the server. The workaround for this is to pass `--unsafely-ignore-certificate-errors` to Deno, at the very least, for the host name of your server.
 
 The binaries are all built to allow all access and ignore certificate errors.
+
+### Safety
+
+While connections are stored in browser storage, anything connected on the server side i.e. a diff or connection monitor makes that connection available to any client that can connect to pg-difficult. By default, the pg-difficult server listens on 127.0.0.1:1999, but you can request a different port and bind address. It's important to be aware that there are no authentication or authorization measures in place to guard access to anything that happens to be running on the server.
+
+Browser local storage is also relatively secure, but it's possible for another server to run on the same host and port that you connected to pg-difficult on at some point, the client for that server would have access to all of your local storage, including connection details.
+
+For local development environments, these concerns aren't usually a terrible risk, but it's important to be aware of possible risks that tooling exposes.
 
 ## Building an executable
 
@@ -85,8 +113,8 @@ The client takes advantage of local storage in the browser to save connection de
 
 ## TODO
 
-* Provide a way to download ~~diffs, schemas, and~~ query results.
-* Allow exporting and importing application settings.
-* Add a dark theme.
-* Expose all server connections in additional tabs in the monitor.
-* Add other instance polling so that multiple servers can diff the same database and let the last one out turn off the lights.
+* [x] Provide a way to download diffs, schemas, and query results.
+* [x] Allow exporting and importing application settings.
+* [x] Add a dark theme.
+* [x] Expose all server connections in additional tabs in the monitor.
+* [ ] Add other instance polling so that multiple servers can diff the same database and let the last one out turn off the lights.
