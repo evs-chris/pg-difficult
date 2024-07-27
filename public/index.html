@@ -38,7 +38,7 @@
     margin: 0;
     padding: 0 0 0.5em 0;
   }
-  code {
+  code.expr {
     display: inline-block;
     border: 1px solid rgba(0, 0, 0, 0.2);
     line-height: 1.4em;
@@ -476,18 +476,30 @@
     </tab>
     <tab title="Settings">
       <div style="display: flex; flex-direction: column;">
-        <label as-field>Theme<select value="{{~/settings.theme}}">
-          <option value="{{undefined}}">Auto</option>
-          <option value="dark">Dark</option>
-          <option value="light">Light</option>
-        </select></label>
-        {{#if !@global.clientOnly}}
-          <label as-field class=inline><input type=checkbox bind-checked="~/settings.queryOrderColumns" /> Order query result columns alphabetically?</label>
-          <label as-field class=inline><input type=checkbox bind-checked="~/settings.allowUndoSegment" /> Enable undoing diff segments by default?</label>
-          <label as-field class=inline><input type=checkbox bind-checked="~/settings.allowUndoSingle" /> Enable undoing individual diff entries by default?</label>
-        {{/if}}
-        <label as-field class=inline><input type=checkbox bind-checked="~/settings.hideBlankFields" /> Hide empty string fields in diff records by default?</label>
-        <label as-field class=inline><input type=checkbox bind-checked="~/settings.hideDefaultFields" /> Hide defaulted fields in diff records by default?</label>
+        <fieldset>
+          <legend>Client Options</legend>
+          <label as-field>Theme<select value="{{~/settings.theme}}">
+            <option value="{{undefined}}">Auto</option>
+            <option value="dark">Dark</option>
+            <option value="light">Light</option>
+          </select></label>
+          <label as-field>Paste Timeout ms<input type=number placeholder=10000 step=1000 value="{{~/settings.pasteTimeout}}" /></label>
+        </fieldset>
+        <fieldset style="margin-top: 1em;">
+          <legend>Diff Entries Options</legend>
+          {{#if !@global.clientOnly}}
+            <label as-field class=inline><input type=checkbox bind-checked="~/settings.allowUndoSegment" /> Enable undoing diff segments by default?</label>
+            <label as-field class=inline><input type=checkbox bind-checked="~/settings.allowUndoSingle" /> Enable undoing individual diff entries by default?</label>
+          {{/if}}
+          <label as-field class=inline><input type=checkbox bind-checked="~/settings.hideBlankFields" /> Hide empty string fields in diff records by default?</label>
+          <label as-field class=inline><input type=checkbox bind-checked="~/settings.hideDefaultFields" /> Hide defaulted fields in diff records by default?</label>
+        </fieldset>
+        <fieldset style="margin-top: 1em;">
+          <legend>Query Options</legend>
+          {{#if !@global.clientOnly}}
+            <label as-field class=inline><input type=checkbox bind-checked="~/settings.queryOrderColumns" /> Order query result columns alphabetically?</label>
+          {{/if}}
+        </fieldset>
         <fieldset style="margin-top: 1em;">
           <legend>Editor Options</legend>
           <label as-field class=inline><input type=checkbox checked="{{~/settings.editor.highlightActive}}" /> Highlight active line?</label>
@@ -508,6 +520,12 @@
           <label as-field title="The delimiter to use between records when rendering a data set as delimited text e.g. \n (line feed), \r (carriage return), \r\n (carriage return, line feed). Defaults to \n">Record Delimiter<input value="{{~/settings.csv.record}}" placeholder="\n" /></label>
           <label as-field title="The quote to use around fields when rendering a data set as delimited text e.g. ' (single quote), &quot; (double quote), $$ (dollar, dollar). Defaults to none">Field Quote<input value="{{~/settings.csv.quote}}" /></label>
         </fieldset>
+        <fieldset style="margin-top: 1em;">
+          <legend>Local Diff Options</legend>
+          <label as-field>Default Left Mode<select value="{{~/settings.diff.leftview}}"><option value="{{undefined}}">tree</option><option>text</option></select></label>
+          <label as-field>Default Right Mode<select value="{{~/settings.diff.rightview}}"><option value="{{undefined}}">tree</option><option>text</option></select></label>
+          <label as-field>Default Value Format<select value="{{~/settings.diff.format}}"><option value="{{undefined}}">raport</option><option>json</option></select></label>
+        </fieldset>
         <div style="margin-top: 1em;">
           <button on-click="@.exportSettings()">Export Settings</button>
           <button on-click="@.importSettings()">Import Settings</button>
@@ -517,7 +535,8 @@
   </tabs>
   <buttons>
     {{#unless @global.clientOnly}}
-      <button left on-click="@.exploreHosts()">Host Explorer</button>
+      <button left title="Open a new Host Explorer window to browse databases on all connections, view schema, query across multiple databases, and run reports." on-click="@.exploreHosts()">Host Explorer</button>
+      <button left title="Open a new two-way diff window for local data." on-click="@.localDiff()">Local Diff</button>
       <button class=reject on-click="@.halt()">Stop pg-difficult</button>
     {{/unless}}
   </buttons>
@@ -574,13 +593,13 @@
       {{#with . as record, @.details(.) as entry}}
         {{#if entry.status}}
           {{#if entry.changed}}
-            <div class="wrapper striped-{{index % 2 == 0 ? 'even' : 'odd'}}">
+            <div class="wrapper striped-{{index % 2 == 0 ? 'even' : 'odd'}}" on-click="@event.shiftKey ? copyToClipboard(record.old || {}, 'Copied old record JSON to clipboard.') : copyToClipboard(record.new || {}, 'Copied new record JSON to clipboard.')">
               <div class=name><span>{{record.table}} {{entry.id || ''}} {{entry.status}}</span><span class=src>({{record.source}})</span></div>
               {{#each entry.changed}}
                 <div class="diff">
                   <div class="name">{{this.0}}</div>
-                  <div class="left">{{typeof this.1.0 === 'object' ? JSON.stringify(this.1.0) : this.1.0}}</div>
-                  <div class="right">{{typeof this.1.1 === 'object' ? JSON.stringify(this.1.1) : this.1.1}}</div>
+                  <div class="left" on-click="copyToClipboard(this.1.0, 'Copied value to clipboard.'), false">{{typeof this.1.0 === 'object' ? JSON.stringify(this.1.0) : this.1.0}}</div>
+                  <div class="right" on-click="copyToClipboard(this.1.1, 'Copied value to clipboard.'), false">{{typeof this.1.1 === 'object' ? JSON.stringify(this.1.1) : this.1.1}}</div>
                 </div>
               {{/each}}
 
@@ -590,10 +609,10 @@
               </div>
             </div>
           {{else}}
-            <div class="diff whole striped-{{index % 2 == 0 ? 'even' : 'odd'}}">
+            <div class="diff whole striped-{{index % 2 == 0 ? 'even' : 'odd'}}" on-click="@event.shiftKey ? copyToClipboard(record.old || {}, 'Copied old record JSON to clipboard.') : copyToClipboard(record.new || {}, 'Copied new record JSON to clipboard.')">
               <div class=name><span>{{record.table}} {{entry.id || ''}} {{entry.status}}</span><span class=src>({{record.source}})</span></div>
               {{#each entry.record}}
-                <div class="entry"><div class="key">{{this.0}}</div><div class="value">{{typeof this.1 === 'object' ? JSON.stringify(this.1) : this.1}}</div></div>
+                <div class="entry"><div class="key">{{this.0}}</div><div class="value" on-click="copyToClipboard(this.1, 'Copied value to clipboard.'), false">{{typeof this.1 === 'object' ? JSON.stringify(this.1) : this.1}}</div></div>
               {{/each}}
 
               <div class=buttons>
@@ -603,7 +622,7 @@
             </div>
           {{/if}}
         {{else}}
-          <div class="wrapper striped-{{index % 2 == 0 ? 'even' : 'odd'}}">
+          <div class="wrapper striped-{{index % 2 == 0 ? 'even' : 'odd'}}" on-click="@event.shiftKey ? copyToClipboard(record.old || {}, 'Copied old record JSON to clipboard.') : copyToClipboard(record.new || {}, 'Copied new record JSON to clipboard.')">
             <div class=name><span>{{record.table}} {{entry.id || ''}} {{entry.status || '(empty changeset)'}}</span><span class=src>({{record.source}})</span></div>
             <div class=buttons>
               <button class=split-up title="Split this entry and all entries above it up to the previous segment into a new segment" on-click="@.renameSegment(record, 'above')">&#9650;</button> <button class=split-down title="Split this entry and all entries below it down to the next segment into a new segment" on-click="@.renameSegment(record, 'below')">&#9660;</button>
@@ -615,7 +634,7 @@
         <div class=header><h2 title="Double click to rename segment" on-dblclick="@.renameSegment(.)">{{.segment}}</h2> <div class=buttons style="padding-top: 0.9em;">{{#if ~/allowUndoSegment}}<button class=undo on-click="@.undoSegment(.)" title="Undo all changes in this segment by replaying the changes in reverse. This will also create a new segment named 'Undo {{.segment}}', unless you hold the ctrl key when clicking this button.">Undo</button>{{/if}}</div></div>
       {{/with}}{{/if}}
       <else>
-        {{#if ~/exprError}}<code>{{~/expr}}</code> is an invalid filter.<br /><br /><pre>Error: {{~/exprError.message + '\n\n'}}{{~/exprError.marked}}</pre>{{else}}No change entries have been recorded.{{/if}}
+        {{#if ~/exprError}}<code class=expr>{{~/expr}}</code> is an invalid filter.<br /><br /><pre>Error: {{~/exprError.message + '\n\n'}}{{~/exprError.marked}}</pre>{{else}}No change entries have been recorded.{{/if}}
       </else>
     </virtual-list>
   </div>
@@ -1191,6 +1210,87 @@
     <button left class=flat on-click="@.cancel()">Cancel</button>
     <button on-click="@.accept()">Done</button>
   </buttons>
+</script>
+
+<script type=text/ractive id=diff>
+  <div class=differ style="display: flex; width: 100%; height: 100%;">
+    <split vertical>
+      <div size=33 style="display: flex; flex-direction: column; position: relative; height: 100%;">
+        <div style="display: flex; justify-content: space-evenly; align-items: center;">
+          <h3>Left</h3>
+          <select value="{{leftView}}"><option value="{{undefined}}">text</option><option>tree</option></select>
+        </div>
+        {{#if ~/copied.recent}}
+          <div class=paster on-click="@.paste('left', @event.shiftKey)"><span>click to paste<br/>shift+click to apply patch</span></div>
+        {{elseif leftView === 'tree'}}
+          {{>root @.parse(.left)}}
+        {{else}}
+          <textarea style="flex-grow: 1; resize: none;" placeholder="Left value here..." lazy=1000>{{.left}}</textarea>
+        {{/if}}
+      </div>
+      <div size=34 style="position: relative; padding: 0.2rem; display: flex; flex-direction: column; height: 100%; box-sizing: border-box;">
+        <div style="display: flex; justify-content: space-evenly; align-items: center;">
+          {{#if ~/leftView === 'tree' || ~/rightView === 'tree'}}<label style="font-size: 0.7em;"><input type=checkbox checked="{{~/expandAll}}"> Expand all tree nodes?</label>{{/if}}
+          <h3>Diff</h3>
+          <select value="{{format}}"><option value="{{undefined}}">raport</option><option>json</option></select>
+        </div>
+        <pre style="overflow: auto;"><code>
+        {{#each @.diff(.left, .right)}}
+          <div style="display: flex; flex-wrap: wrap;">
+            <div style="width: 100%; margin-top: 0.5rem; border-bottom: 1px solid #999; padding: 0.2rem; font-weight: 600;">{{@key}}</div>
+            <div style="width: 50%; padding: 0.5rem; box-sizing: border-box;">{{@.string(this.0)}}</div>
+            <div style="width: 50%; padding: 0.5rem; box-sizing: border-box; border-left: 1px dotted #aaa;">{{{@.string(this.1, this.0)}}}</div>
+          </div>
+        {{/each}}
+        </code></pre>
+      </div>
+      <div size=33 style="display: flex; flex-direction: column; position: relative; height: 100%;">
+        <div style="display: flex; justify-content: space-evenly; align-items: center;">
+          {{#if ~/hasCSV}}<label style="font-size: 0.7em;"><input type=checkbox checked="{{~/csvHeader}}"> CSV Header?</label>{{/if}}
+          <h3>Right</h3>
+          <select value="{{rightView}}"><option value="{{undefined}}">text</option><option>tree</option></select>
+        </div>
+        {{#if ~/copied.recent}}
+          <div class=paster on-click="@.paste('right', @event.shiftKey)"><span>click to paste<br/>shift+click to apply patch</span></div>
+        {{elseif rightView === 'tree'}}
+          {{>root @.parse(.right)}}
+        {{else}}
+          <textarea style="flex-grow: 1; resize: none;" placeholder="Right value here..." lazy=1000>{{.right}}</textarea>
+        {{/if}}
+      </div>
+    </split>
+  </div>
+
+  {{#partial root}}
+    <div class=tree-view>
+      {{#if typeof . === 'object' && .}}<span style="color: #aaa; margin-left: 0.5em;">{{Array.isArray(.) ? '[' : '{'}}</span>{{/if}}
+      <div class=root>
+        {{>tree .}}
+      </div>
+      {{#if typeof . === 'object' && .}}<span style="color: #aaa; margin-left: 0.5em;">{{Array.isArray(.) ? ']' : '}'}}</span>{{/if}}
+    </div>
+  {{/partial}}
+
+  {{#partial tree}}
+    <div class=tree>
+      {{#each .}}
+        <div class=node>
+          <div class=key title="{{(@keypath + '').replace(/.*\)\./, '')}}">{{@key}}<span style="color: #aaa;">:</span>{{#if typeof . === 'object' && .}}<span style="color: #aaa; margin-left: 0.5em;">{{Array.isArray(.) ? '[' : '{'}}</span>{{/if}}</div>
+          {{#unless ~/expandAll}}<div class=expand {{#if typeof . === 'object' && .}}class-show on-click="@.toggle('expand.' + escapeKey(@keypath))"{{/if}}>{{#if ~/expand[@keypath]}}-{{else}}+{{/if}}</div>{{/unless}}
+          <div class=value class-children="typeof . === 'object' && . && (~/expandAll || ~/expand[@keypath])">
+            {{#if typeof . === 'object' && .}}
+              {{#if ~/expandAll || ~/expand[@keypath]}}
+                {{>tree .}}
+                <span style="color: #aaa; margin-left: 0.25em;">{{Array.isArray(.) ? ']' : '}'}}</span>
+              {{else}}
+                <div class=type>{{#if Array.isArray(.)}} ]{{else}} }{{/if}}</div>
+              {{/if}}
+            {{else}}{{@.string(.)}}{{/if}}
+          </div>
+        </div>
+      {{/each}}
+    </div>
+  {{/partial}}
 </script>
 
 <script type=text/ractive id=confirm>
