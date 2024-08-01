@@ -14,6 +14,15 @@ export const functionQuery = `SELECT n.nspname as "schema", p.proname as "name",
  pg_catalog.array_to_string(p.proacl, E'\n') AS "access",
  l.lanname as "language", p.prosrc as "source", pg_catalog.obj_description(p.oid, 'pg_proc') as "description"
 FROM pg_catalog.pg_proc p LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace LEFT JOIN pg_catalog.pg_language l ON l.oid = p.prolang where n.nspname not in ('pg_catalog', 'information_schema') order by p.proname asc, p.prosrc asc`;
+export const oldFunctionQuery = `SELECT n.nspname as "schema", p.proname as "name", pg_catalog.pg_get_function_result(p.oid) as "result", pg_catalog.pg_get_function_arguments(p.oid) as "arguments",
+ CASE p.proisagg WHEN true THEN 'aggregate' ELSE 'function' END as "type",
+ CASE WHEN p.provolatile = 'i' THEN 'immutable' WHEN p.provolatile = 's' THEN 'stable' WHEN p.provolatile = 'v' THEN 'volatile' END as "volatility",
+ CASE WHEN p.proparallel = 'r' THEN 'restricted' WHEN p.proparallel = 's' THEN 'safe' WHEN p.proparallel = 'u' THEN 'unsafe' END as "parallel",
+ pg_catalog.pg_get_userbyid(p.proowner) as "owner",
+ CASE WHEN prosecdef THEN 'definer' ELSE 'invoker' END AS "security",
+ pg_catalog.array_to_string(p.proacl, E'\n') AS "access",
+ l.lanname as "language", p.prosrc as "source", pg_catalog.obj_description(p.oid, 'pg_proc') as "description"
+FROM pg_catalog.pg_proc p LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace LEFT JOIN pg_catalog.pg_language l ON l.oid = p.prolang where n.nspname not in ('pg_catalog', 'information_schema') order by p.proname asc, p.prosrc asc`;
 export const viewQuery = `SELECT n.nspname "schema", c.relname "name", d.description "description", c.relkind = 'm' "materialized", pg_catalog.pg_get_viewdef(c.oid) "definition" FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace left join pg_catalog.pg_description d on d.objoid = c.oid and d.objsubid = 0 WHERE c.relkind in ('v', 'm') and n.nspname not in ('pg_catalog', 'information_schema') order by c.relname asc`;
 export const viewColumnQuery = `SELECT n.nspname "schema", c.relname "table", a.attname "name", t.typname "pgtype", not a.attnotnull "nullable", false pkey, case when a.atttypmod = -1 then null when t.oid in (1042, 1043) then a.atttypmod - 4 when t.oid in (1560, 1562) then a.atttypmod else null end length, case when t.oid = 1700 and a.atttypmod <> -1 then array[((a.atttypmod - 4) >> 16) & 65535, (a.atttypmod - 4) & 65535] else null end "precision", a.attnum "position" FROM pg_catalog.pg_class c INNER JOIN pg_catalog.pg_attribute a ON a.attrelid = c.oid INNER JOIN pg_catalog.pg_type t ON t.oid = a.atttypid inner join pg_catalog.pg_namespace n on n.oid = c.relnamespace WHERE c.relkind in ('v', 'm') and n.nspname not in ('pg_catalog', 'information_schema') and a.attnum > -1 order by a.attname asc;`;
 
@@ -195,7 +204,12 @@ export async function schema(client: Client): Promise<Schema> {
     }
   }
 
-  const functions: Function[] = await client.unsafe(functionQuery);
+  let functions: Function[]; 
+  try {
+    functions = await client.unsafe(functionQuery);
+  } catch {
+    functions = await client.unsafe(oldFunctionQuery);
+  }
   for (const f of functions) {
     if (!f.description) delete f.description;
   }
