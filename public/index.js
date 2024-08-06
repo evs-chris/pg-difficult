@@ -1142,7 +1142,7 @@ Window.extendWith(Entries, {
     }
   },
   observe: {
-    'tables.length'() {
+    'entries.length'() {
       if (this.scroller) {
         const s = this.scroller;
         if (s.scrollTop + s.clientHeight >= s.scrollHeight - 10) setTimeout(() => s.scrollTo({ top: s.scrollHeight, behavior: 'smooth', block: 'end' }), 100);

@@ -587,13 +587,13 @@
     <virtual-list bind-items="~/entries" size=75>
       <header>
         {{#if .segment}}
-          <div class=header><h2 title="Double click to rename segment" on-dblclick="@.renameSegment(.)">{{.segment}}</h2> <div class=buttons style="padding-top: 0.9em;">{{#if ~/allowUndoSegment}}<button class=undo on-click="@.undoSegment(.)" title="Undo all changes in this segment by replaying the changes in reverse. This will also create a new segment named 'Undo {{.segment}}', unless you hold the ctrl key when clicking this button.">Undo</button>{{/if}}</div></div>
+          <div class=header><h2 title="Double click to rename segment" on-dblclick="@.renameSegment(.), false">{{.segment}}</h2> <div class=buttons style="padding-top: 0.9em;">{{#if ~/allowUndoSegment}}<button class=undo on-click="@.undoSegment(.), false" title="Undo all changes in this segment by replaying the changes in reverse. This will also create a new segment named 'Undo {{.segment}}', unless you hold the ctrl key when clicking this button.">Undo</button>{{/if}}</div></div>
         {{/if}}
       </header>
       {{#with . as record, @.details(.) as entry}}
         {{#if entry.status}}
           {{#if entry.changed}}
-            <div class="wrapper striped-{{index % 2 == 0 ? 'even' : 'odd'}}" on-click="@event.shiftKey ? copyToClipboard(record.old || {}, 'Copied old record JSON to clipboard.') : copyToClipboard(record.new || {}, 'Copied new record JSON to clipboard.')">
+            <div class="wrapper striped-{{index % 2 == 0 ? 'even' : 'odd'}}" on-click="@event.shiftKey ? copyToClipboard(record.old || {}, 'Copied old record JSON to clipboard.') : copyToClipboard(record.new || {}, 'Copied new record JSON to clipboard.'), false">
               <div class=name><span>{{record.table}} {{entry.id || ''}} {{entry.status}}</span><span class=src>({{record.source}})</span></div>
               {{#each entry.changed}}
                 <div class="diff">
@@ -604,34 +604,34 @@
               {{/each}}
 
               <div class=buttons>
-                {{#if ~/allowUndoSingle}}<button class=undo on-click="@.undoSingle(record)" title="Undo this change by running the inverse of the statment that created the change.">Undo</button>{{/if}}
-                <button class=split-up title="Split this entry and all entries above it up to the previous segment into a new segment" on-click="@.renameSegment(record, 'above')">&#9650;</button> <button class=split-down title="Split this entry and all entries below it down to the next segment into a new segment" on-click="@.renameSegment(record, 'below')">&#9660;</button>
+                {{#if ~/allowUndoSingle}}<button class=undo on-click="@.undoSingle(record), false" title="Undo this change by running the inverse of the statment that created the change.">Undo</button>{{/if}}
+                <button class=split-up title="Split this entry and all entries above it up to the previous segment into a new segment" on-click="@.renameSegment(record, 'above'), false">&#9650;</button> <button class=split-down title="Split this entry and all entries below it down to the next segment into a new segment" on-click="@.renameSegment(record, 'below'), false">&#9660;</button>
               </div>
             </div>
           {{else}}
-            <div class="diff whole striped-{{index % 2 == 0 ? 'even' : 'odd'}}" on-click="@event.shiftKey ? copyToClipboard(record.old || {}, 'Copied old record JSON to clipboard.') : copyToClipboard(record.new || {}, 'Copied new record JSON to clipboard.')">
+            <div class="diff whole striped-{{index % 2 == 0 ? 'even' : 'odd'}}" on-click="@event.shiftKey ? copyToClipboard(record.old || {}, 'Copied old record JSON to clipboard.') : copyToClipboard(record.new || {}, 'Copied new record JSON to clipboard.'), false">
               <div class=name><span>{{record.table}} {{entry.id || ''}} {{entry.status}}</span><span class=src>({{record.source}})</span></div>
               {{#each entry.record}}
                 <div class="entry"><div class="key">{{this.0}}</div><div class="value" on-click="copyToClipboard(this.1, 'Copied value to clipboard.'), false">{{typeof this.1 === 'object' ? JSON.stringify(this.1) : this.1}}</div></div>
               {{/each}}
 
               <div class=buttons>
-                {{#if ~/allowUndoSingle}}<button class=undo on-click="@.undoSingle(record)" title="Undo this change by running the inverse of the statment that created the change.">Undo</button>{{/if}}
-                <button class=split-up title="Split this entry and all entries above it up to the previous segment into a new segment" on-click="@.renameSegment(record, 'above')">&#9650;</button> <button class=split-down title="Split this entry and all entries below it down to the next segment into a new segment" on-click="@.renameSegment(record, 'below')">&#9660;</button>
+                {{#if ~/allowUndoSingle}}<button class=undo on-click="@.undoSingle(record), false" title="Undo this change by running the inverse of the statment that created the change.">Undo</button>{{/if}}
+                <button class=split-up title="Split this entry and all entries above it up to the previous segment into a new segment" on-click="@.renameSegment(record, 'above'), false">&#9650;</button> <button class=split-down title="Split this entry and all entries below it down to the next segment into a new segment" on-click="@.renameSegment(record, 'below'), false">&#9660;</button>
               </div>
             </div>
           {{/if}}
         {{else}}
-          <div class="wrapper striped-{{index % 2 == 0 ? 'even' : 'odd'}}" on-click="@event.shiftKey ? copyToClipboard(record.old || {}, 'Copied old record JSON to clipboard.') : copyToClipboard(record.new || {}, 'Copied new record JSON to clipboard.')">
+          <div class="wrapper striped-{{index % 2 == 0 ? 'even' : 'odd'}}" on-click="@event.shiftKey ? copyToClipboard(record.old || {}, 'Copied old record JSON to clipboard.') : copyToClipboard(record.new || {}, 'Copied new record JSON to clipboard.'), false">
             <div class=name><span>{{record.table}} {{entry.id || ''}} {{entry.status || '(empty changeset)'}}</span><span class=src>({{record.source}})</span></div>
             <div class=buttons>
-              <button class=split-up title="Split this entry and all entries above it up to the previous segment into a new segment" on-click="@.renameSegment(record, 'above')">&#9650;</button> <button class=split-down title="Split this entry and all entries below it down to the next segment into a new segment" on-click="@.renameSegment(record, 'below')">&#9660;</button>
+              <button class=split-up title="Split this entry and all entries above it up to the previous segment into a new segment" on-click="@.renameSegment(record, 'above'), false">&#9650;</button> <button class=split-down title="Split this entry and all entries below it down to the next segment into a new segment" on-click="@.renameSegment(record, 'below'), false">&#9660;</button>
             </div>
           </div>
         {{/if}}
       {{/with}}
       {{#if ~/entries[index + 1] && ~/entries[index + 1].segment !== .segment}}{{#with ~/entries[index + 1]}}
-        <div class=header><h2 title="Double click to rename segment" on-dblclick="@.renameSegment(.)">{{.segment}}</h2> <div class=buttons style="padding-top: 0.9em;">{{#if ~/allowUndoSegment}}<button class=undo on-click="@.undoSegment(.)" title="Undo all changes in this segment by replaying the changes in reverse. This will also create a new segment named 'Undo {{.segment}}', unless you hold the ctrl key when clicking this button.">Undo</button>{{/if}}</div></div>
+        <div class=header><h2 title="Double click to rename segment" on-dblclick="@.renameSegment(.), false">{{.segment}}</h2> <div class=buttons style="padding-top: 0.9em;">{{#if ~/allowUndoSegment}}<button class=undo on-click="@.undoSegment(.), false" title="Undo all changes in this segment by replaying the changes in reverse. This will also create a new segment named 'Undo {{.segment}}', unless you hold the ctrl key when clicking this button.">Undo</button>{{/if}}</div></div>
       {{/with}}{{/if}}
       <else>
         {{#if ~/exprError}}<code class=expr>{{~/expr}}</code> is an invalid filter.<br /><br /><pre>Error: {{~/exprError.message + '\n\n'}}{{~/exprError.marked}}</pre>{{else}}No change entries have been recorded.{{/if}}
