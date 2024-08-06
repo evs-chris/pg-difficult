@@ -102,10 +102,12 @@ Stopping the diff will remove the triggers, function, and tables from the databa
   }
 }
 
+type PGClient = postgres.Sql<Record<string, unknown>>;
+
 interface Client {
   id: number;
   config: DatabaseConfig;
-  client: postgres.Sql<Record<string, unknown>>;
+  client?: PGClient;
   lock?: boolean;
   pong?: { id: number; callback: () => void };
 }
@@ -261,8 +263,8 @@ async function message(this: WebSocket, msg: Message) {
       case 'halt': halt(); break;
     }
   } catch (e) {
-    if ('id' in msg) error(e.message, this, { id: msg.id });
-    else error(e.message);
+    if ('id' in msg) error(e.message, this, { id: msg.id, stack: e.stack });
+    else error(e.message, this, { stack: e.stack });
   }
 }
 
@@ -298,26 +300,28 @@ async function start(config: DatabaseConfig, id: number, ws: WebSocket, start?: 
   if (!config.ssl) config.ssl = 'prefer';
   config = prepareConfig(config, { app: 'diff' });
 
-  const client = postgres(config);
 
   const did = state.diffId++;
-  const rec = { client, config, id: did, lock: false };
+  const rec = { client: undefined as any, config, id: did, lock: false };
+  const client = await connectClient(rec, 1);
   state.diffs[did] = rec;
 
   try {
-    await client`select 1 as x`;
-
     // check for started diff
     let restart = false;
     try {
       await client`select * from __pgdifficult_state`;
       restart = true;
       if (!start) {
-        await client.end();
+        try {
+          await client.end();
+        } catch {}
         delete state.diffs[did];
         return notify({ id, action: 'resume' }, ws);
       }
-    } catch { /* good */ }
+    } catch (e) {
+      console.warn(`caught error checking for started diff:`, e);
+    }
 
     if (restart && start === 'resume') {
       await client`notify __pg_difficult, 'joined'`;
@@ -327,7 +331,10 @@ async function start(config: DatabaseConfig, id: number, ws: WebSocket, start?: 
       try {
         await diff.start(client);
       } catch (e) {
-        await client.end();
+        console.error(e)
+        try {
+          await client.end();
+        } catch {}
         throw e;
       }
 
@@ -348,16 +355,51 @@ async function start(config: DatabaseConfig, id: number, ws: WebSocket, start?: 
   notify({ action: 'check', reset: true });
 }
 
+const connecting: { [id: number]: undefined|Promise<PGClient> } = {};
+async function connectClient(client: Client, attempts: number = NaN): Promise<PGClient> {
+  const pending = connecting[client.id];
+  if (pending) return pending;
+  const [pr, ok, fail] = defer<PGClient>();
+  pr.catch(() => {});
+  connecting[client.id] = pr;
+  let connected = false;
+  let i = 0;
+  let res: PGClient = undefined as any;
+  while (!connected) {
+    try {
+      res = client.client = postgres(client.config);
+      await client.client`select 1 as x`;
+      connected = true;
+      ok(client.client);
+      connecting[client.id] = undefined;
+    } catch {
+      i++;
+      console.error(`failed connecting client ${client.id} (${source(client.config)}) - retrying in 5s`);
+      if (attempts <= i) {
+        const err = new Error(`too many failed attempts to connect to ${source(client.config)}`);
+        fail(err);
+        throw err;
+      }
+      await sleep(5000);
+    }
+  }
+  return res;
+}
 async function reconnectDiff(client: Client) {
-  try {
-    await client.client.end();
-  } catch { /* probably already dead */ }
-  client.client = postgres(client.config);
-  await client.client`select 1 as x`;
+  const current = client.client;
+  client.client = undefined;
+  if (current) {
+    try {
+      if (client.client) await current.end();
+    } catch {}
+  }
+
+  await connectClient(client);
   await connectedDiff(client);
 }
 
 async function connectedDiff(rec: Client) {
+  if (!rec.client) return;
   await rec.client.listen('__pg_difficult', async v => {
     if (rec.lock) return;
     let req: any;
@@ -369,7 +411,7 @@ async function connectedDiff(rec: Client) {
       console.log('stopping remotely stopped diff');
       delete state.diffs[rec.id];
       try {
-        await rec.client.end();
+        if (rec.client) await rec.client.end();
       } catch {
         console.log(`Failed to disconnect listener for stopped diff ${source(rec.config)}.`);
       }
@@ -390,21 +432,17 @@ async function connectedDiff(rec: Client) {
 }
 
 async function listenerPing(client: Client) {
-  if (client.pong) return;
+  if (client.pong || !client.client) return;
   const id = Math.floor(Math.random() * 10000);
-  let ok: () => void;
-  let fail: (err: Error) => void;
-  const pr = new Promise<void>((y, n) => {
-    ok = y;
-    fail = n;
-  });
+  const [pr, ok, fail] = defer();
+  pr.catch(() => {});
   const tm = setTimeout(() => {
     client.pong = undefined;
-    console.log('ping timeout on ', id);
+    console.log(`ping timeout on ${id}, client ${client.id} (${source(client.config)})`);
     fail(new Error('timeout'));
   }, 5000);
   client.pong = { id, callback: () => { clearTimeout(tm); ok(); } };
-  await client.client.notify('__pg_difficult', JSON.stringify({ action: 'ping', id }));
+  client.client.notify('__pg_difficult', JSON.stringify({ action: 'ping', id }));
   await pr;
   client.pong = undefined;
   return;
@@ -413,6 +451,7 @@ async function listenerPing(client: Client) {
 async function stop(did: number, msgid: number, ws: WebSocket, save?: true) {
   const client = state.diffs[did];
   if (!client) return error('Cannot stop what is not started.');
+  if (!client.client) return error('Cannot stop diff while not attached to server.');
   if (save || save !== false && Object.keys(state.diffs).length > 1) {
     const entries = await diff.entries(client.client);
     const src = source(client.config);
@@ -420,7 +459,9 @@ async function stop(did: number, msgid: number, ws: WebSocket, save?: true) {
     state.saved.push.apply(state.saved, entries);
   }
   await diff.stop(client.client);
-  await client.client.end();
+  try {
+    await client.client.end();
+  } catch {}
   delete state.diffs[did];
   notify({ action: 'stopped', id: msgid }, ws);
   status();
@@ -447,9 +488,11 @@ async function next(segment: string, ws: WebSocket, id?: string) {
   if (!segment) return error('Segment is required.');
   state.segment = segment;
   for (const k in state.diffs) {
-    state.diffs[k].lock = true;
-    await diff.next(state.diffs[k].client, segment);
-    state.diffs[k].lock = false;
+    const d = state.diffs[k];
+    if (!d.client) continue;
+    d.lock = true;
+    await diff.next(d.client, segment);
+    d.lock = false;
   }
 
   status();
@@ -461,12 +504,13 @@ async function clear(client?: number) {
   if (!client) state.saved = [];
 
   if (client) {
-    if (client in state.diffs) await diff.clear(state.diffs[client].client);
+    if (client in state.diffs && state.diffs[client].client) await diff.clear(state.diffs[client].client);
   } else {
     for (const k in state.diffs) {
-      state.diffs[k].lock = true;
-      await diff.clear(state.diffs[k].client);
-      state.diffs[k].lock = false;
+      const d = state.diffs[k];
+      if (!d.client) continue;
+      d.lock = true;
+      await diff.clear(d.client);
     }
   }
 
@@ -479,6 +523,7 @@ async function check(ws: WebSocket, client: string|number, id: string, since?: s
   for (const k in state.diffs) {
     if (+client === +k) {
       const client = state.diffs[k];
+      if (!client.client) return error('Cannot check entries while disconnected', ws, { id });
       try {
         await listenerPing(client);
       } catch {
@@ -504,6 +549,7 @@ async function schema(ws: WebSocket, client?: string|number|DatabaseConfig, id?:
   if (typeof client === 'number' || typeof client === 'string') {
     const c = state.diffs[+client];
     if (!c) return error(`Cannot retrieve schema for unknown client ${client}.`, ws, { id });
+    if (!c.client) return error('Cannot retrieve schema while disconnected.', ws, { id });
     res[c.id] = await diff.schema(c.client);
   } else if (client) {
     const c = postgres(prepareConfig(client, { app: 'schema' }));
@@ -518,11 +564,14 @@ async function schema(ws: WebSocket, client?: string|number|DatabaseConfig, id?:
     } catch (e) {
       return error(`Error getting schema: ${e.message}`, ws, { id });
     } finally {
-      await c.end();
+      try {
+        await c.end();
+      } catch {}
     }
   } else {
     for (const k in state.diffs) {
       const client = state.diffs[k];
+      if (!client.client) continue;
       res[client.id] = await diff.schema(client.client);
     }
   }
@@ -533,12 +582,16 @@ type QueryResult = { rows: any[]; count: number } | { error: string };
 
 async function query(client: DatabaseConfig|number|string, query: string[], params: unknown[][], id: string, ws: WebSocket) {
   if (typeof client === 'number' || typeof client === 'string') {
-    const c = state.diffs[+client];
-    if (!c) return error(`Could not query unknown client ${client}.`, ws, { id });
+    const cl: Client = state.diffs[+client];
+    if (!cl) return error(`Could not query unknown client ${client}.`, ws, { id });
+    if (!cl.client) return error(`Could not query disconnected client ${client} (${source(cl.config)})`);
 
+    let c: PGClient = undefined as any;
     try {
       const start = Date.now();
-      await c.client.begin(async sql => {
+      c = postgres(prepareConfig(cl.config, { app: 'query' }));
+      await c`select 1 as x`;
+      await c.begin(async sql => {
         const results: unknown[] = [];
         for (let i = 0; i < query.length; i++) results.push(await sql.unsafe(query[i], params[i] as JSONValue[]));
         notify({ action: 'query', id, result: results.length === 1 ? results[0] : results, time: Date.now() - start, affected: results.length === 1 ? (results[0] as { count: number }).count : results.map(r => (r as { count: number }).count) }, ws);
@@ -546,10 +599,15 @@ async function query(client: DatabaseConfig|number|string, query: string[], para
     } catch (e) {
       console.error(e, query);
       error(`Error running query: ${e.message}`, ws, { id });
+    } finally {
+      try {
+        await c.end();
+      } catch {}
     }
   } else {
-    const c = postgres(prepareConfig(client, { app: 'query' }));
+    let c: PGClient;
     try {
+      c = postgres(prepareConfig(client, { app: 'query' }));
       await c`select 1 as x`;
     } catch (e) {
       return error(`Error running query: ${e.message}`, ws, { id });
@@ -566,7 +624,9 @@ async function query(client: DatabaseConfig|number|string, query: string[], para
       console.error(e, query);
       error(`Error running query: ${e.message}`, ws, { id });
     } finally {
-      await c.end();
+      try { // hmmmm
+        await c.end();
+      } catch {}
     }
   }
 }
@@ -592,8 +652,9 @@ function queryAll(clients: DatabasesConfig[], query: string[], params: unknown[]
 }
 
 async function queryOne(client: DatabaseConfig, query: string[], params: unknown[][]): Promise<QueryResult> {
-  const c = postgres(prepareConfig(client, { app: 'query-all' }));
+  let c: PGClient;
   try {
+    c = postgres(prepareConfig(client, { app: 'query-all' }));
     await c`select 1 as x`;
   } catch (e) {
     return { error: e.message };
@@ -609,7 +670,9 @@ async function queryOne(client: DatabaseConfig, query: string[], params: unknown
     console.error(e, query);
     return { error: e.message };
   } finally {
-    await c.end();
+    try {
+      await c.end();
+    } catch {}
   }
 }
 
@@ -623,7 +686,7 @@ async function queryQueue(queue: Array<DatabaseConfig & { __key: string }>, quer
   }
 }
 
-async function listConnections(client: postgres.Sql<Record<string, unknown>>): Promise<Connection[]> {
+async function listConnections(client: PGClient): Promise<Connection[]> {
   return await client<Connection[]>`select pid, usename as user, application_name as application, datname as database, backend_start as started, state, client_addr || ':' || client_port as client from pg_stat_activity order by backend_start desc`;
 }
 
@@ -633,6 +696,7 @@ async function leak(config: DatabaseConfig) {
     if (source(prepareConfig(c.client.config, { database: config.database || 'postgres' })) === source(config)) {
       if (c.databases.includes(config.database)) return error(`Already connected to ${source(config)}`);
       else {
+        if (!c.client.client) continue;
         c.databases.push(config.database);
         c.initial[config.database] = await listConnections(c.client.client);
         return status();
@@ -650,7 +714,9 @@ async function leak(config: DatabaseConfig) {
     const connections = await listConnections(c);
     state.leaks[id] = { client: { id, client: c, config }, initial: { [config.database || 'postgres']: connections }, current: connections, databases: [config.database || 'postgres'] };
   } catch (e) {
-    c.end();
+    try {
+      await c.end();
+    } catch {}
     throw (e);
   }
 
@@ -668,7 +734,11 @@ async function unleak(client: DatabaseConfig) {
   delete c.initial[client.database || 'postgres'];
 
   if (c.databases.length < 1) {
-    await c.client.client.end();
+    if (c.client.client) {
+      try {
+        await c.client.client.end();
+      } catch {}
+    }
     delete state.leaks[c.client.id];
   }
   
@@ -685,7 +755,7 @@ async function poll(out: boolean) {
     return;
   }
 
-  for (const l of leaks) l.current = await listConnections(l.client.client);
+  for (const l of leaks) if (l.client.client) l.current = await listConnections(l.client.client);
 
   if (out && state.leakTimer != null) {
     clearTimeout(state.leakTimer);
@@ -711,6 +781,7 @@ async function checkDiffListeners() {
   let recon = 0;
   for (const id in state.diffs) {
     const d = state.diffs[id];
+    if (!d.client) continue;
     try {
       await listenerPing(d);
     } catch (e) {
@@ -732,14 +803,22 @@ async function halt() {
   for (const k in state.diffs) {
     const client = state.diffs[k];
     try {
-      await diff.stop(client.client);
-      await client.client.end();
+      if (client.client) {
+        await diff.stop(client.client);
+        try {
+          await client.client.end();
+        } catch {}
+      }
     } catch { /* sure */ }
     if (state.leakTimer != null) clearTimeout(state.leakTimer);
     for (const k in state.leaks) {
       const leak = state.leaks[k];
       try {
-        await leak.client.client.end();
+        if (leak.client.client) {
+          try {
+            await leak.client.client.end();
+          } catch {}
+        }
       } catch { /* sure */ }
     }
   }
@@ -748,11 +827,29 @@ pg_difficult stopped`);
   Deno.exit(0);
 }
 
+function defer<T = void>(): [Promise<T>, (ok: T) => void, (err: Error) => void] {
+  let ok: (ok: T | Promise<T>) => void = undefined as any;
+  let fail: (err: Error) => void = undefined as any;
+  const pr = new Promise<T>((y, n) => [ok, fail] = [y, n]);
+  return [pr, ok, fail];
+}
+
+function sleep(ms: number): Promise<void> {
+  const [pr, ok] = defer();
+  setTimeout(ok, ms);
+  return pr;
+}
+
 // make sure interrupt stops the diff
 Deno.addSignalListener('SIGINT', halt);
 
 app.addEventListener('error', ev => {
   console.error(`Caught an application error: ${ev.message}`);
+});
+
+globalThis.addEventListener("unhandledrejection", (e) => {
+  console.log("unhandled rejection at:", e.reason);
+  e.preventDefault();
 });
 
 // start server

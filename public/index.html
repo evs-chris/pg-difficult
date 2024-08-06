@@ -330,10 +330,10 @@
               </div>
             </div>
             <div class="actions">
-              {{#if !@.hasDiff(.)}}<button on-click="@.startDiff(.)" title="Begin recording changes to tables in this database.">Start Diff</button>
+              {{#if !@.hasDiff(.)}}<button on-click="@.startDiff(.)" disabled="{{@.diffWait(.)}}" title="Begin recording changes to tables in this database.">Start Diff</button>
               {{else}}
                 <div>
-                  <button on-click="@.stopDiff(.)" title="Cease recording changes to tables in this database.">Stop Diff</button>
+                  <button on-click="@.stopDiff(.)" disabled="{{@.diffWait(.)}}" title="Cease recording changes to tables in this database.">Stop Diff</button>
                   <button on-click="@.entries(.)" title="View recoded entries from this database">Entries</button>
                 </div>
               {{/if}}

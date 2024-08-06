@@ -324,6 +324,10 @@ const app = globalThis.app = new App({
         });
       }
     },
+    waiting(v) {
+      if (v) document.body.style.cursor = 'wait';
+      else document.body.style.cursor = 'default';
+    },
   },
   on: {
     render() {
@@ -462,6 +466,7 @@ app.set('scratchPads', JSON.parse(localStorage.getItem('scratchPads') || '[]'));
 
 class ControlPanel extends Window {
   constructor(opts) { super(opts); }
+  diffStateMap = new Map();
   async editConnection(which) {
     const config = (this.get('connections') || [])[which];
     const wnd = new Connect({ data: { config: Object.assign({}, config) } });
@@ -487,27 +492,52 @@ class ControlPanel extends Window {
     return clients.includes(constr(cfg));
   }
   async startDiff(config) {
-    const res = await request({ action: 'start', config });
+    this.waitForDiff(config, true);
+    let res;
+    try {
+      res = await request({ action: 'start', config });
+    } finally {
+      this.waitForDiff(config, false);
+    }
     if (res.action === 'resume') {
       const what = await app.choose('There is already a running diff in this database. Would you like to cancel, resume the diff that is already running from this instance, or restart start the diff and disconnect any other instances that are connected?', [
         { label: 'Cancel', action() { this.close(); }, where: 'left', title: 'Nevermind, don\'t do anything.' },
         { label: 'Restart', action() { this.close(false, 'restart'); }, title: 'Stop the active diff and start a new one.', where: 'center' },
         { label: 'Resume', action() { this.close(false, 'resume'); }, title: 'Join the active diff.' }
       ], 'Restart or resume diff?');
-      if (what) await request({ action: what, config });
+      if (what) {
+        this.waitForDiff(config, true);
+        try {
+          await request({ action: what, config });
+        } finally {
+          this.waitForDiff(config, false);
+        }
+      }
     }
   }
   async stopDiff(config) {
     const clients = Object.values(this.get('status.clients') || {});
     const str = constr(config);
     const client = clients.find(c => c.source === str);
-    if (client) await request({ action: 'stop', diff: client.id });
+    if (client) {
+      this.waitForDiff(config, true);
+      await request({ action: 'stop', diff: client.id });
+      this.waitForDiff(config, false);
+    }
   }
   async addDiff() {
     const wnd = new Connect();
     this.host.addWindow(wnd, { block: this });
     const res = await wnd.result;
     if (res !== false) this.startDiff(res);
+  }
+  waitForDiff(config, wait) {
+    this.diffStateMap.set(config, wait);
+    this.update('@.diffStateMap');
+  }
+  diffWait(config) {
+    const map = this.get('@.diffStateMap');
+    return map.get(config);
   }
   startLeak(config) {
     notify({ action: 'leak', config });
@@ -2002,7 +2032,7 @@ function message(msg) {
       break;
 
     case 'error':
-      app.host.toast(msg.error || '(unknown error)', { type: 'error' });
+      app.host.toast(msg.error || '(unknown error)', { type: 'error', more: msg.stack, showMore: !!msg.stack });
       if ('id' in msg) request.error(msg.id, msg);
       break;
 
