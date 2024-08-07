@@ -202,7 +202,7 @@ const app = globalThis.app = new App({
     'status.clients': {
       handler(v) {
         const active = Object.values(v || {}).map(v => {
-          return { title: v.source, action() { app.openEntries(v.id) } };
+          return { title: v.source, action() { app.openEntries(v.id) }, right: !(v.connected ?? true) ? '<span class=disconnected title="Connection to server has been lost.">!</span>' : '' };
         });
         if (active.length > 1) active.unshift({ title: 'All Entries', action() { app.openEntries() } });
         this.set('diffs', active);

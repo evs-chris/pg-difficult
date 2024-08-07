@@ -387,8 +387,10 @@ async function connectClient(client: Client, attempts: number = NaN): Promise<PG
 }
 async function reconnectDiff(client: Client) {
   const current = client.client;
+  if (connecting[client.id]) return;
   client.client = undefined;
   if (current) {
+    status();
     try {
       if (client.client) await current.end();
     } catch {}
@@ -396,6 +398,8 @@ async function reconnectDiff(client: Client) {
 
   await connectClient(client);
   await connectedDiff(client);
+  status();
+  throttleCheck();
 }
 
 async function connectedDiff(rec: Client) {
@@ -470,13 +474,14 @@ async function stop(did: number, msgid: number, ws: WebSocket, save?: true) {
 function status(id?: string, ws?: WebSocket) {
   const status = {
     segment: state.segment,
-    clients: {} as { [k: number]: { id: number; config: DatabaseConfig; source: string } },
+    clients: {} as { [k: number]: { id: number; config: DatabaseConfig; source: string; connected: boolean } },
     leaks: {} as { [k: number]: { id: number; config: DatabaseConfig; databases: string[]; initial: { [database: string]: Connection[] }; current: Connection[] } },
     pollingInterval: config.pollingInterval,
     VERSION,
   };
   for (const k in state.diffs) {
-    status.clients[k] = { id: +k, config: Object.assign({}, state.diffs[k].config, { types: undefined, connection: undefined }), source: source(state.diffs[k].config) };
+    const d = state.diffs[k];
+    status.clients[k] = { id: +k, config: Object.assign({}, d.config, { types: undefined, connection: undefined }), source: source(d.config), connected: !!d.client };
   }
   for (const k in state.leaks) {
     status.leaks[k] = { id: +k, config: Object.assign({}, state.leaks[k].client.config, { types: undefined, connection: undefined }), databases: state.leaks[k].databases, initial: state.leaks[k].initial, current: state.leaks[k].current };
@@ -778,7 +783,6 @@ app.addEventListener('listen', ({ secure, hostname, port }) => {
 });
 
 async function checkDiffListeners() {
-  let recon = 0;
   for (const id in state.diffs) {
     const d = state.diffs[id];
     if (!d.client) continue;
@@ -788,13 +792,11 @@ async function checkDiffListeners() {
       console.error(`listener ping failed, reconnecting...`, e);
       try {
         await reconnectDiff(d);
-        recon++;
       } catch (e) {
         console.error('failed to reconnect listener for diff', e);
       }
     }
   }
-  if (recon > 0) notify({ action: 'check' });
 }
 const checkInt = setInterval(checkDiffListeners, config.monitorInterval);
 
