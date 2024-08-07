@@ -684,7 +684,7 @@ class Connect extends Window {
 }
 Window.extendWith(Connect, {
   template: '#connect',
-  options: { title: 'Connect', flex: true, close: false, resizable: false, maximize: false, minimize: false, width: '40em', height: '30em' },
+  options: { title: 'Connect', flex: true, close: false, resizable: true, maximize: false, minimize: false, width: '40em', height: '30em' },
 });
 
 const escRE = /[<>&]/g;
@@ -955,7 +955,7 @@ class Entries extends Window {
     const res = evaluate({ entry, schema: (this.get('schemas') || {})[entry.source], hideBlank: this.get('hideBlankFields'), hideDefault: this.get('hideDefaultFields') }, `
 set res = { table:entry.table segment:entry.segment }
 if entry.old and entry.new {
- let d = sort(diff(entry.old entry.new))
+ let d = sort(diff(filter(entry.old =>@key in ~entry.new) entry.new))
  if keys(d).length {
    set res.status = :changed
    set res.changed = ^d
@@ -1104,7 +1104,7 @@ res
 
       for (const s of srcs) {
         const ts = targets.filter(t => t.source === s);
-        await request({ action: 'query', query: ['update __pgdifficult_entries set segment = $1 where id = any($2)'], params: [[name, ts.map(t => t.id)]], client: srcConfig[s] });
+        await request({ action: 'query', query: ['update pgdifficult.entries set segment = $1 where id = any($2)'], params: [[name, ts.map(t => t.id)]], client: srcConfig[s] });
       }
     }
 

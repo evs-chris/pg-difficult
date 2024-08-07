@@ -38,6 +38,10 @@
     margin: 0;
     padding: 0 0 0.5em 0;
   }
+  fieldset {
+    border-color: rgba(128, 128, 128, 0.4);
+    border-radius: 0.5em;
+  }
   code.expr {
     display: inline-block;
     border: 1px solid rgba(0, 0, 0, 0.2);
@@ -325,14 +329,14 @@
   <tabs pad style="overflow: hidden; height: 100%;">
     <tab title="Connections" hidden="@global.clientOnly">
       <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.3em;">
-        <div>Connections are saved in browser storage and can be used to start diffs and run queries.<br/><br/><span style="color: #ca3c3c; font-weight: bold;">WARNING:</span> Starting a diff on a database will create two tables, create a function, and a then set the function as a trigger for each existing table in the database. A running diff in a database <em>will</em> cause performance degradation, especially if left to collect thousands of changes.</div>
+        <div>Connections are saved in browser storage and can be used to start diffs and run queries.<br/><br/><span style="color: #ca3c3c; font-weight: bold;">WARNING:</span> Starting a diff on a database will create a pgdifficult schema with two tables and a function, and then it will set the function as a trigger for each existing table in the database. A running diff in a database <em>will</em> cause performance degradation, especially if left to collect thousands of changes. You can exclude tables and set maximum captured value size in the connection settings.</div>
         <button style="flex-shrink: 0;" on-click="@.editConnection()" title="Add a saved connection for this browser at this url.">Add Connection</button>
       </div>
       <div style="overflow: auto;">
         {{#each connections}}
           <div class="connection striped">
             <div class="constr">
-              <div style="flex-grow: 1;">{{#if .label}}<strong>{{.label}}</strong> ({{constr(.)}}){{else}}{{constr(.)}}{{/if}}</div>
+              <div style="flex-grow: 1;">{{#if .label}}<strong>{{.label}}</strong> ({{constr(.)}}){{else}}{{constr(.)}}{{/if}}<tip>{{`Maximium value length: ${.diffopts.maxlen || 'none'}\nChanged record capture: ${.diffopts.change === 'whole' ? 'both whole records' : .diffopts.change === 'whole-old' ? 'whole old record, new changes' : 'changes only'}\nIgnored tables: ${.diffopts.ignore.length ? .diffopts.ignore.join(', ') : 'none'}`}}</tip></div>
               <div style="width: 9em; flex-shrink: 0;">
                 <button class=flat disabled="{{@index === 0}}" on-click="moveUp(@context, @event.shiftKey || @event.ctrlKey)" title="Move up, hold shift or ctrl to move to top">&#9650;</button>
                 <button class=flat disabled="{{@index === @last}}" on-click="moveDown(@context, @event.shiftKey || @event.ctrlKey)" title="Move down, hold shift or ctrl to move to bottom">&#9660;</button>
@@ -606,7 +610,7 @@
       {{#with . as record, @.details(.) as entry}}
         {{#if entry.status}}
           {{#if entry.changed}}
-            <div class="wrapper striped-{{index % 2 == 0 ? 'even' : 'odd'}}" on-click="@event.shiftKey ? copyToClipboard(record.old || {}, 'Copied old record JSON to clipboard.') : copyToClipboard(record.new || {}, 'Copied new record JSON to clipboard.'), false">
+            <div class="wrapper striped-{{index % 2 == 0 ? 'even' : 'odd'}}" on-click="@event.shiftKey ? copyToClipboard(record.old || {}, 'Copied old record JSON to clipboard.') : copyToClipboard(Object.keys(record.new).length !== Object.keys(record.old).length ? Object.assign({}, record.old, record.new) : record.new || {}, 'Copied new record JSON to clipboard.'), false">
               <div class=name><span>{{record.table}} {{entry.id || ''}} {{entry.status}}</span><span class=src>({{record.source}})</span></div>
               {{#each entry.changed}}
                 <div class="diff">
@@ -1218,6 +1222,25 @@
       <option value="{{false}}">None</option>
     </select></label>
     <label as-field>Label<input value="{{~/config.label}}" /></label>
+    <fieldset style="margin: 1em 0.5em;">
+      <legend>Diff Options</legend>
+      <label as-field>Max Length <tip>The maximum allowable length of any value of any column to be recorded directly in a diff. Any values with lengths that exceed this number will instead be checksummed. This will affect your ability to undo diffs, as the checksummed value may not be valid in the source column. This defaults to 0, which disables the feature.</tip><input type=number value="{{~/config.diffopts.maxlen}}" placeholder="0" /></label>
+      <label as-field>Change Records<select value="{{~/config.diffopts.changes}}">
+        <option value="{{undefined}}">Record only changed fields and keys if possible.</option>
+        <option value="whole">Always record the full old and new records.</option>
+        <option value="whole-old">Always record the full old record and only changed fields and keys in the new record if possible.</option>
+      </select></label>
+      <field tip="This can be a table name, a schema.table name, or an ilike pattern that matches either table or schema.table. '__pgdifficult_%' and 'pgdifficult.%' are automatically ignored." label="Ignore Patterns" value="{{~/ignore}}"><button on-click="@.push('config.diffopts.ignore', ~/ignore), @.set('ignore', '')">Add</button></field>
+      <h3 style="border-bottom: 1px solid; margin: 1em 0 0.5em 0;">Ignored Pattern List</h3>
+      {{#each ~/config.diffopts.ignore}}
+        <div class="wrapper striped-{{@index % 2 == 0 ? 'even' : 'odd'}}" style="display: flex;">
+          <label as-field class=inline style="flex-grow: 1;"><input value="{{.}}" /></label>
+          <label as-field class=inline style="flex-shrink: 0;"><button on-click="@.splice('~/config.diffopts.ignore', @index, 1)">Remove</button></label>
+        </div>
+      {{else}}
+        <em>No ignored patterns</em>
+      {{/each}}
+    </fieldset>
   </div>
   <buttons>
     <button left class=flat on-click="@.cancel()">Cancel</button>

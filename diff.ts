@@ -1,4 +1,5 @@
 import postgres from 'https://deno.land/x/postgresjs@v3.4.4/mod.js';
+import { evaluate } from 'https://cdn.jsdelivr.net/npm/raport@0.24.8/lib/index.js';
 
 type Client = postgres.Sql<Record<string, unknown>>;
 
@@ -126,16 +127,30 @@ export interface Change {
   stamp: string;
 }
 
-export async function start(client: Client) {
+export interface StartOptions {
+  maxlen?: number;
+  changes?: 'whole'|'whole-old'|'diff';
+  ignore?: string[];
+}
+
+export async function start(client: Client, opts?: StartOptions) {
+  const maxlen = opts?.maxlen ?? 0;
+  const changes = opts?.changes ?? 'diff';
+  const ignore = opts?.ignore || [];
+  // make sure we don't add triggers for diff tables
+  ignore.push('__pgdifficult_%', 'pgdifficult.%');
   await client.begin(async client => {
-    const tables: Table[] = await client.unsafe(tableQuery);
-    await client`create table __pgdifficult_entries (id bigserial primary key, "schema" varchar not null, "table" varchar not null, segment varchar not null, old json, new json, stamp timestamptz not null);`;
-    await client`grant all on table __pgdifficult_entries to public`;
-    await client`grant all on sequence __pgdifficult_entries_id_seq to public`;
-    await client`create table __pgdifficult_state (key varchar primary key, value varchar);`;
-    await client`grant all on table __pgdifficult_state to public`;
-    await client`insert into __pgdifficult_state (key, value) values ('segment', 'initial');`;
-    await client`create or replace function __pgdifficult_record() returns trigger as $trigger$
+    const tables: Table[] = evaluate({ tables: await client.unsafe(tableQuery), ignore }, `filter(tables =>name not-ilike ~ignore and '{schema}.{name}' not-ilike ~ignore)`);
+    if (!tables.length) throw new Error(`No tables to watch`);
+    await client`create schema if not exists pgdifficult`;
+    await client`grant all on schema pgdifficult to public`;
+    await client`create table pgdifficult.entries (id bigserial primary key, "schema" varchar not null, "table" varchar not null, segment varchar not null, old json, new json, stamp timestamptz not null);`;
+    await client`grant all on table pgdifficult.entries to public`;
+    await client`grant all on sequence pgdifficult.entries_id_seq to public`;
+    await client`create table pgdifficult.state (key varchar primary key, value varchar);`;
+    await client`grant all on table pgdifficult.state to public`;
+    await client`insert into pgdifficult.state (key, value) values ('segment', 'initial');`;
+    await client.unsafe(`create or replace function pgdifficult.record() returns trigger as $trigger$
   declare
     segment varchar;
     rec record;
@@ -144,26 +159,34 @@ export async function start(client: Client) {
     pkeys varchar[];
   begin
     set timezone = 'UTC';
-    select value into segment from __pgdifficult_state where key = 'segment';
+    select value into segment from pgdifficult.state where key = 'segment';${maxlen <= 0 ? `
+    select row_to_json(OLD) into obj_old;
+    select row_to_json(NEW) into obj_new;` : `
+    with obj as (select a.key, case when length(a.value::varchar) > ${maxlen} then ('"<a really big value md5:' || md5(a.value::varchar) || '>"')::json else a.value end as value from json_each(row_to_json(OLD)) a)
+    select json_object_agg(key, value) into obj_old from obj;
+    with obj as (select a.key, case when length(a.value::varchar) > ${maxlen} then ('"<a really big value md5:' || md5(a.value::varchar) || '>"')::json else a.value end as value from json_each(row_to_json(NEW)) a)
+    select json_object_agg(key, value) into obj_new from obj;`}
     case TG_OP
       when 'UPDATE' then
         select array_agg(a.attname::varchar) into pkeys from pg_index i join pg_attribute a on i.indrelid = a.attrelid and a.attnum = any(i.indkey) where i.indrelid = TG_RELID and i.indisprimary;
 
         case when pkeys is null then
-          insert into __pgdifficult_entries ("table", "schema", "segment", "old", "new", stamp) values (TG_TABLE_NAME, TG_TABLE_SCHEMA, segment, row_to_json(OLD), row_to_json(NEW), CURRENT_TIMESTAMP(3));
+          insert into pgdifficult.entries ("table", "schema", "segment", "old", "new", stamp) values (TG_TABLE_NAME, TG_TABLE_SCHEMA, segment, obj_old, obj_new, CURRENT_TIMESTAMP(3));
         else
-          with obj1 as (select * from json_each(row_to_json(OLD))), obj2 as (select * from json_each(row_to_json(NEW))), diff as (select a.key, a.value from obj1 a join obj2 b on a.key = b.key where a.value is null and b.value is not null or b.value is null and a.value is not null or a.value::varchar <> b.value::varchar or a.key = any(pkeys))
-          select json_object_agg(key, value) into obj_old from diff;
-          with obj1 as (select * from json_each(row_to_json(NEW))), obj2 as (select * from json_each(row_to_json(OLD))), diff as (select a.key, a.value from obj1 a join obj2 b on a.key = b.key where a.value is null and b.value is not null or b.value is null and a.value is not null or a.value::varchar <> b.value::varchar or a.key = any(pkeys))
-          select json_object_agg(key, value) into obj_new from diff;
-          insert into __pgdifficult_entries ("table", "schema", "segment", "old", "new", stamp) values (TG_TABLE_NAME, TG_TABLE_SCHEMA, segment, obj_old, obj_new, CURRENT_TIMESTAMP(3));
+          -- specified change recording method for old${changes === 'diff' ? `
+          with obj1 as (select * from json_each(obj_old)), obj2 as (select * from json_each(obj_new)), diff as (select a.key, a.value from obj1 a join obj2 b on a.key = b.key where a.value is null and b.value is not null or b.value is null and a.value is not null or a.value::varchar <> b.value::varchar or a.key = any(pkeys))
+          select json_object_agg(key, value) into obj_old from diff;` : ` - whole`}
+          -- specified change recording method for new${changes === 'diff' || changes === 'whole-old' ? `
+          with obj1 as (select * from json_each(obj_new)), obj2 as (select * from json_each(obj_old)), diff as (select a.key, a.value from obj1 a join obj2 b on a.key = b.key where a.value is null and b.value is not null or b.value is null and a.value is not null or a.value::varchar <> b.value::varchar or a.key = any(pkeys))
+          select json_object_agg(key, value) into obj_new from diff;` : ' - whole'}
+          insert into pgdifficult.entries ("table", "schema", "segment", "old", "new", stamp) values (TG_TABLE_NAME, TG_TABLE_SCHEMA, segment, obj_old, obj_new, CURRENT_TIMESTAMP(3));
         end case;
         rec := NEW;
       when 'INSERT' then
-        insert into __pgdifficult_entries ("table", "schema", "segment", "old", "new", stamp) values (TG_TABLE_NAME, TG_TABLE_SCHEMA, segment, null, row_to_json(NEW), CURRENT_TIMESTAMP(3));
+        insert into pgdifficult.entries ("table", "schema", "segment", "old", "new", stamp) values (TG_TABLE_NAME, TG_TABLE_SCHEMA, segment, null, obj_new, CURRENT_TIMESTAMP(3));
         rec := NEW;
       when 'DELETE' then
-        insert into __pgdifficult_entries ("table", "schema", "segment", "old", "new", stamp) values (TG_TABLE_NAME, TG_TABLE_SCHEMA, segment, row_to_json(OLD), null, CURRENT_TIMESTAMP(3));
+        insert into pgdifficult.entries ("table", "schema", "segment", "old", "new", stamp) values (TG_TABLE_NAME, TG_TABLE_SCHEMA, segment, obj_old, null, CURRENT_TIMESTAMP(3));
         rec := OLD;
       else
         raise exception 'Unknown trigger op: "%"', TG_OP;
@@ -171,17 +194,17 @@ export async function start(client: Client) {
     notify __pg_difficult, 'record';
     return rec;
   end;
-  $trigger$ language plpgsql;`;
-    await client`grant all on function __pgdifficult_record() to public`;
+  $trigger$ language plpgsql;`);
+    await client`grant all on function pgdifficult.record() to public`;
     for (const table of tables) {
-      await client`drop trigger if exists __pgdifficult_notify on ${client(table.name)};`;
-      await client`create constraint trigger __pgdifficult_notify after insert or update or delete on ${client(table.name)} deferrable initially deferred for each row execute procedure __pgdifficult_record();`;
+      await client`drop trigger if exists __pgdifficult_notify on ${client(table.schema)}.${client(table.name)};`;
+      await client`create constraint trigger __pgdifficult_notify after insert or update or delete on ${client(table.schema)}.${client(table.name)} deferrable initially deferred for each row execute procedure pgdifficult.record();`;
     }
   });
 }
 
 export async function next(client: Client, segment: string) {
-  await client`update __pgdifficult_state set value = ${segment} where key = 'segment';`;
+  await client`update pgdifficult.state set value = ${segment} where key = 'segment';`;
   await client.unsafe(`notify __pg_difficult, '${JSON.stringify({ action: 'segment', segment }).replace(/\'/g, '\\\'')}'`);
 }
 
@@ -232,8 +255,8 @@ export async function schema(client: Client): Promise<Schema> {
   }
 
   return {
-    tables: tables.filter(t => !t.name.startsWith('__pgdifficult_')),
-    functions: functions.filter(f => !f.name.startsWith('__pgdifficult_')),
+    tables: tables.filter(t => t.schema !== 'pgdifficult' && !t.name.startsWith('__pgdifficult_')),
+    functions: functions.filter(f => f.schema !== 'pgdifficult' && !f.name.startsWith('__pgdifficult_')),
     views
   };
 }
@@ -245,7 +268,19 @@ export interface Entry extends Change {
 }
 
 export async function dump(client: Client): Promise<Segment> {
-  const changes = await client`select * from __pgdifficult_entries order by id;`;
+  let changes: any[];
+  try {
+    changes = await client`select * from pgdifficult.entries order by id;`;
+  } catch (e) {
+    try {
+      // watch for old-style diffs
+      changes = await client`select * from __pgdifficult_entries order by id;`;
+    } catch (e) {
+      // ultimately, I don't think this matters
+      console.warn(`error dumping diff entries`, e);
+      changes = [];
+    }
+  }
   return changes.reduce((a, c) => {
     (a[c.segment] || (a[c.segment] = [])).push({
       table: c.table, old: c.old, new: c.new, stamp: c.stamp
@@ -255,12 +290,12 @@ export async function dump(client: Client): Promise<Segment> {
 }
 
 export async function entries(client: Client, since?: string): Promise<Entry[]> {
-  if (since) return await client`select * from __pgdifficult_entries where id > ${since} order by id asc;`;
-  else return await client`select * from __pgdifficult_entries where 1 = ${1} order by id asc;`; // gotta pass a param to get a result that doesn't have to be cast to any[]
+  if (since) return await client`select * from pgdifficult.entries where id > ${since} order by id asc;`;
+  else return await client`select * from pgdifficult.entries where 1 = ${1} order by id asc;`; // gotta pass a param to get a result that doesn't have to be cast to any[]
 }
 
 export async function clear(client: Client) {
-  await client`delete from __pgdifficult_entries;`;
+  await client`delete from pgdifficult.entries;`;
   await client`notify __pg_difficult, 'clear'`;
 }
 
@@ -269,9 +304,13 @@ export async function stop(client: Client): Promise<Segment> {
   await client.begin(async t => {
     await t`drop table if exists __pgdifficult_entries;`;
     await t`drop table if exists __pgdifficult_state;`;
+    await t`drop table if exists pgdifficult.entries;`;
+    await t`drop table if exists pgdifficult.state;`;
     const tables: Table[] = await t.unsafe(tableQuery);
-    for (const table of tables) await t`drop trigger if exists __pgdifficult_notify on ${t(table.name)}`;
+    for (const table of tables) await t`drop trigger if exists __pgdifficult_notify on ${t(table.schema)}.${t(table.name)}`;
     await t`drop function if exists __pgdifficult_record();`;
+    await t`drop function if exists pgdifficult.record();`;
+    await t`drop schema if exists pgdifficult;`;
     await t`notify __pg_difficult, 'stopped'`;
   });
   return res;

@@ -16,6 +16,7 @@ interface DatabaseConfig {
   port?: number;
   database: string;
   ssl?: 'prefer'|'require';
+  diffopts?: diff.StartOptions;
 }
 
 interface DatabasesConfig extends DatabaseConfig {
@@ -88,8 +89,8 @@ settings in the client will only apply to the specific url the browser accesses.
 you want seperate environments, you can use a different listening address or port to
 have a separate set of settings saved in the client.
 
-WARNING: Starting a diff in a database will create two new tables in that database that
-pg-difficult will use to track changes made to any records in any other table in the
+WARNING: Starting a diff in a database will create a pgdifficult schema with two new tables
+that pg-difficult will use to track changes made to any records in any other table in the
 database. It will also add a function and install it as a trigger on every table in the
 database. These tables are world readable and writable, so if there is any sensitive
 information in the database that is guarded by access controls, it will be possible for
@@ -310,17 +311,22 @@ async function start(config: DatabaseConfig, id: number, ws: WebSocket, start?: 
     // check for started diff
     let restart = false;
     try {
-      await client`select * from __pgdifficult_state`;
+      // watch out for old-style diffs and clean them up
+      await client`select count(key) from __pgdifficult_state`;
       restart = true;
-      if (!start) {
-        try {
-          await client.end();
-        } catch {}
-        delete state.diffs[did];
-        return notify({ id, action: 'resume' }, ws);
-      }
+      start = 'restart';
     } catch (e) {
-      console.warn(`caught error checking for started diff:`, e);
+      try {
+        await client`select count(key) from pgdifficult.state`;
+        restart = true;
+        if (!start) {
+          try {
+            await client.end();
+          } catch {};
+          delete state.diffs[did];
+          return notify({ id, action: 'resume' }, ws);
+        }
+      } catch {}
     }
 
     if (restart && start === 'resume') {
@@ -329,7 +335,7 @@ async function start(config: DatabaseConfig, id: number, ws: WebSocket, start?: 
     } else {
       if (restart && start === 'restart') await diff.stop(client);
       try {
-        await diff.start(client);
+        await diff.start(client, config.diffopts);
       } catch (e) {
         console.error(e)
         try {
@@ -801,6 +807,9 @@ async function checkDiffListeners() {
 const checkInt = setInterval(checkDiffListeners, config.monitorInterval);
 
 async function halt() {
+  console.log(`
+stop requested, shutting down...
+`);
   clearInterval(checkInt);
   for (const k in state.diffs) {
     const client = state.diffs[k];
