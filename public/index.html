@@ -1364,6 +1364,14 @@
 <script src="./ace@1.35.4/ace.js"></script>
 <script>
   Ractive.use(RauiAceEditor.default({ name: 'ace' }));
+  ace.config.loadModule('ace/keybinding/vim', () => {
+    const vim = ace.require('ace/keyboard/vim').Vim;
+    // tweak the vim mappings
+    vim.map('j', 'gj', 'normal');
+    vim.map('k', 'gk', 'normal');
+    vim.map('jk', '<Esc>', 'insert');
+    vim.map('kj', '<Esc>', 'insert');
+  });
 </script>
   </body>
 </html>
