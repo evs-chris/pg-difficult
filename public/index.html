@@ -530,6 +530,8 @@
             <option>vim</option>
             <option>vscode</option>
           </select></label>
+          <label as-field>Light Theme <tip>The Ace editor theme to use when retinal pain mode is selected.</tip><select value="{{~/settings.editor.lightTheme}}">{{>ace-themes}}</select></label>
+          <label as-field>Dark Theme <tip>The Ace editor theme to use when the correct mode is selected.</tip><select value="{{~/settings.editor.darkTheme}}">{{>ace-themes}}</select></label>
         </fieldset>
         <fieldset style="margin-top: 1em;">
           <legend>Delimited Text Options</legend>
@@ -557,6 +559,55 @@
       <button class=reject on-click="@.halt()">Stop pg-difficult</button>
     {{/unless}}
   </buttons>
+  {{#partial ace-themes}}
+    <option value="{{undefined}}">The Default&trade;</option>
+    <option>ambiance</option>
+    <option>chrome</option>
+    <option>cloud9_day</option>
+    <option>cloud9_night</option>
+    <option>cloud_editor</option>
+    <option>cloud_editor_dark</option>
+    <option>clouds</option>
+    <option>clouds_midnight</option>
+    <option>cobalt</option>
+    <option>crimson_editor</option>
+    <option>dawn</option>
+    <option>dracula</option>
+    <option>dreamweaver</option>
+    <option>eclipse</option>
+    <option>github</option>
+    <option>github_dark</option>
+    <option>github_light_default</option>
+    <option>gob</option>
+    <option>gruvbox</option>
+    <option>gruvbox_dark_hard</option>
+    <option>gruvbox_light_hard</option>
+    <option>idle_fingers</option>
+    <option>iplastic</option>
+    <option>katzenmilch</option>
+    <option>kr_theme</option>
+    <option>kuroir</option>
+    <option>merbivore</option>
+    <option>merbivore_soft</option>
+    <option>mono_industrial</option>
+    <option>monokai</option>
+    <option>nord_dark</option>
+    <option>one_dark</option>
+    <option>pastel_on_dark</option>
+    <option>solarized_dark</option>
+    <option>solarized_light</option>
+    <option>sqlserver</option>
+    <option>terminal</option>
+    <option>textmate</option>
+    <option>tomorrow</option>
+    <option>tomorrow_night</option>
+    <option>tomorrow_night_blue</option>
+    <option>tomorrow_night_bright</option>
+    <option>tomorrow_night_eighties</option>
+    <option>twilight</option>
+    <option>vibrant_ink</option>
+    <option>xcode</option>
+  {{/partial}}
 </script>
 
 <script type=text/ractive id=query>
@@ -577,7 +628,7 @@
   </div>
   <div class="query" style="position: relative;">
     <split>
-      <div size=20 class="query-text" as-tracked=`ace` as-ace="{ bind: '~/query', syntax: 'pgsql', theme: @style.theme == 'dark' ? 'tomorrow_night_eighties' : 'github', wrap: ~/editor.wrap, highlightActive: ~/editor.highlightActive, fontSize: '1em', font: 'monospace', printMargin: ~/editor.printMargin, keymode: ~/editor.keymode }" on-keydown="@event.ctrlKey && @event.key === 'Enter' ? @.runQuery(~/query) : true" />
+      <div size=20 class="query-text" as-tracked=`ace` as-ace="{ bind: '~/query', syntax: 'pgsql', theme: @style.theme == 'dark' ? (~/editor.darkTheme || 'tomorrow_night_eighties') : (~/editor.lightTheme || 'tomorrow'), wrap: ~/editor.wrap, highlightActive: ~/editor.highlightActive, fontSize: '1em', font: 'monospace', printMargin: ~/editor.printMargin, keymode: ~/editor.keymode }" on-keydown="@event.ctrlKey && @event.key === 'Enter' ? @.runQuery(~/query) : true" />
       <div class="result">
         <data-table auto-titles no-wrap fixed-header allow-select=false on-init="@.set('@.table', $1)" items="{{~/result}}">
           <bottom>
@@ -941,17 +992,59 @@
     <label as-field class=inline><input value="{{pad.name}}" placeholder="Name..." lazy=1000 /></label>
     <label as-field class=inline><select value="{{pad.syntax}}" lazy=1000>
       <option value="{{undefined}}">plain text</option>
-      <option>markdown</option>
-      <option>json</option>
-      <option>pgsql</option>
-      <option>javascript</option>
-      <option>typescript</option>
-      <option>ejs</option>
-      <option>handlebars</option>
+      <option>c_cpp</option>
       <option>csharp</option>
+      <option>css</option>
+      <option>ejs</option>
+      <option>golang</option>
+      <option>handlebars</option>
+      <option>html</option>
+      <option>ini</option>
+      <option>java</option>
+      <option>javascript</option>
+      <option>json</option>
+      <option>jsx</option>
+      <option>julia</option>
+      <option>kotlin</option>
+      <option>less</option>
+      <option>liquid</option>
+      <option>lisp</option>
+      <option>lua</option>
+      <option>markdown</option>
+      <option>mediawiki</option>
+      <option>nix</option>
+      <option>nunjucks</option>
+      <option>ocaml</option>
+      <option>odin</option>
+      <option>pascal</option>
+      <option>perl</option>
+      <option>pgsql</option>
+      <option>php</option>
+      <option>plain_text</option>
+      <option>python</option>
+      <option>ruby</option>
+      <option>rust</option>
+      <option>sass</option>
+      <option>scala</option>
+      <option>scheme</option>
+      <option>sh</option>
+      <option>sql</option>
+      <option>stylus</option>
+      <option>svg</option>
+      <option>swift</option>
+      <option>tcl</option>
+      <option>toml</option>
+      <option>tsx</option>
+      <option>twig</option>
+      <option>typescript</option>
+      <option>vue</option>
+      <option>xml</option>
+      <option>xquery</option>
+      <option>yaml</option>
+      <option>zig</option>
     </select></label>
   </div>
-  <div style="flex-grow: 1;" as-ace="{ bind: 'pad.text', syntax: pad.syntax || 'plain_text', theme: @style.theme == 'dark' ? 'tomorrow_night_eighties' : 'github', wrap: ~/editor.wrap, highlightActive: ~/editor.highlightActive, fontSize: '1em', font: 'monospace', printMargin: ~/editor.printMargin, keymode: ~/editor.keymode }" />
+  <div style="flex-grow: 1;" as-ace="{ bind: 'pad.text', syntax: pad.syntax || 'plain_text', theme: @style.theme == 'dark' ? (~/editor.darkTheme || 'tomorrow_night_eighties') : (~/editor.lightTheme || 'tomorrow'), wrap: ~/editor.wrap, highlightActive: ~/editor.highlightActive, fontSize: '1em', font: 'monospace', printMargin: ~/editor.printMargin, keymode: ~/editor.keymode }" />
 </script>
 
 <script type=text/ractive id=host-explore>
