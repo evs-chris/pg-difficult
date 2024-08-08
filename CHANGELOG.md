@@ -1,3 +1,30 @@
+## 1.10.0
+
+2024-08-07
+
+### Bugs
+
+* Older versions of postgres (down to at least 9.5) are now supported by the schema gatherer in the server.
+* Auto-scrolling at the end of a diff as new entries arrive auto scrolls again.
+* Apparently the win64 build won't work without also showing a terminal window, so it'll do that again.
+
+### Somewhere between bugs and features
+
+* Active diffs will now attempt to be disconnect tolerant, so if you're on a flaky connection, the server won't crash or cease sending diff entries as they come in without notifying. Active diffs that become disconnected will get an indicator next to them in the menu.
+
+### Features
+
+* Diffs that are starting and stopping will show the wait indicator in the title bar while the server is starting and stopping the diff in the selected database, and the button to start the diff will disable until the server responds.
+* Diff connections can now specify table patterns to ignore for diffing, with `__pgdifficult_%` and `pgdifficult.%` automatically ignored.
+* Diff connections can specify the maximum value length to show up in a diff entry. It happens that browsers don't deal well with dropping 180mb of binary string into a div. This value currently defaults to 0, because it does affect undo support. If you don't want to specifically exclude a full table, this is a good option to set to something like 10,000. If a value exceeds the specified length, it will be replaced with a string that includes the md5 of the data.
+* Diff connections can now specify the format of update entries, where the whole record for both the old and new records are stored, the whole old record and the just the changes of the new record are stored, or just the changes in both the old and new records are stored.
+* The pg-difficult name at the top of the menu is now a link to the github page.
+* Query and scratch editors now have selectable themes in settings, and scratch editors have more available modes.
+* There are line number, relative line number, and highlight selected word options for editors.
+* vim mode editors now have j -> gj and k -> gk in normal mode, and jk or kj -> esc in insert mode mappings because I like them.
+* There is now a local diff tool that compares two objects that can be sourced from csv, xml, json, query rows, or diff entries. Shift+click on a table row will copy it to the clipboard and make it available to the local diff tool. Clicking a diff entry header will copy the new value, and shift+clicking a diff entry header will copy the old value.
+
+
 ## 1.9.2
 
 2024-07-25

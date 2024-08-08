@@ -57,9 +57,12 @@
         if (typeof options.margin === 'boolean') { editor.setShowPrintMargin(options.margin); }
         if (typeof options.wrap === 'boolean') { session.setUseWrapMode(options.wrap); }
         if (typeof options.highlightActive === 'boolean') { editor.setHighlightActiveLine(options.highlightActive); }
+        if (typeof options.highlightSelected === 'boolean') { editor.setHighlightSelectedWord(options.highlightSelected); }
         if (options.font) editor.setOptions({ fontFamily: options.font });
         if (options.fontSize) editor.setOptions({ fontSize: options.fontSize });
         if ('printMargin' in options) editor.setOption('showPrintMargin', options.printMargin);
+        if (typeof options.lineNumbers === 'boolean') editor.setOption('showLineNumbers', options.lineNumbers);
+        if (typeof options.relativeLineNumbers === 'boolean') editor.setOption('relativeLineNumbers', options.relativeLineNumbers);
 
         if ('keymode' in options && options.keymode) { editor.setKeyboardHandler(`ace/keyboard/${options.keymode}`); }
         else { editor.setKeyboardHandler(null); }

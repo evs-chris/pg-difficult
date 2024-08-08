@@ -28,6 +28,7 @@ Ractive.helpers.age = function(ts) {
   if (+now - +d > (7 * 86400000)) return evaluate({ d }, `d#date,'yyyy-MM-dd'`);
   return evaluate({ d }, `d#date,'HH:mm EEE'`);
 }
+Ractive.helpers.escapeKey = Ractive.escapeKey;
 
 Ractive.decorators.autofocus = function autofocus(node) {
   if (node) {
@@ -171,6 +172,7 @@ let gate;
 
 let reportId = 0;
 let scratchId = 0;
+let localDiffId = 0;
 
 class App extends Ractive {
   constructor(opts) { super(opts); }
@@ -200,7 +202,7 @@ const app = globalThis.app = new App({
     'status.clients': {
       handler(v) {
         const active = Object.values(v || {}).map(v => {
-          return { title: v.source, action() { app.openEntries(v.id) } };
+          return { title: v.source, action() { app.openEntries(v.id) }, right: !(v.connected ?? true) ? '<span class=disconnected title="Connection to server has been lost.">!</span>' : '' };
         });
         if (active.length > 1) active.unshift({ title: 'All Entries', action() { app.openEntries() } });
         this.set('diffs', active);
@@ -322,6 +324,10 @@ const app = globalThis.app = new App({
         });
       }
     },
+    waiting(v) {
+      if (v) document.body.style.cursor = 'wait';
+      else document.body.style.cursor = 'default';
+    },
   },
   on: {
     render() {
@@ -334,6 +340,9 @@ const app = globalThis.app = new App({
 
       resize(this.shell.shellSize());
       setTimeout(() => this.shell.on('resize', (_ctx, size) => resize(size)));
+
+      this.host.toastDefaults.top = false;
+      this.host.toastDefaults.bottom = true;
     },
   },
   notify,
@@ -402,6 +411,11 @@ const app = globalThis.app = new App({
     win = new ScratchPad({ data: { scratchId } }, pad);
     this.host.addWindow(win, { id: wid, title: `Loading scratch pad...` });
   },
+  openLocalDiff() {
+    const id = ++localDiffId;
+    const win = new Diff();
+    this.host.addWindow(win, { id: `local-diff-${id}`, title: `Local Diff ${id}` });
+  },
   confirm(question, title) {
     const w = new Confirm({ data: { message: question } });
     this.host.addWindow(w, { title, block: true, top: 'center', left: 'center' });
@@ -452,6 +466,7 @@ app.set('scratchPads', JSON.parse(localStorage.getItem('scratchPads') || '[]'));
 
 class ControlPanel extends Window {
   constructor(opts) { super(opts); }
+  diffStateMap = new Map();
   async editConnection(which) {
     const config = (this.get('connections') || [])[which];
     const wnd = new Connect({ data: { config: Object.assign({}, config) } });
@@ -477,27 +492,52 @@ class ControlPanel extends Window {
     return clients.includes(constr(cfg));
   }
   async startDiff(config) {
-    const res = await request({ action: 'start', config });
+    this.waitForDiff(config, true);
+    let res;
+    try {
+      res = await request({ action: 'start', config });
+    } finally {
+      this.waitForDiff(config, false);
+    }
     if (res.action === 'resume') {
       const what = await app.choose('There is already a running diff in this database. Would you like to cancel, resume the diff that is already running from this instance, or restart start the diff and disconnect any other instances that are connected?', [
         { label: 'Cancel', action() { this.close(); }, where: 'left', title: 'Nevermind, don\'t do anything.' },
         { label: 'Restart', action() { this.close(false, 'restart'); }, title: 'Stop the active diff and start a new one.', where: 'center' },
         { label: 'Resume', action() { this.close(false, 'resume'); }, title: 'Join the active diff.' }
       ], 'Restart or resume diff?');
-      if (what) await request({ action: what, config });
+      if (what) {
+        this.waitForDiff(config, true);
+        try {
+          await request({ action: what, config });
+        } finally {
+          this.waitForDiff(config, false);
+        }
+      }
     }
   }
   async stopDiff(config) {
     const clients = Object.values(this.get('status.clients') || {});
     const str = constr(config);
     const client = clients.find(c => c.source === str);
-    if (client) await request({ action: 'stop', diff: client.id });
+    if (client) {
+      this.waitForDiff(config, true);
+      await request({ action: 'stop', diff: client.id });
+      this.waitForDiff(config, false);
+    }
   }
   async addDiff() {
     const wnd = new Connect();
     this.host.addWindow(wnd, { block: this });
     const res = await wnd.result;
     if (res !== false) this.startDiff(res);
+  }
+  waitForDiff(config, wait) {
+    this.diffStateMap.set(config, wait);
+    this.update('@.diffStateMap');
+  }
+  diffWait(config) {
+    const map = this.get('@.diffStateMap');
+    return map.get(config);
   }
   startLeak(config) {
     notify({ action: 'leak', config });
@@ -541,6 +581,9 @@ class ControlPanel extends Window {
   }
   scratch(pad) {
     app.openScratch(pad);
+  }
+  localDiff() {
+    app.openLocalDiff();
   }
   reportHasQuerySql(rep) {
     return rep.sources.find(s => s.type === 'query-all-sql' || s.type === 'query' && !s.config);
@@ -641,7 +684,103 @@ class Connect extends Window {
 }
 Window.extendWith(Connect, {
   template: '#connect',
-  options: { title: 'Connect', flex: true, close: false, resizable: false, maximize: false, minimize: false, width: '40em', height: '30em' },
+  options: { title: 'Connect', flex: true, close: false, resizable: true, maximize: false, minimize: false, width: '40em', height: '30em' },
+});
+
+const escRE = /[<>&]/g;
+const escapes = { '<': '&lt;', '>': '&gt;', '&': '&amp;' };
+
+class Diff extends Window {
+  constructor(opts) { super(opts); }
+
+  diff(left, right) {
+    const l = this.parse(left);
+    const lcsv = this.get('csv');
+    const r = this.parse(right);
+    const rcsv = this.get('csv');
+    this.set('hasCSV', lcsv || rcsv);
+    const diff = evaluate({ left: l, right: r }, 'diff(left right)')
+    const res = {};
+    for (const k in diff) res[k.replace(/^v\./, '')] = diff[k];
+    return res;
+  }
+
+  parse(val) {
+    this.set('csv', false);
+    if (!val) return;
+    if (val[0] === '<') return evaluate({ val }, 'parse(val xml:1)');
+    const res = evaluate({ val }, 'parse(val)')?.v;
+    if (res === undefined || Object.keys(res).length === 1 && res.r && res.r.k) {
+      this.set('csv', true);
+      return evaluate({ val, header: this.get('csvHeader') }, `parse(val csv:1 detect:1 header:header)`);
+    }
+    return res;
+  }
+
+  string(val, comp) {
+    if (val === undefined) return 'undefined';
+    if (comp && val && typeof comp === 'string' && typeof val === 'string') {
+      comp = evaluate({ val: comp }, `string(val ${this.get('format') || 'raport'}:1)`).replace(escRE, c => escapes[c]);
+      val = evaluate({ val }, `string(val ${this.get('format') || 'raport'}:1)`).replace(escRE, c => escapes[c]);
+      let i = 0;
+      for (; i < comp.length && i < val.length; i++) if (val[i] !== comp[i]) break;
+      return val.slice(0, i) + '<span class=highlight>' + val.slice(i) + '</span>';
+    }
+    return evaluate({ val }, `string(val ${this.get('format') || 'raport'}:1)`);
+  }
+
+  paste(which, patch) {
+    let val = this.get('copied.text');
+    if (patch) {
+      const cur = this.parse(this.get(which));
+      Object.assign(cur, this.parse(val));
+      this.set(which, JSON.stringify(cur));
+    } else {
+      this.set(which, val);
+    }
+    this.set('copied.recent', false);
+  }
+}
+Window.extendWith(Diff, {
+  template: '#diff',
+  options: { flex: true, width: '60em', height: '45em', resizable: true },
+  css(data) {
+    return `
+h3 { padding: 0.5rem; text-align: center; }
+textarea { border: none; outline: none; padding: 0.2rem; }
+pre { margin: 0; white-space: pre-wrap; word-break: break-all; }
+.tree-view { overflow: auto; flex-grow: 1; }
+.tree { margin-left: 0.5em; padding-left: 0.5em; border-left: 1px dotted #aaa; }
+.tree:hover { border-left-color: blue; }
+.tree .node { white-space: nowrap; }
+.tree .key { margin-left: 0.5em; display: inline-block; }
+.tree .type { color: #aaa; display: inline-block; }
+.tree .value { display: inline-block; vertical-align: top; white-space: pre-wrap; word-break: break-all; }
+.tree .children { display: block; }
+.tree .expand { display: none; width: 1em; height: 1em; box-sizing: border-box; border: 1px solid #aaa; color: #999; vertical-align: middle; line-height: 0.8em; text-align: center; display: none; cursor: pointer; }
+.tree .expand.show { display: inline-block; }
+.highlight { background-color: yellow; }
+.paster { display: flex; width: 100%; height: 100%; opacity: 0.8; justify-content: space-around; align-items: center; cursor: pointer; }
+${data('theme') === 'dark' ? `
+.differ, textarea { color: #ddd; background-color: #333; }
+.tree:hover { border-left-color: cyan; }
+.highlight { background-color: darkblue; }` : ''}
+`;
+  },
+  on: {
+    init() {
+      this.link('copied', 'copied', { instance: app });
+      const s = app.get('settings.diff') || {};
+      this.set('leftView', s.leftview === 'text' ? undefined : 'tree');
+      this.set('rightView', s.rightview === 'text' ? undefined : 'tree');
+      this.set('format', s.format);
+    },
+  },
+  observe: {
+    'left right format'() {
+      window.localStorage.setItem('diff', JSON.stringify({ left: this.get('left'), right: this.get('right'), format: this.get('format') }));
+    }
+  },
 });
 
 class Query extends Window {
@@ -816,7 +955,7 @@ class Entries extends Window {
     const res = evaluate({ entry, schema: (this.get('schemas') || {})[entry.source], hideBlank: this.get('hideBlankFields'), hideDefault: this.get('hideDefaultFields') }, `
 set res = { table:entry.table segment:entry.segment }
 if entry.old and entry.new {
- let d = sort(diff(entry.old entry.new))
+ let d = sort(diff(filter(entry.old =>@key in ~entry.new) entry.new))
  if keys(d).length {
    set res.status = :changed
    set res.changed = ^d
@@ -965,7 +1104,7 @@ res
 
       for (const s of srcs) {
         const ts = targets.filter(t => t.source === s);
-        await request({ action: 'query', query: ['update __pgdifficult_entries set segment = $1 where id = any($2)'], params: [[name, ts.map(t => t.id)]], client: srcConfig[s] });
+        await request({ action: 'query', query: ['update pgdifficult.entries set segment = $1 where id = any($2)'], params: [[name, ts.map(t => t.id)]], client: srcConfig[s] });
       }
     }
 
@@ -1033,7 +1172,7 @@ Window.extendWith(Entries, {
     }
   },
   observe: {
-    'tables.length'() {
+    'entries.length'() {
       if (this.scroller) {
         const s = this.scroller;
         if (s.scrollTop + s.clientHeight >= s.scrollHeight - 10) setTimeout(() => s.scrollTo({ top: s.scrollHeight, behavior: 'smooth', block: 'end' }), 100);
@@ -1893,7 +2032,7 @@ function message(msg) {
       break;
 
     case 'error':
-      app.host.toast(msg.error || '(unknown error)', { type: 'error' });
+      app.host.toast(msg.error || '(unknown error)', { type: 'error', more: msg.stack, showMore: !!msg.stack });
       if ('id' in msg) request.error(msg.id, msg);
       break;
 
@@ -2008,7 +2147,17 @@ else {
 
 Ractive.helpers.copyToClipboard = (function() {
   let clipEl;
+  let id = 0;
   return function copyToClipboard(text, message) {
+    if (typeof text !== 'string') text = JSON.stringify(text);
+
+    const cur = ++id;
+    app.set('copied.text', text);
+    app.set('copied.recent', true);
+    setTimeout(() => {
+      if (cur === id) app.set('copied.recent', false);
+    }, app.get('settings.pasteTimeout') || 10000);
+
     if (!clipEl) {
       clipEl = document.createElement('textarea');
       clipEl.id = 'clipEl';

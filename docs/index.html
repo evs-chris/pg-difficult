@@ -4,7 +4,7 @@
     <title>pg-difficult</title>
     <link rel="shortcut icon" href="./icon.png" />
     <script src="./ractive@1.4.2.js"></script>
-    <script src="./raport@0.24.7.js"></script>
+    <script src="./raport@0.24.8.js"></script>
     <script src="./raui@0.15.6/ace-editor.js"></script>
     <script src="./raui@0.15.6/button.js"></script>
     <script src="./raui@0.15.6/form.js"></script>
@@ -38,7 +38,11 @@
     margin: 0;
     padding: 0 0 0.5em 0;
   }
-  code {
+  fieldset {
+    border-color: rgba(128, 128, 128, 0.4);
+    border-radius: 0.5em;
+  }
+  code.expr {
     display: inline-block;
     border: 1px solid rgba(0, 0, 0, 0.2);
     line-height: 1.4em;
@@ -238,6 +242,19 @@
   th {
     text-align: right;
   }
+
+  .disconnected {
+    display: inline-block;
+    background-color: #a33;
+    color: #fff;
+    width: 1em;
+    height: 1em;
+    border-radius: 1em;
+    user-select: none;
+    cursor: help;
+    text-align: center;
+    margin: 0 0.5em;
+  }
 </style>
 <script>clientOnly = true</script>
 <script type=text/ractive id=template>
@@ -247,7 +264,7 @@
         <menu>
           <container>
             <div style="display: flex; align-items: center; justify-content: space-around; height: 3.6em; background-color: #325932;">
-              <span>pg-difficult <span class=version>- v{{~/status.VERSION || '-client-only'}}</span></span>
+              <span><a style="color: #eee; text-decoration: none;" href="https://github.com/evs-chris/pg-difficult" target=_blank>pg-difficult</a> <span class=version>- v{{~/status.VERSION || '-client-only'}}</span></span>
             </div>
           </container>
           <item title="Control Panel" on-action="@.host.getWindow('control-panel').raise(true)" />
@@ -312,14 +329,14 @@
   <tabs pad style="overflow: hidden; height: 100%;">
     <tab title="Connections" hidden="@global.clientOnly">
       <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.3em;">
-        <div>Connections are saved in browser storage and can be used to start diffs and run queries.<br/><br/><span style="color: #ca3c3c; font-weight: bold;">WARNING:</span> Starting a diff on a database will create two tables, create a function, and a then set the function as a trigger for each existing table in the database. A running diff in a database <em>will</em> cause performance degradation, especially if left to collect thousands of changes.</div>
+        <div>Connections are saved in browser storage and can be used to start diffs and run queries.<br/><br/><span style="color: #ca3c3c; font-weight: bold;">WARNING:</span> Starting a diff on a database will create a pgdifficult schema with two tables and a function, and then it will set the function as a trigger for each existing table in the database. A running diff in a database <em>will</em> cause performance degradation, especially if left to collect thousands of changes. You can exclude tables and set maximum captured value size in the connection settings.</div>
         <button style="flex-shrink: 0;" on-click="@.editConnection()" title="Add a saved connection for this browser at this url.">Add Connection</button>
       </div>
       <div style="overflow: auto;">
         {{#each connections}}
           <div class="connection striped">
             <div class="constr">
-              <div style="flex-grow: 1;">{{#if .label}}<strong>{{.label}}</strong> ({{constr(.)}}){{else}}{{constr(.)}}{{/if}}</div>
+              <div style="flex-grow: 1;">{{#if .label}}<strong>{{.label}}</strong> ({{constr(.)}}){{else}}{{constr(.)}}{{/if}}<tip>{{`Maximium value length: ${.diffopts.maxlen || 'none'}\nChanged record capture: ${.diffopts.change === 'whole' ? 'both whole records' : .diffopts.change === 'whole-old' ? 'whole old record, new changes' : 'changes only'}\nIgnored tables: ${.diffopts.ignore.length ? .diffopts.ignore.join(', ') : 'none'}`}}</tip></div>
               <div style="width: 9em; flex-shrink: 0;">
                 <button class=flat disabled="{{@index === 0}}" on-click="moveUp(@context, @event.shiftKey || @event.ctrlKey)" title="Move up, hold shift or ctrl to move to top">&#9650;</button>
                 <button class=flat disabled="{{@index === @last}}" on-click="moveDown(@context, @event.shiftKey || @event.ctrlKey)" title="Move down, hold shift or ctrl to move to bottom">&#9660;</button>
@@ -330,10 +347,10 @@
               </div>
             </div>
             <div class="actions">
-              {{#if !@.hasDiff(.)}}<button on-click="@.startDiff(.)" title="Begin recording changes to tables in this database.">Start Diff</button>
+              {{#if !@.hasDiff(.)}}<button on-click="@.startDiff(.)" disabled="{{@.diffWait(.)}}" title="Begin recording changes to tables in this database.">Start Diff</button>
               {{else}}
                 <div>
-                  <button on-click="@.stopDiff(.)" title="Cease recording changes to tables in this database.">Stop Diff</button>
+                  <button on-click="@.stopDiff(.)" disabled="{{@.diffWait(.)}}" title="Cease recording changes to tables in this database.">Stop Diff</button>
                   <button on-click="@.entries(.)" title="View recoded entries from this database">Entries</button>
                 </div>
               {{/if}}
@@ -476,22 +493,37 @@
     </tab>
     <tab title="Settings">
       <div style="display: flex; flex-direction: column;">
-        <label as-field>Theme<select value="{{~/settings.theme}}">
-          <option value="{{undefined}}">Auto</option>
-          <option value="dark">Dark</option>
-          <option value="light">Light</option>
-        </select></label>
-        {{#if !@global.clientOnly}}
-          <label as-field class=inline><input type=checkbox bind-checked="~/settings.queryOrderColumns" /> Order query result columns alphabetically?</label>
-          <label as-field class=inline><input type=checkbox bind-checked="~/settings.allowUndoSegment" /> Enable undoing diff segments by default?</label>
-          <label as-field class=inline><input type=checkbox bind-checked="~/settings.allowUndoSingle" /> Enable undoing individual diff entries by default?</label>
-        {{/if}}
-        <label as-field class=inline><input type=checkbox bind-checked="~/settings.hideBlankFields" /> Hide empty string fields in diff records by default?</label>
-        <label as-field class=inline><input type=checkbox bind-checked="~/settings.hideDefaultFields" /> Hide defaulted fields in diff records by default?</label>
+        <fieldset>
+          <legend>Client Options</legend>
+          <label as-field>Theme<select value="{{~/settings.theme}}">
+            <option value="{{undefined}}">Auto</option>
+            <option value="dark">Dark</option>
+            <option value="light">Light</option>
+          </select></label>
+          <label as-field>Paste Timeout ms<input type=number placeholder=10000 step=1000 value="{{~/settings.pasteTimeout}}" /></label>
+        </fieldset>
+        <fieldset style="margin-top: 1em;">
+          <legend>Diff Entries Options</legend>
+          {{#if !@global.clientOnly}}
+            <label as-field class=inline><input type=checkbox bind-checked="~/settings.allowUndoSegment" /> Enable undoing diff segments by default?</label>
+            <label as-field class=inline><input type=checkbox bind-checked="~/settings.allowUndoSingle" /> Enable undoing individual diff entries by default?</label>
+          {{/if}}
+          <label as-field class=inline><input type=checkbox bind-checked="~/settings.hideBlankFields" /> Hide empty string fields in diff records by default?</label>
+          <label as-field class=inline><input type=checkbox bind-checked="~/settings.hideDefaultFields" /> Hide defaulted fields in diff records by default?</label>
+        </fieldset>
+        <fieldset style="margin-top: 1em;">
+          <legend>Query Options</legend>
+          {{#if !@global.clientOnly}}
+            <label as-field class=inline><input type=checkbox bind-checked="~/settings.queryOrderColumns" /> Order query result columns alphabetically?</label>
+          {{/if}}
+        </fieldset>
         <fieldset style="margin-top: 1em;">
           <legend>Editor Options</legend>
-          <label as-field class=inline><input type=checkbox checked="{{~/settings.editor.highlightActive}}" /> Highlight active line?</label>
           <label as-field class=inline><input type=checkbox checked="{{~/settings.editor.wrap}}" /> Word wrap?</label>
+          <label as-field class=inline><input type=checkbox checked="{{~/settings.editor.lineNumbers}}" /> Show line numbers?</label>
+          {{#if ~/settings.editor.lineNumbers}}<label as-field class=inline><input type=checkbox checked="{{~/settings.editor.relativeLineNumbers}}" /> Relative line numbers?</label>{{/if}}
+          <label as-field class=inline><input type=checkbox checked="{{~/settings.editor.highlightActive}}" /> Highlight active line?</label>
+          <label as-field class=inline><input type=checkbox checked="{{~/settings.editor.highlightSelected}}" /> Highlight selected word?</label>
           <label as-field class=inline><input type=checkbox checked="{{~/settings.editor.printMargin}}" /> Show print margin?</label>
           <div class=break />
           <label as-field>Input Mode<select value="{{~/settings.editor.keymode}}">
@@ -501,12 +533,20 @@
             <option>vim</option>
             <option>vscode</option>
           </select></label>
+          <label as-field>Light Theme <tip>The Ace editor theme to use when retinal pain mode is selected.</tip><select value="{{~/settings.editor.lightTheme}}">{{>ace-themes}}</select></label>
+          <label as-field>Dark Theme <tip>The Ace editor theme to use when the correct mode is selected.</tip><select value="{{~/settings.editor.darkTheme}}">{{>ace-themes}}</select></label>
         </fieldset>
         <fieldset style="margin-top: 1em;">
           <legend>Delimited Text Options</legend>
           <label as-field title="The delimiter to use between fields when rendering a data set as delimited text e.g. , (comma), \t (tab), | (pipe). Defaults to ,">Field Delimiter<input value="{{~/settings.csv.field}}" placeholder="," /></label>
           <label as-field title="The delimiter to use between records when rendering a data set as delimited text e.g. \n (line feed), \r (carriage return), \r\n (carriage return, line feed). Defaults to \n">Record Delimiter<input value="{{~/settings.csv.record}}" placeholder="\n" /></label>
           <label as-field title="The quote to use around fields when rendering a data set as delimited text e.g. ' (single quote), &quot; (double quote), $$ (dollar, dollar). Defaults to none">Field Quote<input value="{{~/settings.csv.quote}}" /></label>
+        </fieldset>
+        <fieldset style="margin-top: 1em;">
+          <legend>Local Diff Options</legend>
+          <label as-field>Default Left Mode<select value="{{~/settings.diff.leftview}}"><option value="{{undefined}}">tree</option><option>text</option></select></label>
+          <label as-field>Default Right Mode<select value="{{~/settings.diff.rightview}}"><option value="{{undefined}}">tree</option><option>text</option></select></label>
+          <label as-field>Default Value Format<select value="{{~/settings.diff.format}}"><option value="{{undefined}}">raport</option><option>json</option></select></label>
         </fieldset>
         <div style="margin-top: 1em;">
           <button on-click="@.exportSettings()">Export Settings</button>
@@ -517,10 +557,60 @@
   </tabs>
   <buttons>
     {{#unless @global.clientOnly}}
-      <button left on-click="@.exploreHosts()">Host Explorer</button>
+      <button left title="Open a new Host Explorer window to browse databases on all connections, view schema, query across multiple databases, and run reports." on-click="@.exploreHosts()">Host Explorer</button>
+      <button left title="Open a new two-way diff window for local data." on-click="@.localDiff()">Local Diff</button>
       <button class=reject on-click="@.halt()">Stop pg-difficult</button>
     {{/unless}}
   </buttons>
+  {{#partial ace-themes}}
+    <option value="{{undefined}}">The Default&trade;</option>
+    <option>ambiance</option>
+    <option>chrome</option>
+    <option>cloud9_day</option>
+    <option>cloud9_night</option>
+    <option>cloud_editor</option>
+    <option>cloud_editor_dark</option>
+    <option>clouds</option>
+    <option>clouds_midnight</option>
+    <option>cobalt</option>
+    <option>crimson_editor</option>
+    <option>dawn</option>
+    <option>dracula</option>
+    <option>dreamweaver</option>
+    <option>eclipse</option>
+    <option>github</option>
+    <option>github_dark</option>
+    <option>github_light_default</option>
+    <option>gob</option>
+    <option>gruvbox</option>
+    <option>gruvbox_dark_hard</option>
+    <option>gruvbox_light_hard</option>
+    <option>idle_fingers</option>
+    <option>iplastic</option>
+    <option>katzenmilch</option>
+    <option>kr_theme</option>
+    <option>kuroir</option>
+    <option>merbivore</option>
+    <option>merbivore_soft</option>
+    <option>mono_industrial</option>
+    <option>monokai</option>
+    <option>nord_dark</option>
+    <option>one_dark</option>
+    <option>pastel_on_dark</option>
+    <option>solarized_dark</option>
+    <option>solarized_light</option>
+    <option>sqlserver</option>
+    <option>terminal</option>
+    <option>textmate</option>
+    <option>tomorrow</option>
+    <option>tomorrow_night</option>
+    <option>tomorrow_night_blue</option>
+    <option>tomorrow_night_bright</option>
+    <option>tomorrow_night_eighties</option>
+    <option>twilight</option>
+    <option>vibrant_ink</option>
+    <option>xcode</option>
+  {{/partial}}
 </script>
 
 <script type=text/ractive id=query>
@@ -541,7 +631,7 @@
   </div>
   <div class="query" style="position: relative;">
     <split>
-      <div size=20 class="query-text" as-tracked=`ace` as-ace="{ bind: '~/query', syntax: 'pgsql', theme: @style.theme == 'dark' ? 'tomorrow_night_eighties' : 'github', wrap: ~/editor.wrap, highlightActive: ~/editor.highlightActive, fontSize: '1em', font: 'monospace', printMargin: ~/editor.printMargin, keymode: ~/editor.keymode }" on-keydown="@event.ctrlKey && @event.key === 'Enter' ? @.runQuery(~/query) : true" />
+      <div size=20 class="query-text" as-tracked=`ace` as-ace="{ bind: '~/query', syntax: 'pgsql', theme: @style.theme == 'dark' ? (~/editor.darkTheme || 'tomorrow_night_eighties') : (~/editor.lightTheme || 'tomorrow'), wrap: ~/editor.wrap, highlightActive: ~/editor.highlightActive, fontSize: '1em', font: 'monospace', printMargin: ~/editor.printMargin, keymode: ~/editor.keymode, lineNumbers: ~/editor.lineNumbers, relativeLineNumbers: ~/editor.relativeLineNumbers, highlightSelected: ~/editor.highlightSelected }" on-keydown="@event.ctrlKey && @event.key === 'Enter' ? @.runQuery(~/query) : true" />
       <div class="result">
         <data-table auto-titles no-wrap fixed-header allow-select=false on-init="@.set('@.table', $1)" items="{{~/result}}">
           <bottom>
@@ -568,54 +658,54 @@
     <virtual-list bind-items="~/entries" size=75>
       <header>
         {{#if .segment}}
-          <div class=header><h2 title="Double click to rename segment" on-dblclick="@.renameSegment(.)">{{.segment}}</h2> <div class=buttons style="padding-top: 0.9em;">{{#if ~/allowUndoSegment}}<button class=undo on-click="@.undoSegment(.)" title="Undo all changes in this segment by replaying the changes in reverse. This will also create a new segment named 'Undo {{.segment}}', unless you hold the ctrl key when clicking this button.">Undo</button>{{/if}}</div></div>
+          <div class=header><h2 title="Double click to rename segment" on-dblclick="@.renameSegment(.), false">{{.segment}}</h2> <div class=buttons style="padding-top: 0.9em;">{{#if ~/allowUndoSegment}}<button class=undo on-click="@.undoSegment(.), false" title="Undo all changes in this segment by replaying the changes in reverse. This will also create a new segment named 'Undo {{.segment}}', unless you hold the ctrl key when clicking this button.">Undo</button>{{/if}}</div></div>
         {{/if}}
       </header>
       {{#with . as record, @.details(.) as entry}}
         {{#if entry.status}}
           {{#if entry.changed}}
-            <div class="wrapper striped-{{index % 2 == 0 ? 'even' : 'odd'}}">
+            <div class="wrapper striped-{{index % 2 == 0 ? 'even' : 'odd'}}" on-click="@event.shiftKey ? copyToClipboard(record.old || {}, 'Copied old record JSON to clipboard.') : copyToClipboard(Object.keys(record.new).length !== Object.keys(record.old).length ? Object.assign({}, record.old, record.new) : record.new || {}, 'Copied new record JSON to clipboard.'), false">
               <div class=name><span>{{record.table}} {{entry.id || ''}} {{entry.status}}</span><span class=src>({{record.source}})</span></div>
               {{#each entry.changed}}
                 <div class="diff">
                   <div class="name">{{this.0}}</div>
-                  <div class="left">{{typeof this.1.0 === 'object' ? JSON.stringify(this.1.0) : this.1.0}}</div>
-                  <div class="right">{{typeof this.1.1 === 'object' ? JSON.stringify(this.1.1) : this.1.1}}</div>
+                  <div class="left" on-click="copyToClipboard(this.1.0, 'Copied value to clipboard.'), false">{{typeof this.1.0 === 'object' ? JSON.stringify(this.1.0) : this.1.0}}</div>
+                  <div class="right" on-click="copyToClipboard(this.1.1, 'Copied value to clipboard.'), false">{{typeof this.1.1 === 'object' ? JSON.stringify(this.1.1) : this.1.1}}</div>
                 </div>
               {{/each}}
 
               <div class=buttons>
-                {{#if ~/allowUndoSingle}}<button class=undo on-click="@.undoSingle(record)" title="Undo this change by running the inverse of the statment that created the change.">Undo</button>{{/if}}
-                <button class=split-up title="Split this entry and all entries above it up to the previous segment into a new segment" on-click="@.renameSegment(record, 'above')">&#9650;</button> <button class=split-down title="Split this entry and all entries below it down to the next segment into a new segment" on-click="@.renameSegment(record, 'below')">&#9660;</button>
+                {{#if ~/allowUndoSingle}}<button class=undo on-click="@.undoSingle(record), false" title="Undo this change by running the inverse of the statment that created the change.">Undo</button>{{/if}}
+                <button class=split-up title="Split this entry and all entries above it up to the previous segment into a new segment" on-click="@.renameSegment(record, 'above'), false">&#9650;</button> <button class=split-down title="Split this entry and all entries below it down to the next segment into a new segment" on-click="@.renameSegment(record, 'below'), false">&#9660;</button>
               </div>
             </div>
           {{else}}
-            <div class="diff whole striped-{{index % 2 == 0 ? 'even' : 'odd'}}">
+            <div class="diff whole striped-{{index % 2 == 0 ? 'even' : 'odd'}}" on-click="@event.shiftKey ? copyToClipboard(record.old || {}, 'Copied old record JSON to clipboard.') : copyToClipboard(record.new || {}, 'Copied new record JSON to clipboard.'), false">
               <div class=name><span>{{record.table}} {{entry.id || ''}} {{entry.status}}</span><span class=src>({{record.source}})</span></div>
               {{#each entry.record}}
-                <div class="entry"><div class="key">{{this.0}}</div><div class="value">{{typeof this.1 === 'object' ? JSON.stringify(this.1) : this.1}}</div></div>
+                <div class="entry"><div class="key">{{this.0}}</div><div class="value" on-click="copyToClipboard(this.1, 'Copied value to clipboard.'), false">{{typeof this.1 === 'object' ? JSON.stringify(this.1) : this.1}}</div></div>
               {{/each}}
 
               <div class=buttons>
-                {{#if ~/allowUndoSingle}}<button class=undo on-click="@.undoSingle(record)" title="Undo this change by running the inverse of the statment that created the change.">Undo</button>{{/if}}
-                <button class=split-up title="Split this entry and all entries above it up to the previous segment into a new segment" on-click="@.renameSegment(record, 'above')">&#9650;</button> <button class=split-down title="Split this entry and all entries below it down to the next segment into a new segment" on-click="@.renameSegment(record, 'below')">&#9660;</button>
+                {{#if ~/allowUndoSingle}}<button class=undo on-click="@.undoSingle(record), false" title="Undo this change by running the inverse of the statment that created the change.">Undo</button>{{/if}}
+                <button class=split-up title="Split this entry and all entries above it up to the previous segment into a new segment" on-click="@.renameSegment(record, 'above'), false">&#9650;</button> <button class=split-down title="Split this entry and all entries below it down to the next segment into a new segment" on-click="@.renameSegment(record, 'below'), false">&#9660;</button>
               </div>
             </div>
           {{/if}}
         {{else}}
-          <div class="wrapper striped-{{index % 2 == 0 ? 'even' : 'odd'}}">
+          <div class="wrapper striped-{{index % 2 == 0 ? 'even' : 'odd'}}" on-click="@event.shiftKey ? copyToClipboard(record.old || {}, 'Copied old record JSON to clipboard.') : copyToClipboard(record.new || {}, 'Copied new record JSON to clipboard.'), false">
             <div class=name><span>{{record.table}} {{entry.id || ''}} {{entry.status || '(empty changeset)'}}</span><span class=src>({{record.source}})</span></div>
             <div class=buttons>
-              <button class=split-up title="Split this entry and all entries above it up to the previous segment into a new segment" on-click="@.renameSegment(record, 'above')">&#9650;</button> <button class=split-down title="Split this entry and all entries below it down to the next segment into a new segment" on-click="@.renameSegment(record, 'below')">&#9660;</button>
+              <button class=split-up title="Split this entry and all entries above it up to the previous segment into a new segment" on-click="@.renameSegment(record, 'above'), false">&#9650;</button> <button class=split-down title="Split this entry and all entries below it down to the next segment into a new segment" on-click="@.renameSegment(record, 'below'), false">&#9660;</button>
             </div>
           </div>
         {{/if}}
       {{/with}}
       {{#if ~/entries[index + 1] && ~/entries[index + 1].segment !== .segment}}{{#with ~/entries[index + 1]}}
-        <div class=header><h2 title="Double click to rename segment" on-dblclick="@.renameSegment(.)">{{.segment}}</h2> <div class=buttons style="padding-top: 0.9em;">{{#if ~/allowUndoSegment}}<button class=undo on-click="@.undoSegment(.)" title="Undo all changes in this segment by replaying the changes in reverse. This will also create a new segment named 'Undo {{.segment}}', unless you hold the ctrl key when clicking this button.">Undo</button>{{/if}}</div></div>
+        <div class=header><h2 title="Double click to rename segment" on-dblclick="@.renameSegment(.), false">{{.segment}}</h2> <div class=buttons style="padding-top: 0.9em;">{{#if ~/allowUndoSegment}}<button class=undo on-click="@.undoSegment(.), false" title="Undo all changes in this segment by replaying the changes in reverse. This will also create a new segment named 'Undo {{.segment}}', unless you hold the ctrl key when clicking this button.">Undo</button>{{/if}}</div></div>
       {{/with}}{{/if}}
       <else>
-        {{#if ~/exprError}}<code>{{~/expr}}</code> is an invalid filter.<br /><br /><pre>Error: {{~/exprError.message + '\n\n'}}{{~/exprError.marked}}</pre>{{else}}No change entries have been recorded.{{/if}}
+        {{#if ~/exprError}}<code class=expr>{{~/expr}}</code> is an invalid filter.<br /><br /><pre>Error: {{~/exprError.message + '\n\n'}}{{~/exprError.marked}}</pre>{{else}}No change entries have been recorded.{{/if}}
       </else>
     </virtual-list>
   </div>
@@ -905,17 +995,59 @@
     <label as-field class=inline><input value="{{pad.name}}" placeholder="Name..." lazy=1000 /></label>
     <label as-field class=inline><select value="{{pad.syntax}}" lazy=1000>
       <option value="{{undefined}}">plain text</option>
-      <option>markdown</option>
-      <option>json</option>
-      <option>pgsql</option>
-      <option>javascript</option>
-      <option>typescript</option>
-      <option>ejs</option>
-      <option>handlebars</option>
+      <option>c_cpp</option>
       <option>csharp</option>
+      <option>css</option>
+      <option>ejs</option>
+      <option>golang</option>
+      <option>handlebars</option>
+      <option>html</option>
+      <option>ini</option>
+      <option>java</option>
+      <option>javascript</option>
+      <option>json</option>
+      <option>jsx</option>
+      <option>julia</option>
+      <option>kotlin</option>
+      <option>less</option>
+      <option>liquid</option>
+      <option>lisp</option>
+      <option>lua</option>
+      <option>markdown</option>
+      <option>mediawiki</option>
+      <option>nix</option>
+      <option>nunjucks</option>
+      <option>ocaml</option>
+      <option>odin</option>
+      <option>pascal</option>
+      <option>perl</option>
+      <option>pgsql</option>
+      <option>php</option>
+      <option>plain_text</option>
+      <option>python</option>
+      <option>ruby</option>
+      <option>rust</option>
+      <option>sass</option>
+      <option>scala</option>
+      <option>scheme</option>
+      <option>sh</option>
+      <option>sql</option>
+      <option>stylus</option>
+      <option>svg</option>
+      <option>swift</option>
+      <option>tcl</option>
+      <option>toml</option>
+      <option>tsx</option>
+      <option>twig</option>
+      <option>typescript</option>
+      <option>vue</option>
+      <option>xml</option>
+      <option>xquery</option>
+      <option>yaml</option>
+      <option>zig</option>
     </select></label>
   </div>
-  <div style="flex-grow: 1;" as-ace="{ bind: 'pad.text', syntax: pad.syntax || 'plain_text', theme: @style.theme == 'dark' ? 'tomorrow_night_eighties' : 'github', wrap: ~/editor.wrap, highlightActive: ~/editor.highlightActive, fontSize: '1em', font: 'monospace', printMargin: ~/editor.printMargin, keymode: ~/editor.keymode }" />
+  <div style="flex-grow: 1;" as-ace="{ bind: 'pad.text', syntax: pad.syntax || 'plain_text', theme: @style.theme == 'dark' ? (~/editor.darkTheme || 'tomorrow_night_eighties') : (~/editor.lightTheme || 'tomorrow'), wrap: ~/editor.wrap, highlightActive: ~/editor.highlightActive, fontSize: '1em', font: 'monospace', printMargin: ~/editor.printMargin, keymode: ~/editor.keymode, lineNumbers: ~/editor.lineNumbers, relativeLineNumbers: ~/editor.relativeLineNumbers, highlightSelected: ~/editor.highlightSelected }" />
 </script>
 
 <script type=text/ractive id=host-explore>
@@ -1186,11 +1318,111 @@
       <option value="{{false}}">None</option>
     </select></label>
     <label as-field>Label<input value="{{~/config.label}}" /></label>
+    <fieldset style="margin: 1em 0.5em;">
+      <legend>Diff Options</legend>
+      <label as-field>Max Length <tip>The maximum allowable length of any value of any column to be recorded directly in a diff. Any values with lengths that exceed this number will instead be checksummed. This will affect your ability to undo diffs, as the checksummed value may not be valid in the source column. This defaults to 0, which disables the feature.</tip><input type=number value="{{~/config.diffopts.maxlen}}" placeholder="0" /></label>
+      <label as-field>Change Records<select value="{{~/config.diffopts.changes}}">
+        <option value="{{undefined}}">Record only changed fields and keys if possible.</option>
+        <option value="whole">Always record the full old and new records.</option>
+        <option value="whole-old">Always record the full old record and only changed fields and keys in the new record if possible.</option>
+      </select></label>
+      <field tip="This can be a table name, a schema.table name, or an ilike pattern that matches either table or schema.table. '__pgdifficult_%' and 'pgdifficult.%' are automatically ignored." label="Ignore Patterns" value="{{~/ignore}}"><button on-click="@.push('config.diffopts.ignore', ~/ignore), @.set('ignore', '')">Add</button></field>
+      <h3 style="border-bottom: 1px solid; margin: 1em 0 0.5em 0;">Ignored Pattern List</h3>
+      {{#each ~/config.diffopts.ignore}}
+        <div class="wrapper striped-{{@index % 2 == 0 ? 'even' : 'odd'}}" style="display: flex;">
+          <label as-field class=inline style="flex-grow: 1;"><input value="{{.}}" /></label>
+          <label as-field class=inline style="flex-shrink: 0;"><button on-click="@.splice('~/config.diffopts.ignore', @index, 1)">Remove</button></label>
+        </div>
+      {{else}}
+        <em>No ignored patterns</em>
+      {{/each}}
+    </fieldset>
   </div>
   <buttons>
     <button left class=flat on-click="@.cancel()">Cancel</button>
     <button on-click="@.accept()">Done</button>
   </buttons>
+</script>
+
+<script type=text/ractive id=diff>
+  <div class=differ style="display: flex; width: 100%; height: 100%;">
+    <split vertical>
+      <div size=33 style="display: flex; flex-direction: column; position: relative; height: 100%;">
+        <div style="display: flex; justify-content: space-evenly; align-items: center;">
+          <h3>Left</h3>
+          <select value="{{leftView}}"><option value="{{undefined}}">text</option><option>tree</option></select>
+        </div>
+        {{#if ~/copied.recent}}
+          <div class=paster on-click="@.paste('left', @event.shiftKey)"><span>click to paste<br/>shift+click to apply patch</span></div>
+        {{elseif leftView === 'tree'}}
+          {{>root @.parse(.left)}}
+        {{else}}
+          <textarea style="flex-grow: 1; resize: none;" placeholder="Left value here..." lazy=1000>{{.left}}</textarea>
+        {{/if}}
+      </div>
+      <div size=34 style="position: relative; padding: 0.2rem; display: flex; flex-direction: column; height: 100%; box-sizing: border-box;">
+        <div style="display: flex; justify-content: space-evenly; align-items: center;">
+          {{#if ~/leftView === 'tree' || ~/rightView === 'tree'}}<label style="font-size: 0.7em;"><input type=checkbox checked="{{~/expandAll}}"> Expand all tree nodes?</label>{{/if}}
+          <h3>Diff</h3>
+          <select value="{{format}}"><option value="{{undefined}}">raport</option><option>json</option></select>
+        </div>
+        <pre style="overflow: auto;"><code>
+        {{#each @.diff(.left, .right)}}
+          <div style="display: flex; flex-wrap: wrap;">
+            <div style="width: 100%; margin-top: 0.5rem; border-bottom: 1px solid #999; padding: 0.2rem; font-weight: 600;">{{@key}}</div>
+            <div style="width: 50%; padding: 0.5rem; box-sizing: border-box;">{{@.string(this.0)}}</div>
+            <div style="width: 50%; padding: 0.5rem; box-sizing: border-box; border-left: 1px dotted #aaa;">{{{@.string(this.1, this.0)}}}</div>
+          </div>
+        {{/each}}
+        </code></pre>
+      </div>
+      <div size=33 style="display: flex; flex-direction: column; position: relative; height: 100%;">
+        <div style="display: flex; justify-content: space-evenly; align-items: center;">
+          {{#if ~/hasCSV}}<label style="font-size: 0.7em;"><input type=checkbox checked="{{~/csvHeader}}"> CSV Header?</label>{{/if}}
+          <h3>Right</h3>
+          <select value="{{rightView}}"><option value="{{undefined}}">text</option><option>tree</option></select>
+        </div>
+        {{#if ~/copied.recent}}
+          <div class=paster on-click="@.paste('right', @event.shiftKey)"><span>click to paste<br/>shift+click to apply patch</span></div>
+        {{elseif rightView === 'tree'}}
+          {{>root @.parse(.right)}}
+        {{else}}
+          <textarea style="flex-grow: 1; resize: none;" placeholder="Right value here..." lazy=1000>{{.right}}</textarea>
+        {{/if}}
+      </div>
+    </split>
+  </div>
+
+  {{#partial root}}
+    <div class=tree-view>
+      {{#if typeof . === 'object' && .}}<span style="color: #aaa; margin-left: 0.5em;">{{Array.isArray(.) ? '[' : '{'}}</span>{{/if}}
+      <div class=root>
+        {{>tree .}}
+      </div>
+      {{#if typeof . === 'object' && .}}<span style="color: #aaa; margin-left: 0.5em;">{{Array.isArray(.) ? ']' : '}'}}</span>{{/if}}
+    </div>
+  {{/partial}}
+
+  {{#partial tree}}
+    <div class=tree>
+      {{#each .}}
+        <div class=node>
+          <div class=key title="{{(@keypath + '').replace(/.*\)\./, '')}}">{{@key}}<span style="color: #aaa;">:</span>{{#if typeof . === 'object' && .}}<span style="color: #aaa; margin-left: 0.5em;">{{Array.isArray(.) ? '[' : '{'}}</span>{{/if}}</div>
+          {{#unless ~/expandAll}}<div class=expand {{#if typeof . === 'object' && .}}class-show on-click="@.toggle('expand.' + escapeKey(@keypath))"{{/if}}>{{#if ~/expand[@keypath]}}-{{else}}+{{/if}}</div>{{/unless}}
+          <div class=value class-children="typeof . === 'object' && . && (~/expandAll || ~/expand[@keypath])">
+            {{#if typeof . === 'object' && .}}
+              {{#if ~/expandAll || ~/expand[@keypath]}}
+                {{>tree .}}
+                <span style="color: #aaa; margin-left: 0.25em;">{{Array.isArray(.) ? ']' : '}'}}</span>
+              {{else}}
+                <div class=type>{{#if Array.isArray(.)}} ]{{else}} }{{/if}}</div>
+              {{/if}}
+            {{else}}{{@.string(.)}}{{/if}}
+          </div>
+        </div>
+      {{/each}}
+    </div>
+  {{/partial}}
 </script>
 
 <script type=text/ractive id=confirm>
@@ -1228,6 +1460,14 @@
 <script src="./ace@1.35.4/ace.js"></script>
 <script>
   Ractive.use(RauiAceEditor.default({ name: 'ace' }));
+  ace.config.loadModule('ace/keybinding/vim', () => {
+    const vim = ace.require('ace/keyboard/vim').Vim;
+    // tweak the vim mappings
+    vim.map('j', 'gj', 'normal');
+    vim.map('k', 'gk', 'normal');
+    vim.map('jk', '<Esc>', 'insert');
+    vim.map('kj', '<Esc>', 'insert');
+  });
 </script>
   </body>
 </html>
