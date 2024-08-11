@@ -2096,7 +2096,7 @@ class SourceEdit extends Window {
     if (this.get('error')) return;
     const source = this.get('source');
     const arr = this.get('paramArray');
-    if (arr.length) {
+    if (arr && arr.length) {
       source.parameters = source.parameters || [];
       source.parameters = source.parameters.slice(0, arr.length);
     } else {
