@@ -159,13 +159,11 @@
   }
 
   .striped:nth-child(odd), .striped-odd {
-    background-color: rgba(128, 128, 128, 0.02);
     padding: 0.3em;
     box-sizing: border-box;
     border-radius: 0.3em;
   }
   .striped, .striped-even {
-    background-color: rgba(128, 128, 128, 0.1);
     padding: 0.3em;
     box-sizing: border-box;
     border-radius: 0.3em;
@@ -824,33 +822,35 @@
     <tab title=Tables>
       <virtual-list bind-items="tables" size=34 style="flex-grow: 1;">
         <header>
-          <div style="border-bottom: 1px solid;">
-            <div class="stretch-fields">
-              <label as-field>Search<input value="{{~/schemafilter}}" lazy=500 /></label>
-              <label as-field title="Available fields are column.{name, default, enum, type, pgtype, nullable, length, precision, pkey, schema, table, description}">Expression<input value="{{~/schemaexpr}}" lazy=500 /></label>
-              {{#if !~/compareSchema || ~/compareSchema.schema !== _schema}}
-                <label as-field style="flex-grow: 0;"><button on-click="@.compareSchema(_schema, _config)" title="Compare this schema to another database's schema.">Compare</button></label>
-              {{else}}
-                <label as-field style="flex-grow: 0;"><button on-click="@.set('compareSchema', undefined)" title="Cancel waiting for another schema to be selected to compare to this schema.">Cancel</button></label>
-              {{/if}}
-              <label as-field style="flex-grow: 0;"><button on-click="@.downloadSchema(_schema)" title="Download a file containing this schema.">Download</button></label>
+          <div style="position: relative;">
+            <div style="border-bottom: 1px solid;">
+              <div class="stretch-fields">
+                <label as-field>Search<input value="{{~/schemafilter}}" lazy=500 /></label>
+                <label as-field title="Available fields are column.{name, default, enum, type, pgtype, nullable, length, precision, pkey, schema, table, description}">Expression<input value="{{~/schemaexpr}}" lazy=500 /></label>
+                {{#if !~/compareSchema || ~/compareSchema.schema !== _schema}}
+                  <label as-field style="flex-grow: 0;"><button on-click="@.compareSchema(_schema, _config)" title="Compare this schema to another database's schema.">Compare</button></label>
+                {{else}}
+                  <label as-field style="flex-grow: 0;"><button on-click="@.set('compareSchema', undefined)" title="Cancel waiting for another schema to be selected to compare to this schema.">Cancel</button></label>
+                {{/if}}
+                <label as-field style="flex-grow: 0;"><button on-click="@.downloadSchema(_schema)" title="Download a file containing this schema.">Download</button></label>
+              </div>
+              <div class="schema-row" style="font-weight: bold;">
+                <div class="name" style="cursor: pointer;" title="Click to sort columns by {{~/schemasort === 'position' ? 'name' : 'position'}}" on-click="@.set('schemasort', ~/schemasort === 'position' ? 'name' : 'position')">Name ({{~/schemasort === 'position' ? '#' : 'A'}})</div>
+                <div class="nullable">Null</div>
+                <div class="default">Default</div>
+                <div class="type">Type</div>
+                <div class="size">Size</div>
+              </div>
             </div>
-            <div class="schema-row" style="font-weight: bold;">
-              <div class="name" style="cursor: pointer;" title="Click to sort columns by {{~/schemasort === 'position' ? 'name' : 'position'}}" on-click="@.set('schemasort', ~/schemasort === 'position' ? 'name' : 'position')">Name ({{~/schemasort === 'position' ? '#' : 'A'}})</div>
-              <div class="nullable">Null</div>
-              <div class="default">Default</div>
-              <div class="type">Type</div>
-              <div class="size">Size</div>
-            </div>
+            {{#if index && schemaexpanded.table[escapeKey(.table || .name)]}}
+              <div class="schema-row table sticky-header" style="position: absolute; padding: 0.5em; width: 100%; box-sizing: border-box; top: auto;" on-click="@.toggle('schemaexpanded.table.' + escapeKey(.table || .name))" style-z-index="{{index + 1}}">
+                <div class="name">{{.table || .name}}</div>
+                <div class="details">({{@.colsFor(.table || .name, 'tables')}} cols{{#if ~/schemafilter || ~/schemaexpr}}, {{~/schemaMatches.tables[.table || .name].length}} match{{/if}})</div>
+              </div>
+            {{/if}}
           </div>
-          {{#if index}}
-            <div class="schema-row table" style="padding: 0.5em;" on-click="@.toggle('schemaexpanded.table.' + escapeKey(.table || .name))">
-              <div class="name">{{.table || .name}}</div>
-              <div class="details">({{@.colsFor(.table || .name, 'tables')}} cols{{#if ~/schemafilter || ~/schemaexpr}}, {{~/schemaMatches.tables[.table || .name].length}} match{{/if}})</div>
-            </div>
-          {{/if}}
         </header>
-        <item class="striped-{{index % 2 ? 'odd' : 'even'}}">
+        <item class="striped-{{index % 2 ? 'odd' : 'even'}}" {{#if !.table}}style="position: relative; z-index: {{index}};"{{/if}}>
           {{#if !.table}}
             <div class="schema-row table" on-click="@.toggle('schemaexpanded.table.' + escapeKey(.name))">
               <div class="name" {{#if .description}}title="{{.description}}"{{/if}}>{{.name}}</div>
@@ -882,33 +882,35 @@
     <tab title=Views>
       <virtual-list bind-items="views" size=34 style="flex-grow: 1;">
         <header>
-          <div style="border-bottom: 1px solid;">
-            <div class="stretch-fields">
-              <label as-field>Search<input value="{{~/schemafilter}}" lazy=500 /></label>
-              <label as-field title="Available fields are column.{name, default, enum, type, pgtype, nullable, length, precision, pkey, schema, table}">Expression<input value="{{~/schemaexpr}}" lazy=500 /></label>
-              {{#if !~/compareSchema || ~/compareSchema.schema !== _schema}}
-                <label as-field style="flex-grow: 0;"><button on-click="@.compareSchema(_schema, _config)" title="Compare this schema to another database's schema.">Compare</button></label>
-              {{else}}
-                <label as-field style="flex-grow: 0;"><button on-click="@.set('compareSchema', undefined)" title="Cancel waiting for another schema to be selected to compare to this schema.">Cancel</button></label>
-              {{/if}}
-              <label as-field style="flex-grow: 0;"><button on-click="@.downloadSchema(_schema)" title="Download a file containing this schema.">Download</button></label>
+          <div style="position: relative;">
+            <div style="border-bottom: 1px solid;">
+              <div class="stretch-fields">
+                <label as-field>Search<input value="{{~/schemafilter}}" lazy=500 /></label>
+                <label as-field title="Available fields are column.{name, default, enum, type, pgtype, nullable, length, precision, pkey, schema, table}">Expression<input value="{{~/schemaexpr}}" lazy=500 /></label>
+                {{#if !~/compareSchema || ~/compareSchema.schema !== _schema}}
+                  <label as-field style="flex-grow: 0;"><button on-click="@.compareSchema(_schema, _config)" title="Compare this schema to another database's schema.">Compare</button></label>
+                {{else}}
+                  <label as-field style="flex-grow: 0;"><button on-click="@.set('compareSchema', undefined)" title="Cancel waiting for another schema to be selected to compare to this schema.">Cancel</button></label>
+                {{/if}}
+                <label as-field style="flex-grow: 0;"><button on-click="@.downloadSchema(_schema)" title="Download a file containing this schema.">Download</button></label>
+              </div>
+              <div class="schema-row" style="font-weight: bold;">
+                <div class="name" style="cursor: pointer;" title="Click to sort columns by {{~/schemasort === 'position' ? 'name' : 'position'}}" on-click="@.set('schemasort', ~/schemasort === 'position' ? 'name' : 'position')">Name ({{~/schemasort === 'position' ? '#' : 'A'}})</div>
+                <div class="nullable">Null</div>
+                <div class="default">Default</div>
+                <div class="type">Type</div>
+                <div class="size">Size</div>
+              </div>
             </div>
-            <div class="schema-row" style="font-weight: bold;">
-              <div class="name" style="cursor: pointer;" title="Click to sort columns by {{~/schemasort === 'position' ? 'name' : 'position'}}" on-click="@.set('schemasort', ~/schemasort === 'position' ? 'name' : 'position')">Name ({{~/schemasort === 'position' ? '#' : 'A'}})</div>
-              <div class="nullable">Null</div>
-              <div class="default">Default</div>
-              <div class="type">Type</div>
-              <div class="size">Size</div>
-            </div>
+            {{#if index && schemaexpanded.view[escapeKey(.table || .name)]}}
+              <div class="schema-row table sticky-header" style="position: absolute; padding: 0.5em; width: 100%; box-sizing: border-box; top: auto;" on-click="@.toggle('schemaexpanded.view.' + escapeKey(.table || .name))" style-z-index="{{index + 1}}">
+                <div class="name">{{.table || .name}}</div>
+                <div class="details">({{@.colsFor(.table || .name, 'views')}} cols{{#if ~/schemafilter || ~/schemaexpr}}, {{~/schemaMatches.tables[.table || .name].length}} match{{/if}})</div>
+              </div>
+            {{/if}}
           </div>
-          {{#if index}}
-            <div class="schema-row table" style="padding: 0.5em;" on-click="@.toggle('schemaexpanded.view.' + escapeKey(.table || .name))">
-              <div class="name">{{.table || .name}}</div>
-              <div class="details">({{@.colsFor(.table || .name, 'views')}} cols{{#if ~/schemafilter || ~/schemaexpr}}, {{~/schemaMatches.tables[.table || .name].length}} match{{/if}})</div>
-            </div>
-          {{/if}}
         </header>
-        <item class="striped-{{index % 2 ? 'odd' : 'even'}}">
+        <item class="striped-{{index % 2 ? 'odd' : 'even'}}" {{#if !.table}}style="position: relative; z-index: {{index}};"{{/if}}>
           {{#if !.table}}
             <div class="schema-row table" on-click="@.toggle('schemaexpanded.view.' + escapeKey(.name))">
               <div class="name" {{#if .description}}title="{{.description}}"{{/if}}>{{.name}}</div>
@@ -976,14 +978,14 @@
       {{#if pair[0] != null && pair[1] != null}}
         <div class="schema-diff striped">
           <div class="name" title="{{@key}}">{{@key}}</div>
-          <div class="left" title="{{pair[0]}}">{{pair[0]}}</div>
-          <div class="right" title="{{pair[1]}}">{{pair[1]}}</div>
+          <div class="left" title="{{pair[0]}}">{{typeof pair[0] === 'object' ? JSON.stringify(pair[0]) : pair[0]}}</div>
+          <div class="right" title="{{pair[1]}}">{{typeof pair[1] === 'object' ? JSON.stringify(pair[1]) : pair[1]}}</div>
         </div>
       {{else}}
         <div class="schema-diff whole striped">
           <div class="name">{{#if pair[0] == null}}Added{{else}}Removed{{/if}} {{@key}}</div>
           {{#each pair[0] || pair[1]}}
-            <div class="entry"><div class="key">{{@key}}</div><div class="value">{{.}}</div></div>
+            <div class="entry"><div class="key">{{@key}}</div><div class="value">{{typeof . === 'object' ? JSON.stringify(.) : .}}</div></div>
           {{/each}}
         </div>
       {{/if}}

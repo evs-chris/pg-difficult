@@ -183,12 +183,49 @@ let gate;
   };
 }
 
+function expandSchema(schema) {
+  const res = {};
+  for (const t of schema.tables) {
+    if (!res[t.schema]) res[t.schema] = {};
+    if (!res[t.schema].tables) res[t.schema].tables = {};
+    const cols = res[t.schema].tables[t.name] = {};
+    for (const c of t.columns) cols[c.name] = Object.assign({}, c, { name: undefined });
+  }
+  for (const t of schema.views || []) {
+    if (!res[t.schema]) res[t.schema] = {};
+    if (!res[t.schema].views) res[t.schema].views = {};
+    const cols = res[t.schema].views[t.name] = {};
+    for (const c of t.columns) cols[c.name] = Object.assign({}, c, { name: undefined });
+  }
+  for (const f of schema.functions) {
+    if (!res[f.schema]) res[f.schema] = {};
+    if (!res[f.schema].functions) res[f.schema].functions = {};
+    const sig = `${f.name}(${f.arguments})`;
+    res[f.schema].functions[sig] = f;
+  }
+  return res;
+}
+
 let reportId = 0;
 let scratchId = 0;
 let localDiffId = 0;
 
 class App extends Ractive {
   constructor(opts) { super(opts); }
+
+  compareSchema(local, config) {
+    const target = this.get('compareSchema');
+    if (target && target.schema !== local) {
+      this.set('compareSchema', undefined);
+      const left = expandSchema(target.schema);
+      const right = expandSchema(local);
+      const w = new SchemaCompare({ data: { diff: evaluate({ left, right }, 'diff(left right)') } });
+      this.host.addWindow(w, { title: `Comparing schema ${constr(target.config)} to ${constr(config || 'Local File')}`});
+    } else {
+      this.set('compareSchema', { config: config || 'Local File', schema: local });
+      this.host.toast('Click Compare on another schema to compare', { type: 'info', timeout: 4000 });
+    }
+  }
 }
 Ractive.extendWith(App, {
   css(data) {
@@ -198,6 +235,9 @@ Ractive.extendWith(App, {
         color: ${data('raui.primary.fg') || data('raui.fg') || '#222'};
         background-color: ${data('raui.primary.bg') || data('raui.bg') || '#fff'};
       }
+      .schema-row.sticky-header { background-color: ${data('raui.primary.bg') || '#fff'}; }
+      .stiped:nth-child(odd), .striped-odd { background-color: ${data('theme') === 'dark' ? '#353535' : '#f2f2f2'}; }
+      .stiped:nth-child(even), .striped-even { background-color: ${data('theme') === 'dark' ? '#3b3b3b' : '#fdfdfd'}; }
     `;
   },
 });
@@ -1295,17 +1335,7 @@ class Schema extends Window {
     return Object.values(matches || {}).reduce((a, c) => a + (c?.length || 0), 0);
   }
   compareSchema(local, config) {
-    const target = this.get('compareSchema');
-    if (target && target.schema !== local) {
-      this.set('compareSchema', undefined);
-      const left = target.schema.tables.reduce((a, t) => (a[t.name] = { schema: t.schema }, t.columns.reduce((a, c) => (a[`${t.name}.${c.name}`] = c, a), a), a), {});
-      const right = local.tables.reduce((a, t) => (a[t.name] = { schema: t.schema }, t.columns.reduce((a, c) => (a[`${t.name}.${c.name}`] = c, a), a), a), {});
-      const w = new SchemaCompare({ data: { diff: evaluate({ left, right }, 'diff(left right)') } });
-      this.host.addWindow(w, { title: `Comparing schema ${constr(target.config)} to ${constr(this.config || 'Local File')}` });
-    } else {
-      this.set('compareSchema', { config: config || 'Local File', schema: local });
-      this.host.toast('Click Compare on another schema to compare', { type: 'info', timeout: 4000 });
-    }
+    app.compareSchema(local, config);
   }
   colCount(schema, which) {
     const tables = schema?.[which] || [];
@@ -1766,17 +1796,7 @@ class HostExplore extends Window {
     download(`schema ${db} ${evaluate(`#now##date,'yyyy-MM-dd HH mm'`)}.pgds`, JSON.stringify(this.get(`schemas.${Ractive.escapeKey(selected.connection.constr + '@' + selected.entry.database)}.schema`)), 'application/pg-difficult-schema');
   }
   compareSchema(local, config) {
-    const target = this.get('compareSchema');
-    if (target && target.schema !== local) {
-      this.set('compareSchema', undefined);
-      const left = target.schema.reduce((a, t) => (a[t.name] = { schema: t.schema }, t.columns.reduce((a, c) => (a[`${t.name}.${c.name}`] = c, a), a), a), {});
-      const right = local.reduce((a, t) => (a[t.name] = { schema: t.schema }, t.columns.reduce((a, c) => (a[`${t.name}.${c.name}`] = c, a), a), a), {});
-      const w = new SchemaCompare({ data: { diff: evaluate({ left, right }, 'diff(left right)') } });
-      this.host.addWindow(w, { title: `Comparing schema ${constr(target.config)} to ${constr(config || 'Local File')}` });
-    } else {
-      this.set('compareSchema', { config: config || 'Local File', schema: local });
-      this.host.toast('Click Compare on another schema to compare', { type: 'info', timeout: 4000 });
-    }
+    app.compareSchema(local, config);
   }
 
   clicked(ev, col, rec) {
