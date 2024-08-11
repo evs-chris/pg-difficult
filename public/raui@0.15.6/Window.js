@@ -1490,14 +1490,14 @@
         // resizing from top/left requires top/left/width/height adjustments
         var set = {};
 
-        if (iy <= size) {
+        if (iy <= min) {
           set['control.top'] = oy + dy;
           set['control.height'] = oh - dy;
         } else {
           set['control.height'] = oh + dy;
         }
 
-        if (ix <= size) {
+        if (ix <= min) {
           set['control.left'] = ox + dx;
           set['control.width'] = ow - dx;
         } else {

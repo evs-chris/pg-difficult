@@ -1,4 +1,5 @@
 const { evaluate, registerOperator, parse, run } = Raport;
+const { docs } = Raport.Design;
 const { Window } = RauiWindow;
 
 registerOperator({ type: 'value', names: ['log'], apply: (_name, args) => console.log.apply(console, args) });
@@ -29,6 +30,7 @@ Ractive.helpers.age = function(ts) {
   return evaluate({ d }, `d#date,'HH:mm EEE'`);
 }
 Ractive.helpers.escapeKey = Ractive.escapeKey;
+Ractive.helpers.evaluate = Raport.evaluate;
 
 Ractive.decorators.autofocus = function autofocus(node) {
   if (node) {
@@ -48,7 +50,7 @@ Ractive.decorators.tracked = function tracked(node, name) {
   }
   return { 
     teardown() {
-      this[name] = init;
+      if (this[name] === node) this[name] = init;
     }
   };
 }
@@ -56,6 +58,17 @@ Ractive.decorators.tracked = function tracked(node, name) {
 setInterval(() => {
   Ractive.sharedSet('now', new Date());
 }, 5000);
+
+let settingsLock = false;
+function readSettings() {
+  settingsLock = true;
+  app.set('connections', JSON.parse(localStorage.getItem('connections') || '[]'));
+  app.set('settings', JSON.parse(localStorage.getItem('settings') || '{}'));
+  app.set('savedQueries', JSON.parse(localStorage.getItem('savedQueries') || '[]'));
+  app.set('savedReports', JSON.parse(localStorage.getItem('savedReports') || '[]'));
+  app.set('scratchPads', JSON.parse(localStorage.getItem('scratchPads') || '[]'));
+  settingsLock = false;
+}
 
 Ractive.helpers.moveUp = (ctx, max) => {
   const idx = ctx.get('@index');
@@ -232,7 +245,8 @@ const app = globalThis.app = new App({
       strict: true, init: false,
     },
     'connections savedQueries savedReports scratchPads': {
-      handler(v, _o, k) {
+      handler: debounce((v, _o, k) => {
+        if (settingsLock) return;
         localStorage.setItem(k, JSON.stringify(v || []));
         if (k === 'savedReports') {
           const min = Math.max.apply(Math, v.map(r => +r.id).concat([reportId]));
@@ -241,13 +255,14 @@ const app = globalThis.app = new App({
           const min = Math.max.apply(Math, v.map(r => +r.id).concat([scratchId]));
           scratchId = min;
         }
-      },
+      }),
       init: false,
     },
     'settings': {
-      handler(v) {
+      handler: debounce((v) => {
+        if (settingsLock) return;
         localStorage.setItem('settings', JSON.stringify(v || {}));
-      },
+      }),
       init: false,
     },
     '@.host': {
@@ -458,11 +473,7 @@ const app = globalThis.app = new App({
   },
 });
 
-app.set('connections', JSON.parse(localStorage.getItem('connections') || '[]'));
-app.set('settings', JSON.parse(localStorage.getItem('settings') || '{}'));
-app.set('savedQueries', JSON.parse(localStorage.getItem('savedQueries') || '[]'));
-app.set('savedReports', JSON.parse(localStorage.getItem('savedReports') || '[]'));
-app.set('scratchPads', JSON.parse(localStorage.getItem('scratchPads') || '[]'));
+readSettings();
 
 class ControlPanel extends Window {
   constructor(opts) { super(opts); }
@@ -744,6 +755,7 @@ class Diff extends Window {
 Window.extendWith(Diff, {
   template: '#diff',
   options: { flex: true, width: '60em', height: '45em', resizable: true },
+  noCssTransform: true,
   css(data) {
     return `
 h3 { padding: 0.5rem; text-align: center; }
@@ -775,11 +787,6 @@ ${data('theme') === 'dark' ? `
       this.set('rightView', s.rightview === 'text' ? undefined : 'tree');
       this.set('format', s.format);
     },
-  },
-  observe: {
-    'left right format'() {
-      window.localStorage.setItem('diff', JSON.stringify({ left: this.get('left'), right: this.get('right'), format: this.get('format') }));
-    }
   },
 });
 
@@ -985,7 +992,7 @@ res
     return res;
   }
   download() {
-    if (this.event?.event?.ctrlKey) return this.openHtml();
+    if (this.event?.event?.ctrlKey || this.event?.event?.shiftKey) return this.openHtml();
     const db = this.source ? this.source.replace(/.*@([^:]+).*\/(.*)/, '$1-$2') : this.get('loaded') ? 'Local file' : 'multiple';
     const name = `diff ${db} ${evaluate(`#now##date,'yyyy-MM-dd HH mm'`)}`;
     const ext = this.event?.event?.shiftKey ? 'html' : 'pgdd';
@@ -1075,7 +1082,7 @@ res
     const reverse = entries.map(e => reverseEntry(e, schema)).filter(e => e);
     if (reverse.length !== entries.length) return this.host.toast(`Undo is not supported for this segment`, { type: 'error', timeout: 3000 });
 
-    if (!this.event?.event?.ctrlKey) await request({ action: 'segment', segment: `Undo ${entry.segment}` });
+    if (!this.event?.event?.ctrlKey || this.event?.event?.shiftKey) await request({ action: 'segment', segment: `Undo ${entry.segment}` });
 
     request({ action: 'query', query: reverse.map(p => p[0]), params: reverse.map(p => p[1]), client: Object.values(app.get('status.clients') || {}).find(c => c.source === this.source).config });
   }
@@ -1114,7 +1121,7 @@ res
   }
 
   clearEntries() {
-    if (this.event?.event?.ctrlKey || !this.source) notify({ action: 'clear' });
+    if (this.event?.event?.ctrlKey || this.event?.event?.shiftKey || !this.source) notify({ action: 'clear' });
     else notify({ action: 'clear', source: this.source });
   }
 }
@@ -1377,8 +1384,10 @@ Window.extendWith(SchemaCompare, {
 class ScratchPad extends Window {
   constructor(opts, pad) {
     super(opts);
-    const id = this.get('scratchId') || ++scratchId;
-    pad = pad || { id, syntax: 'markdown' };
+    const id = pad?.id || this.get('scratchId') || ++scratchId;
+    pad = pad || { id, syntax: 'markdown', text: '' };
+    this.upstream = pad;
+    if (!('text' in pad)) pad.text = '';
     setTimeout(() => this.set('pad', JSON.parse(JSON.stringify(pad))));
   }
   save() {
@@ -1388,23 +1397,105 @@ class ScratchPad extends Window {
     const idx = saved.findIndex(r => r.id === pad.id);
     if (~idx) app.splice('scratchPads', idx, 1, pad);
     else app.push('scratchPads', pad);
+    this.upstream = Object.assign({}, pad);
+  }
+  saveDebounced = debounce(() => this.save(), 2000);
+  evaluate(txt) {
+    if (this.ace) {
+      const sel = this.getContext(this.ace).decorators.ace.editor.getSelectedText();
+      if (sel) txt = sel;
+    }
+    const ok = parse(txt, { consumeAll: true });
+    if (ok && 'cause' in ok) {
+      this.set({
+        evalresult: '',
+        evalerror: `Invalid expression: ${ok.message}\n\n${ok.marked}`,
+      });
+    } else {
+      this.set({
+        evalresult: evaluate(ok),
+        evalerror: '',
+      });
+    }
+    const split = this.findComponent('split');
+    if (split) {
+      const sp = split.get('splits.1');
+      if (sp.min) {
+        split.set('splits.1.min', false);
+        if (sp.lastSize < 0.5) split.set('splits.1', { curSize: 40, lastSize: 40, min: false }, { deep: true });
+        else split.set('splits.1.curSize', sp.lastSize);
+      } else if (sp.curSize < 0.5) split.set('splits.1', { curSize: 40, lastSize: 40, min: false }, { deep: true });
+    }
+    const tabs = this.findComponent('tabs');
+    if (tabs && tabs.selection > 1) tabs.select(0);
+  }
+  string(v) {
+    return v === undefined ? 'undefined' : JSON.stringify(v);
   }
 }
 Window.extendWith(ScratchPad, {
   template: '#scratch-pad',
+  css: `
+h3 { text-align: left; }
+dt { margin-top: 1rem; font-family: monospace; }
+dd { margin: 0.5em 0 1em 2em; white-space: pre-wrap; }
+.ops-search { opacity: 0.2; }
+.ops-search:hover { opacity: 1; }
+`,
   options: { flex: true, resizable: true, minimize: false, width: '50em', height: '35em' },
   on: {
     init() {
       this.link('settings.editor', 'editor', { instance: app });
+      this.partials.root = Diff.prototype.template.p.root;
+      this.partials.tree = Diff.prototype.template.p.tree;
+      this.watch = app.observe('scratchPads', v => {
+        const id = this.get('pad.id');
+        const txt = this.get('pad.text');
+        if (v) {
+          const up = v.find(p => p.id == id);
+          if (up) {
+            this.set('pad.syntax', up.syntax);
+            this.set('pad.name', up.name);
+            if (up.text !== txt) {
+              if (this.upstream?.text === txt) {
+                this.set('pad.text', up.text);
+                this.set('diff', false);
+              } else this.set('diff', true);
+            } else this.set('diff', false);
+            this.upstream = up;
+          }
+        }
+      }, { strict: true });
+    },
+    destruct() {
+      if (this.watch) this.watch.cancel();
     }
+  },
+  data() {
+    return { docs, ops: evaluate(docs.operators) };
+  },
+  computed: {
+    operators() {
+      const map = this.get('ops').reduce((a, c) => (Array.isArray(c.op) ? c.op.forEach(o => a.push([o, c])) : a.push([c.op, c]), a), []);
+      let ops = evaluate({ map }, `sort(map =>if _.0[0] == '#' then 'zz[_.0]' elif _.0[0] == '|' then ' {_.0}' else _.0)`)
+      const search = this.get('opsearch');
+      if (search) {
+        const re = new RegExp(search.replace(/([*.\\\/$^()[\]{}+])/g, '\\$1'), 'i');
+        ops = ops.filter(p => re.test(p[0]) || re.test(docs.operatorText[p[0]]));
+      }
+      return ops;
+    },
   },
   observe: {
     'pad.name'(n) {
       this.title = `Scratch Pad${n ? ` - ${n}` : ''}`;
       this.save();
     },
+    'pad.syntax'() {
+      if (typeof this.get('pad.text') === 'string') this.save();
+    },
     'pad.text'(v) {
-      if (typeof v === 'string') this.save();
+      if (typeof v === 'string') this.saveDebounced();
     },
   },
 });
@@ -2214,8 +2305,17 @@ function unloading() {
   clearTimeout(unloadTm);
 }
 
+function debounce(fn, timeout = 1000, target) {
+  let tm;
+  return (function(...args) {
+    if (tm) clearTimeout(tm);
+    tm = setTimeout(() => fn.apply(target, args), timeout);
+  });
+}
+
 window.addEventListener('beforeunload', unload);
 window.addEventListener('unload', unloading);
+window.addEventListener('storage', debounce(readSettings, 5000));
 
 // Set up debug helper
 let el;

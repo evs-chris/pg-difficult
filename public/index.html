@@ -5,6 +5,7 @@
     <link rel="shortcut icon" href="./icon.png" />
     <script src="./ractive@1.4.2.js"></script>
     <script src="./raport@0.24.8.js"></script>
+    <script src="./raport.design@0.24.8.js"></script>
     <script src="./raui@0.15.6/ace-editor.js"></script>
     <script src="./raui@0.15.6/button.js"></script>
     <script src="./raui@0.15.6/form.js"></script>
@@ -993,8 +994,10 @@
 </script>
 
 <script type=text/ractive id=scratch-pad>
-  <div style="display: flex; justify-content: space-between; flex-shrink: 0;">
+  <div style="display: flex; flex-shrink: 0;">
+    {{#if pad.syntax === 'raport'}}<label as-field class=inline><button class=flat on-click="@.evaluate(pad.text)" style="line-height: 2.5em; height: 2em;" title="Evaluate expression"><span style="font-size: 1.5em;">&#9658;</span></button></label>{{/if}}
     <label as-field class=inline><input value="{{pad.name}}" placeholder="Name..." lazy=1000 /></label>
+    <div style="flex-grow: 1;" />
     <label as-field class=inline><select value="{{pad.syntax}}" lazy=1000>
       <option value="{{undefined}}">plain text</option>
       <option>c_cpp</option>
@@ -1027,6 +1030,7 @@
       <option>php</option>
       <option>plain_text</option>
       <option>python</option>
+      <option>raport</option>
       <option>ruby</option>
       <option>rust</option>
       <option>sass</option>
@@ -1049,7 +1053,63 @@
       <option>zig</option>
     </select></label>
   </div>
-  <div style="flex-grow: 1;" as-ace="{ bind: 'pad.text', syntax: pad.syntax || 'plain_text', theme: @style.theme == 'dark' ? (~/editor.darkTheme || 'tomorrow_night_eighties') : (~/editor.lightTheme || 'tomorrow'), wrap: ~/editor.wrap, highlightActive: ~/editor.highlightActive, fontSize: '1em', font: 'monospace', printMargin: ~/editor.printMargin, keymode: ~/editor.keymode, lineNumbers: ~/editor.lineNumbers, relativeLineNumbers: ~/editor.relativeLineNumbers, highlightSelected: ~/editor.highlightSelected }" />
+  <div style="flex-grow: 1; position: relative; display: flex;">
+    {{#if pad.syntax === 'raport'}}
+      <split>
+        <div style="height: 100%;" as-tracked=`ace` as-ace="{ bind: 'pad.text', syntax: pad.syntax || 'plain_text', theme: @style.theme == 'dark' ? (~/editor.darkTheme || 'tomorrow_night_eighties') : (~/editor.lightTheme || 'tomorrow'), wrap: ~/editor.wrap, highlightActive: ~/editor.highlightActive, fontSize: '1em', font: 'monospace', printMargin: ~/editor.printMargin, keymode: ~/editor.keymode, lineNumbers: ~/editor.lineNumbers, relativeLineNumbers: ~/editor.relativeLineNumbers, highlightSelected: ~/editor.highlightSelected }" on-keydown="@event.ctrlKey && @event.key === 'Enter' ? @.evaluate(pad.text) : true" />
+        <tabs pad flex size=0 style="height: 100%;">
+          <tab>
+            <title>{{~/evalerror ? 'Error' : 'Result'}}</title>
+            <pre><code>{{~/evalerror || JSON.stringify(~/evalresult)}}</code></pre>
+          </tab>
+          <tab hidden="{{~/evalerror}}" title="Tree" no-pad>
+            {{>root ~/evalresult}}
+          </tab>
+          <tab title="Language Reference" right no-pad>
+            <iframe style="border: none; flex-grow: 1; flex-shrink: 1; max-height: 100%;" srcdoc="{{~/docs.languageReference(100, @style.theme)}}" />
+          </tab>
+          <tab title="Operators" right no-pad>
+            <div class="ops-search" style="display: flex; justify-content: space-between; background: transparent; position: absolute; top: 0; width: 100%;">
+              <label as-field class=inline style="background-color: rgba(128, 128, 128, 0.2); border-radius: 0 0 1em 0; backdrop-filter: blur(5px);"><input lazy=500 placeholder="Search..." value="{{opDocSearch}}" style="width: 10em; margin: 0.5em;" title="Find any operators with docs containing the string entered here." /></label>
+              <label as-field class=inline style="background-color: rgba(128, 128, 128, 0.2); border-radius: 0 0 0 1em; backdrop-filter: blur(5px);"><input lazy=500 placeholder="Operator..." value="{{opDoc}}" style="width: 10em; margin: 0.5em;" title="Find any operators with a name containing the string entered here." /></label>
+            </div>
+            <div style="padding: 0.5rem; height: 100%; width: 100%; overflow: auto; box-sizing: border-box;">
+              <div style="max-width: 60em; margin: auto; color: {{@style.raui.primary.fg}};">
+                <h2 style="text-align: center;">Raport Operators</h2>
+                <dl>
+                  {{#each operators as op}}{{#if (!~/opDoc || op.0.includes(~/opDoc)) && (!~/opDocSearch || JSON.stringify(op.1).toLowerCase().includes(~/opDocSearch.toLowerCase()))}}
+                  <dt style="border-bottom: 1px dotted; margin-bottom: 0.25rem; margin-top: 2rem;"><h3>{{op.0.0 === '#' ? 'Format ' + op.0.slice(1) : op.0}}{{#if op.1.alias}} <em style="font-size: 0.8em;"> - (alias for <strong>{{op.1.alias}}</strong>)</em>{{/if}}</h3></dt>
+                    <dd>
+                      <dl>
+                        {{#each op.1.sig}}
+                          <dt>
+                            <strong>{{.proto}}</strong>{{#if .bin}} <em>or</em> <strong>arg1 {{op.0}} arg2</strong>{{/if}}{{#if .un}} or <strong>{{op.0}}arg1</strong>{{/if}}
+                            {{#if .agg}}<br /><em>arg1 can implicitly be <code>@source</code></em>{{/if}}
+                          </dt>
+                          <dd>{{.desc}}</dd>
+                        {{/each}}
+                      </dl>
+                      {{#if op.1.opts.length}}
+                        <h4>Options</h4>
+                        <dl>
+                          {{#each op.1.opts}}
+                          <dt><strong>{{Array.isArray(.name) ? .name.join(' or ') : .name}}{{#if .type}} - <em>{{.type}}</em>{{/if}}</strong></dt>
+                            <dd>{{.desc}}</dd>
+                          {{/each}}
+                        </dl>
+                      {{/if}}
+                    </dd>
+                    {{/if}}{{/each}}
+                </dl>
+              </div>
+            </div>
+          </tab>
+        </tabs>
+      </split>
+    {{elseif pad && 'text' in pad}}
+      <div style="flex-grow: 1;" as-ace="{ bind: 'pad.text', syntax: pad.syntax || 'plain_text', theme: @style.theme == 'dark' ? (~/editor.darkTheme || 'tomorrow_night_eighties') : (~/editor.lightTheme || 'tomorrow'), wrap: ~/editor.wrap, highlightActive: ~/editor.highlightActive, fontSize: '1em', font: 'monospace', printMargin: ~/editor.printMargin, keymode: ~/editor.keymode, lineNumbers: ~/editor.lineNumbers, relativeLineNumbers: ~/editor.relativeLineNumbers, highlightSelected: ~/editor.highlightSelected }" />
+    {{/if}}
+  </div>
 </script>
 
 <script type=text/ractive id=host-explore>
@@ -1151,7 +1211,7 @@
                       </tabs>
                     {{else}}
                       <div style="padding: 0.5em; opacity: 0.5;">
-                        Select a report...
+                        Select a report or <button on-click="@.reportDesigner()">Add Report</button>
                       </div>
                     {{/if}}
                   </div>
@@ -1202,7 +1262,7 @@
                   </tabs>
                 {{else}}
                   <div style="padding: 0.5em; opacity: 0.5;">
-                    Select a report...
+                    Select a report or <button on-click="@.reportDesigner()">Add Report</button>
                   </div>
                 {{/if}}
               </div>
@@ -1216,16 +1276,18 @@
             </div>
           </tab>
           <tab title="Query">
-            <div style="padding: 0.3em;">Queries will run against all visible databases in the Host Explorer tree. Queries run here are useful to extend data available for filtering. Results may be provided for reports, but having a report with a query all source is preferable.</div>
-            <label as-field>SQL<textarea>{{~/queryall}}</textarea></label>
-            <div>
-              <label as-field title="Give a name to the result set to be available in the expression filter of this host explorer. Applied results are added to any existing results, so collapsing a host that already has results and rerunning a query will not remove the previous result.">Apply As<input value="{{~/queryapply}}" /></label>
-              <label as-field><button on-click="@.queryAll(~/queryall, ~/queryapply), @.set('queryapply', '')">Run</button></label>
-              <label as-field style="margin-left: 2em;"><button class-reject title="Clear cached results. To clear all, leave Apply As blank. To clear a specific set, fill the desired name in Apply As." on-click="@.set(~/queryapply ? 'results.' + escapeKey(~/queryapply) : 'results', {}), @.set('queryapply', '')">Clear Results</button></label>
-              <hr />
-              <label as-field title="Provide a result set with the given name, which will be available to any reports that have a provided query all source of the same name.">Provide Result<input value="{{~/queryname}}" /></label>
-              <label as-field><button on-click="@.queryAll(~/queryall, undefined, ~/queryname), @.set('queryname', '')">Run</button></label>
-              <label as-field style="margin-left: 2em;"><button class-reject title="Clear cached provided results. To clear all, leave Provided Result blank. To clear a specific set, fill the desired name in Provided Result." on-click="app.set(~/queryname ? 'results.' + escapeKey(~/queryname) : 'results', {}), @.set('queryname', '')">Clear Results</button></label>
+            <div style="display: flex; flex-direction: column; flex-grow: 1;">
+              <div style="padding: 0.3em;">Queries will run against all visible databases in the Host Explorer tree. Queries run here are useful to extend data available for filtering. Results may be provided for reports, but having a report with a query all source is preferable.</div>
+              <div style="flex-grow: 1; border: 1px solid rgba(128, 128, 128, 0.4); margin: 0.5em 0;" as-ace="{ bind: '~/queryall', syntax: 'pgsql', theme: @style.theme == 'dark' ? (~/editor.darkTheme || 'tomorrow_night_eighties') : (~/editor.lightTheme || 'tomorrow'), wrap: ~/editor.wrap, highlightActive: ~/editor.highlightActive, fontSize: '1em', font: 'monospace', printMargin: ~/editor.printMargin, keymode: ~/editor.keymode, lineNumbers: ~/editor.lineNumbers, relativeLineNumbers: ~/editor.relativeLineNumbers, highlightSelected: ~/editor.highlightSelected }" />
+              <div>
+                <label as-field title="Give a name to the result set to be available in the expression filter of this host explorer. Applied results are added to any existing results, so collapsing a host that already has results and rerunning a query will not remove the previous result.">Apply As<input value="{{~/queryapply}}" /></label>
+                <label as-field><button on-click="@.queryAll(~/queryall, ~/queryapply), @.set('queryapply', '')">Run</button></label>
+                <label as-field style="margin-left: 2em;"><button class-reject title="Clear cached results. To clear all, leave Apply As blank. To clear a specific set, fill the desired name in Apply As." on-click="@.set(~/queryapply ? 'results.' + escapeKey(~/queryapply) : 'results', {}), @.set('queryapply', '')">Clear Results</button></label>
+                <hr />
+                <label as-field title="Provide a result set with the given name, which will be available to any reports that have a provided query all source of the same name.">Provide Result<input value="{{~/queryname}}" /></label>
+                <label as-field><button on-click="@.queryAll(~/queryall, undefined, ~/queryname), @.set('queryname', '')">Run</button></label>
+                <label as-field style="margin-left: 2em;"><button class-reject title="Clear cached provided results. To clear all, leave Provided Result blank. To clear a specific set, fill the desired name in Provided Result." on-click="app.set(~/queryname ? 'results.' + escapeKey(~/queryname) : 'results', {}), @.set('queryname', '')">Clear Results</button></label>
+              </div>
             </div>
           </tab>
         </tabs>
@@ -1279,7 +1341,7 @@
           <label as-field>Database<input value="{{source.config.database}}" /></label>
         </div>
       {{/if}}
-      <div><label as-field>Query<textarea>{{source.query}}</textarea></label></div>
+      <div style="flex-grow: 1; border: 1px solid rgba(128, 128, 128, 0.4); margin: 0.5em 0; min-height: 15em;" as-ace="{ bind: 'source.query', syntax: 'pgsql', theme: @style.theme == 'dark' ? (~/editor.darkTheme || 'tomorrow_night_eighties') : (~/editor.lightTheme || 'tomorrow'), wrap: ~/editor.wrap, highlightActive: ~/editor.highlightActive, fontSize: '1em', font: 'monospace', printMargin: ~/editor.printMargin, keymode: ~/editor.keymode, lineNumbers: ~/editor.lineNumbers, relativeLineNumbers: ~/editor.relativeLineNumbers, highlightSelected: ~/editor.highlightSelected }" />
       {{#if ~/error}}<div style="color: red;">{{~/error}}</div>{{/if}}
       <div>
         {{#each ~/paramArray}}
@@ -1291,7 +1353,7 @@
     {{elseif source.type === 'query-all'}}
       <label as-field>Result Name<input value="{{source.result}}" /></label>
     {{elseif source.type === 'query-all-sql'}}
-      <div><label as-field>Query<textarea>{{source.query}}</textarea></label></div>
+      <div style="flex-grow: 1; border: 1px solid rgba(128, 128, 128, 0.4); margin: 0.5em 0; min-height: 15em;" as-ace="{ bind: 'source.query', syntax: 'pgsql', theme: @style.theme == 'dark' ? (~/editor.darkTheme || 'tomorrow_night_eighties') : (~/editor.lightTheme || 'tomorrow'), wrap: ~/editor.wrap, highlightActive: ~/editor.highlightActive, fontSize: '1em', font: 'monospace', printMargin: ~/editor.printMargin, keymode: ~/editor.keymode, lineNumbers: ~/editor.lineNumbers, relativeLineNumbers: ~/editor.relativeLineNumbers, highlightSelected: ~/editor.highlightSelected }" />
       {{#if ~/error}}<div style="color: red;">{{~/error}}</div>{{/if}}
       <div>
         {{#each ~/paramArray}}
@@ -1396,7 +1458,7 @@
   </div>
 
   {{#partial root}}
-    <div class=tree-view>
+    <div class=tree-view style="padding: 0.5em 0;">
       {{#if typeof . === 'object' && .}}<span style="color: #aaa; margin-left: 0.5em;">{{Array.isArray(.) ? '[' : '{'}}</span>{{/if}}
       <div class=root>
         {{>tree .}}
@@ -1407,22 +1469,26 @@
 
   {{#partial tree}}
     <div class=tree>
-      {{#each .}}
-        <div class=node>
-          <div class=key title="{{(@keypath + '').replace(/.*\)\./, '')}}">{{@key}}<span style="color: #aaa;">:</span>{{#if typeof . === 'object' && .}}<span style="color: #aaa; margin-left: 0.5em;">{{Array.isArray(.) ? '[' : '{'}}</span>{{/if}}</div>
-          {{#unless ~/expandAll}}<div class=expand {{#if typeof . === 'object' && .}}class-show on-click="@.toggle('expand.' + escapeKey(@keypath))"{{/if}}>{{#if ~/expand[@keypath]}}-{{else}}+{{/if}}</div>{{/unless}}
-          <div class=value class-children="typeof . === 'object' && . && (~/expandAll || ~/expand[@keypath])">
-            {{#if typeof . === 'object' && .}}
-              {{#if ~/expandAll || ~/expand[@keypath]}}
-                {{>tree .}}
-                <span style="color: #aaa; margin-left: 0.25em;">{{Array.isArray(.) ? ']' : '}'}}</span>
-              {{else}}
-                <div class=type>{{#if Array.isArray(.)}} ]{{else}} }{{/if}}</div>
-              {{/if}}
-            {{else}}{{@.string(.)}}{{/if}}
+      {{#if typeof . === 'object'}}
+        {{#each .}}
+          <div class=node>
+            <div class=key title="{{(@keypath + '').replace(/.*\)\./, '')}}">{{@key}}<span style="color: #aaa;">:</span>{{#if typeof . === 'object' && .}}<span style="color: #aaa; margin-left: 0.5em;">{{Array.isArray(.) ? '[' : '{'}}</span>{{/if}}</div>
+            {{#unless ~/expandAll}}<div class=expand {{#if typeof . === 'object' && .}}class-show on-click="@.toggle('expand.' + escapeKey(@keypath))"{{/if}}>{{#if ~/expand[@keypath]}}-{{else}}+{{/if}}</div>{{/unless}}
+            <div class=value class-children="typeof . === 'object' && . && (~/expandAll || ~/expand[@keypath])">
+              {{#if typeof . === 'object' && .}}
+                {{#if ~/expandAll || ~/expand[@keypath]}}
+                  {{>tree .}}
+                  <span style="color: #aaa; margin-left: 0.25em;">{{Array.isArray(.) ? ']' : '}'}}</span>
+                {{else}}
+                  <div class=type>{{#if Array.isArray(.)}} ]{{else}} }{{/if}}</div>
+                {{/if}}
+              {{else}}{{@.string(.)}}{{/if}}
+            </div>
           </div>
-        </div>
-      {{/each}}
+        {{/each}}
+      {{else}}
+        {{@.string(.)}}
+      {{/if}}
     </div>
   {{/partial}}
 </script>
