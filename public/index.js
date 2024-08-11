@@ -1,4 +1,4 @@
-const { evaluate, registerOperator, parse, run } = Raport;
+const { evaluate, registerOperator, parse, run, Root } = Raport;
 const { docs } = Raport.Design;
 const { Window } = RauiWindow;
 
@@ -512,6 +512,8 @@ const app = globalThis.app = new App({
     app.host.addWindow(wnd);
   },
 });
+
+Ractive.helpers.appSet = (p, v) => app.set(p, v);
 
 readSettings();
 
@@ -1442,8 +1444,15 @@ class ScratchPad extends Window {
         evalerror: `Invalid expression: ${ok.message}\n\n${ok.marked}`,
       });
     } else {
+      const opts = app.get('scratchroot') || {};
+      const root = new Root({}, opts);
+      root.sources = Object.assign({}, opts.sources);
+      if (opts.all) {
+        for (const k in opts.all.apply || {}) if (opts.all.apply[k]) root.sources[k] = { value: opts.all.apply[k] };
+        for (const k in opts.all.provide || {}) if (opts.all.provide[k]) root.sources[k] = { value: opts.all.provide[k] };
+      }
       this.set({
-        evalresult: evaluate(ok),
+        evalresult: evaluate(root, ok),
         evalerror: '',
       });
     }
@@ -1624,8 +1633,24 @@ class HostExplore extends Window {
       app.set(`results.${Ractive.escapeKey(result)}`, set);
     }
     if (!apply && !result) this.set('lastresults', res.result);
+    if (apply) app.set(`scratchroot.all.apply.${Ractive.escapeKey(apply)}`, res.result);
+    if (result) app.set(`scratchroot.all.provide.${Ractive.escapeKey(result)}`, res.result);
 
     this.blocked = false;
+  }
+
+  clearResult(type, name) {
+    if (type === 'applied') {
+      this.set(name ? `results.${Ractive.escapeKey(name)}` : 'results', {});
+      if (name) app.set(`scratchroot.all.apply.${Ractive.escapeKey(name)}`, undefined);
+      else app.set('scratchroot.all.apply', {});
+      this.set('queryapply', '');
+    } else if (type === 'provided') {
+      app.set(name ? `results.${Ractive.escapeKey(name)}` : 'results', {});
+      if (name) app.set(`scratchroot.all.provide.${Ractive.escapeKey(name)}`, undefined);
+      else app.set('scratchroot.all.provide', {});
+      this.set('queryname', '')
+    }
   }
 
   async reportData(connections, source, sample, params, report) {
@@ -1848,7 +1873,7 @@ dd { white-space: pre-wrap; }
     },
   },
   data() {
-    return { meta: {}, expanded: {}, schemaexpanded: { table: {} } };
+    return { hosts: {}, meta: {}, expanded: {}, schemaexpanded: { table: {} } };
   },
   observe: {
     'hosts filter'() {
