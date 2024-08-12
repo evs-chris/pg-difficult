@@ -1280,8 +1280,8 @@
                         {{/each}}
                       </div>
                       <div>
-                        <button on-click="@.runReport(allreport, false, false)">View Report</button>
-                        <button on-click="@.runReport(allreport, false, true)">Download Report</button>
+                        <button on-click="@.runReport(allreport, false, false)" {{#unless @.visibleDBs().length}}disabled title="At least one database must be visible in the list of databases to run this report."{{/unless}}>View Report</button>
+                        <button on-click="@.runReport(allreport, false, true)" {{#unless @.visibleDBs().length}}disabled title="At least one database must be visible in the list of databases to run this report."{{/unless}}>Download Report</button>
                       </div>
                     </tab>
                     <tab button right hidden="{{!~/allreport}}" on-click="@.unlink('allreport')">
