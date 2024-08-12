@@ -1077,10 +1077,13 @@
         <tabs pad flex size=0 style="height: 100%;">
           <tab>
             <title>{{~/evalerror ? 'Error' : 'Result'}}</title>
-            <pre><code on-click="copyToClipboard(typeof ~/evalresult === 'object' ? JSON.stringify(~/evalresult) : ~/evalresult)" title="click to copy result to the clipboard">{{~/evalerror || (typeof ~/evalresult === 'object' ? JSON.stringify(~/evalresult) : ~/evalresult)}}</code></pre>
+            <pre><code on-click="copyToClipboard(~/evalresult)" title="click to copy result to the clipboard">{{~/evalerror || ~/evaltext}}</code></pre>
           </tab>
           <tab hidden="{{~/evalerror}}" title="Tree" no-pad>
-            {{>root ~/evalresult}}
+            <div style="position: absolute; top: 0; right: 0; background-color: rgba(128, 128, 128, 0.2); border-radius: 0 0 0 1em;">
+              <label as-field class=inline style="min-height: 2.7em;"><input type="checkbox" checked="{{~/expandAll}}" /> Expand all?</label>
+            </div>
+            {{>root ~/treeresult}}
           </tab>
           <tab title="Language Reference" right no-pad>
             <iframe style="border: none; flex-grow: 1; flex-shrink: 1; max-height: 100%;" srcdoc="{{~/docs.languageReference(100, @style.theme)}}" />
@@ -1436,7 +1439,7 @@
         {{#if ~/copied.recent}}
           <div class=paster on-click="@.paste('left', @event.shiftKey)"><span>click to paste<br/>shift+click to apply patch</span></div>
         {{elseif leftView === 'tree'}}
-          {{>root @.parse(.left)}}
+          {{>root .lefttree}}
         {{else}}
           <textarea style="flex-grow: 1; resize: none;" placeholder="Left value here..." lazy=1000>{{.left}}</textarea>
         {{/if}}
@@ -1445,7 +1448,7 @@
         <div style="display: flex; justify-content: space-evenly; align-items: center;">
           {{#if ~/leftView === 'tree' || ~/rightView === 'tree'}}<label style="font-size: 0.7em;"><input type=checkbox checked="{{~/expandAll}}"> Expand all tree nodes?</label>{{/if}}
           <h3>Diff</h3>
-          <select value="{{format}}"><option value="{{undefined}}">raport</option><option>json</option></select>
+          <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</div>
         </div>
         <pre style="overflow: auto;"><code>
         {{#each @.diff(.left, .right)}}
@@ -1466,7 +1469,7 @@
         {{#if ~/copied.recent}}
           <div class=paster on-click="@.paste('right', @event.shiftKey)"><span>click to paste<br/>shift+click to apply patch</span></div>
         {{elseif rightView === 'tree'}}
-          {{>root @.parse(.right)}}
+          {{>root .righttree}}
         {{else}}
           <textarea style="flex-grow: 1; resize: none;" placeholder="Right value here..." lazy=1000>{{.right}}</textarea>
         {{/if}}
@@ -1476,37 +1479,41 @@
 
   {{#partial root}}
     <div class=tree-view style="padding: 0.5em 0;">
-      {{#if typeof . === 'object' && .}}<span style="color: #aaa; margin-left: 0.5em;">{{Array.isArray(.) ? '[' : '{'}}</span>{{/if}}
       <div class=root>
-        {{>tree .}}
+        <div class=node>
+          {{>.type}}
+        </div>
       </div>
-      {{#if typeof . === 'object' && .}}<span style="color: #aaa; margin-left: 0.5em;">{{Array.isArray(.) ? ']' : '}'}}</span>{{/if}}
     </div>
   {{/partial}}
-
-  {{#partial tree}}
-    <div class=tree>
-      {{#if typeof . === 'object'}}
-        {{#each .}}
-          <div class=node>
-            <div class=key title="{{(@keypath + '').replace(/.*\)\./, '')}}">{{@key}}<span style="color: #aaa;">:</span>{{#if typeof . === 'object' && .}}<span style="color: #aaa; margin-left: 0.5em;">{{Array.isArray(.) ? '[' : '{'}}</span>{{/if}}</div>
-            {{#unless ~/expandAll}}<div class=expand {{#if typeof . === 'object' && .}}class-show on-click="@.toggle('expand.' + escapeKey(@keypath))"{{/if}}>{{#if ~/expand[@keypath]}}-{{else}}+{{/if}}</div>{{/unless}}
-            <div class=value class-children="typeof . === 'object' && . && (~/expandAll || ~/expand[@keypath])">
-              {{#if typeof . === 'object' && .}}
-                {{#if ~/expandAll || ~/expand[@keypath]}}
-                  {{>tree .}}
-                  <span style="color: #aaa; margin-left: 0.25em;">{{Array.isArray(.) ? ']' : '}'}}</span>
-                {{else}}
-                  <div class=type>{{#if Array.isArray(.)}} ]{{else}} }{{/if}}</div>
-                {{/if}}
-              {{else}}{{@.string(.)}}{{/if}}
-            </div>
-          </div>
+  {{#partial leaf}}<div class=value>{{.value}}</div>{{/partial}}
+  {{#partial array}}
+      <div class=type style="margin-left: 0.5em;">[</div>
+      <div class=expand {{#if .children.length}}class-show on-click="@context.toggle('.expand')"{{/if}}>{{#if .expand}}-{{else}}+{{/if}}</div>
+      {{#if .expand || ~/expandAll}}
+        <div class=tree>
+        {{#each .children}}
+          <div class=node><span class=key>{{.index}}</span><span style="color: #aaa; margin-left: 0.5em;">:</span>{{>.value.type .value}}</div>
         {{/each}}
+        </div>
+        <div class=type style="margin-left: 0.5em;">]</div>
       {{else}}
-        {{@.string(.)}}
+        <div class=type>]</div>
       {{/if}}
-    </div>
+  {{/partial}}
+  {{#partial node}}
+      <div class=type style="margin-left: 0.5em;">{</div>
+      <div class=expand {{#if .children.length}}class-show on-click="@context.toggle('.expand')"{{/if}}>{{#if .expand}}-{{else}}+{{/if}}</div>
+      {{#if .expand || ~/expandAll}}
+        <div class=tree>
+        {{#each .children}}
+          <div class=node><span class=key>{{.key}}</span><span style="color: #aaa; margin-left: 0.5em;">:</span>{{>.value.type .value}}</div>
+        {{/each}}
+        </div>
+        <div class=type style="margin-left: 0.5em;">}</div>
+      {{else}}
+        <div class=type>}</div>
+      {{/if}}
   {{/partial}}
 </script>
 

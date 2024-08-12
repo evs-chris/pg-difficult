@@ -771,6 +771,7 @@ class Diff extends Window {
   constructor(opts) { super(opts); }
 
   diff(left, right) {
+    if (left === undefined || right === undefined) return {};
     const l = this.parse(left);
     const lcsv = this.get('csv');
     const r = this.parse(right);
@@ -784,15 +785,20 @@ class Diff extends Window {
 
   parse(val) {
     this.set('csv', false);
-    if (!val) return;
+    if (val == null) return;
     if (val[0] === '<') return evaluate({ val }, 'parse(val xml:1)');
-    const res = evaluate({ val }, 'parse(val)')?.v;
+    try {
+      return JSON.parse(val);
+    } catch {}
+    let res = evaluate({ val }, 'parse(val)')?.v;
     if (res === undefined || Object.keys(res).length === 1 && res.r && res.r.k) {
       this.set('csv', true);
-      return evaluate({ val, header: this.get('csvHeader') }, `parse(val csv:1 detect:1 header:header)`);
+      res = evaluate({ val, header: this.get('csvHeader') }, `parse(val csv:1 detect:1 header:header)`);
     }
     return res;
   }
+
+  treeify = treeify;
 
   string(val, comp) {
     if (val === undefined) return 'undefined';
@@ -830,13 +836,13 @@ pre { margin: 0; white-space: pre-wrap; word-break: break-all; }
 .tree-view { overflow: auto; flex-grow: 1; }
 .tree { margin-left: 0.5em; padding-left: 0.5em; border-left: 1px dotted #aaa; }
 .tree:hover { border-left-color: blue; }
-.tree .node { white-space: nowrap; }
-.tree .key { margin-left: 0.5em; display: inline-block; }
-.tree .type { color: #aaa; display: inline-block; }
-.tree .value { display: inline-block; vertical-align: top; white-space: pre-wrap; word-break: break-all; }
-.tree .children { display: block; }
-.tree .expand { display: none; width: 1em; height: 1em; box-sizing: border-box; border: 1px solid #aaa; color: #999; vertical-align: middle; line-height: 0.8em; text-align: center; display: none; cursor: pointer; }
-.tree .expand.show { display: inline-block; }
+.root .node { white-space: nowrap; }
+.root .key { margin-left: 0.5em; display: inline-block; }
+.root .type { color: #aaa; display: inline-block; }
+.root .value { margin-left: 0.5em; display: inline-block; vertical-align: top; white-space: pre-wrap; word-break: break-all; }
+.root .children { display: block; }
+.root .expand { display: none; width: 1em; height: 1em; box-sizing: border-box; border: 1px solid #aaa; color: #999; vertical-align: middle; line-height: 0.8em; text-align: center; display: none; cursor: pointer; }
+.root .expand.show { display: inline-block; }
 .highlight { background-color: yellow; }
 .paster { display: flex; width: 100%; height: 100%; opacity: 0.8; justify-content: space-around; align-items: center; cursor: pointer; }
 ${data('theme') === 'dark' ? `
@@ -853,6 +859,20 @@ ${data('theme') === 'dark' ? `
       this.set('rightView', s.rightview === 'text' ? undefined : 'tree');
       this.set('format', s.format);
     },
+  },
+  observe: {
+    'left right leftView rightView': {
+      handler(_v, _o, k) {
+        if (k.startsWith('left')) {
+          if (this.get('leftView') !== 'tree') return;
+          this.set('lefttree', treeify(this.parse(this.get('left'))));
+        } else {
+          if (this.get('rightView') !== 'tree') return;
+          this.set('righttree', treeify(this.parse(this.get('right'))));
+        }
+      },
+      strict: true,
+    }
   },
 });
 
@@ -1475,8 +1495,13 @@ class ScratchPad extends Window {
         for (const k in opts.all.apply || {}) if (opts.all.apply[k]) root.sources[k] = { value: opts.all.apply[k] };
         for (const k in opts.all.provide || {}) if (opts.all.provide[k]) root.sources[k] = { value: opts.all.provide[k] };
       }
+      const res = evaluate(root, ok);
+      let evaltext = res === undefined ? 'undefined' : JSON.stringify(res);
+      if (evaltext.length > 100000) evaltext = `${evaltext.slice(0, 100000)}...`;
       this.set({
-        evalresult: evaluate(root, ok),
+        evalresult: res,
+        evaltext,
+        treeresult: treeify(res),
         evalerror: '',
       });
     }
@@ -1509,8 +1534,11 @@ dd { margin: 0.5em 0 1em 2em; white-space: pre-wrap; }
   on: {
     init() {
       this.link('settings.editor', 'editor', { instance: app });
-      this.partials.root = Diff.prototype.template.p.root;
-      this.partials.tree = Diff.prototype.template.p.tree;
+      const ps = Diff.prototype.template.p;
+      this.partials.root = ps.root;
+      this.partials.array = ps.array;
+      this.partials.leaf = ps.leaf;
+      this.partials.node = ps.node;
       this.watch = app.observe('scratchPads', v => {
         const id = this.get('pad.id');
         const txt = this.get('pad.text');
@@ -1535,7 +1563,7 @@ dd { margin: 0.5em 0 1em 2em; white-space: pre-wrap; }
     }
   },
   data() {
-    return { docs, ops: evaluate(docs.operators) };
+    return { docs, ops: evaluate(docs.operators), expand: {} };
   },
   computed: {
     operators() {
@@ -2318,6 +2346,7 @@ Ractive.helpers.copyToClipboard = (function() {
       if (cur === id) app.set('copied.recent', false);
     }, app.get('settings.pasteTimeout') || 10000);
 
+    if (text.length > 500000) return Promise.resolve(false);
     if (!clipEl) {
       clipEl = document.createElement('textarea');
       clipEl.id = 'clipEl';
@@ -2380,6 +2409,16 @@ function debounce(fn, timeout = 1000, target) {
     if (tm) clearTimeout(tm);
     tm = setTimeout(() => fn.apply(target, args), timeout);
   });
+}
+
+function treeify(val, depth = 0) {
+  if (typeof val === 'object' && val) {
+    if (Array.isArray(val)) {
+      return { type: 'array', children: val.reduce((a, c, index) => (a.push({ index, value: treeify(c, depth + 1) }), a), []), expand: !depth };
+    } else {
+      return { type: 'node', children: Object.entries(val).reduce((a, [key, value]) => (a.push({ key, value: treeify(value, depth + 1) }), a), []), expand: !depth };
+    }
+  } else return { type: 'leaf', value: val === 'undefined' ? 'undefined' : JSON.stringify(val) };
 }
 
 window.addEventListener('beforeunload', unload);
