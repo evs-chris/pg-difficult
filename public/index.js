@@ -128,6 +128,8 @@ let request;
     msg.id = id++;
     let ok, fail;
     const pr = new Promise((o, f) => (ok = o, fail = f));
+    pr.message = msg;
+    pr.id = msg.id;
     listeners[msg.id] = [ok, fail];
     notify(msg);
     app.add('waiting', 1);
@@ -140,7 +142,7 @@ let request;
       delete listeners[id];
       listener[0](msg);
     }
-  }
+  };
   request.error = function error(id, msg) {
     const listener = listeners[id];
     if (Array.isArray(listener) && typeof listener[1] === 'function') {
@@ -148,7 +150,17 @@ let request;
       delete listeners[id];
       listener[1](msg);
     }
-  }
+  };
+  const notifiers = {};
+  request.listen = function listen(notify, handler) {
+    if (!notifiers[notify]) notifiers[notify] = [];
+    notifiers[notify].push(handler);
+    return { stop() { notifiers[notify].splice(notifiers[notify].indexOf(handler), 1); } };
+  };
+  request.notified = function notified(msg) {
+    const listeners = notifiers[msg.notify];
+    if (listeners) for (const l of listeners) l(msg);
+  };
 }
 
 let gate;
@@ -422,6 +434,7 @@ const app = globalThis.app = new App({
 
       this.host.toastDefaults.top = false;
       this.host.toastDefaults.bottom = true;
+      this.host.toastDefaults.stack = true;
     },
   },
   notify,
@@ -1668,8 +1681,19 @@ class HostExplore extends Window {
     if (!list.length) return;
 
     this.blocked = true;
+    const progress = this.host.toast('Processing queries...', { type: 'info', timeout: 0 });
+    const req = request({ action: 'query-all', clients: list, query: [query] });
+    let total = 0;
+    const listen = request.listen(`query-all-progress-${req.id}`, msg => {
+      total = msg.total;
+      progress.message = `Queries ${msg.done} of ${msg.total} complete...`;
+    });
+    const res = await req;
+    listen.stop();
+    progress.message = `${total} ${total !== 1 ? 'queries' : 'query'} processed.`;
+    progress.type = 'success';
+    progress.close(3000);
 
-    const res = await request({ action: 'query-all', clients: list, query: [query] });
     if (apply) {
       const old = this.get(`results.${Ractive.escapeKey(apply)}`);
       this.set(`results.${Ractive.escapeKey(apply)}`, Object.assign({}, old, res.result));
@@ -1713,7 +1737,20 @@ class HostExplore extends Window {
     if (!connections.length) return { value: {} };
 
     if (source.type === 'query-all-sql') {
-      const res = await request({ action: 'query-all', clients: connections, query: [source.query], params: [queryParams(report.definition, source, params)], });
+
+      const progress = this.host.toast('Processing queries...', { type: 'info', timeout: 0 });
+      const req = request({ action: 'query-all', clients: connections, query: [source.query], params: [queryParams(report.definition, source, params)], });
+      let total = 0;
+      const listen = request.listen(`query-all-progress-${req.id}`, msg => {
+        total = msg.total;
+        progress.message = `Queries ${msg.done} of ${msg.total} complete...`;
+      });
+      const res = await req;
+      listen.stop();
+      progress.message = `${total} ${total !== 1 ? 'queries' : 'query'} processed.`;
+      progress.type = 'success';
+      progress.close(3000);
+
       const set = [];
       for (const l of connections) {
         for (const d of l.databases) {
@@ -2247,6 +2284,10 @@ function message(msg) {
     case 'leaks':
       for (const k in msg.map) app.set(`status.leaks.${k}.current`, msg.map[k]);
       app.set('status.lastUpdate', new Date());
+      break;
+
+    case 'notify':
+      request.notified(msg);
       break;
   }
 

@@ -646,16 +646,30 @@ interface QueryControl {
   pending: number;
   result: { [con: string]: QueryResult };
   callback: () => void;
+  progress: () => void;
 }
 
 function queryAll(clients: DatabasesConfig[], query: string[], params: unknown[][], batch: number, id: string, ws: WebSocket) {
-  const queue = clients.reduce((a, c) => {
-    for (const d of c.databases) a.push(Object.assign({}, c, { database: d, __key: `${source(c)}@${d}` }));
-    return a;
-  }, [] as Array<DatabaseConfig & { __key: string }>);
+  // interleave clients to minimize impact on each server if possible
+  const queue: Array<DatabaseConfig & { __key: string }> = [];
+  let i = 0;
+  while (true) {
+    let queued = false;
+    for (const c of clients) {
+      if (c.databases[i]) {
+        queue.push(Object.assign({}, c, { database: c.databases[i], __key: `${source(c)}@${c.databases[i]}` }));
+        queued = true;
+      }
+    }
+    i++;
+    if (!queued) break;
+  }
+  const total = queue.length;
 
-  let ctrl: QueryControl;
-  ctrl = { pending: queue.length, result: {}, callback: () => notify({ action: 'query-all', id, result: ctrl.result }, ws) };
+  const ctrl: QueryControl = { pending: queue.length, result: {},
+    callback: () => notify({ action: 'query-all', id, result: ctrl.result }, ws),
+    progress: () => notify({ action: 'notify', notify: `query-all-progress-${id}`, queryId: id, done: total - queue.length, total }, ws),
+  };
 
   for (let i = 0; i < batch && queue.length; i++) {
     queryQueue(queue, query, params, ctrl);
@@ -693,6 +707,7 @@ async function queryQueue(queue: Array<DatabaseConfig & { __key: string }>, quer
     const res = await queryOne(e, query, params);
     ctrl.pending--;
     ctrl.result[e.__key] = res;
+    ctrl.progress();
     if (ctrl.pending === 0) ctrl.callback();
   }
 }
