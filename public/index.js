@@ -2200,6 +2200,11 @@ Window.extendWith(SourceEdit, {
 .field.textarea textarea { height: calc(100% - 1.6em); }
   `,
   options: { close: false, flex: true, resizable: true, maximize: false, minimize: false, width: '40em', height: '30em' },
+  on: {
+    init() {
+      this.link('settings.editor', 'editor', { instance: app });
+    }
+  },
   observe: {
     'source.query'(q) {
       if (q) {
