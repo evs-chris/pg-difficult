@@ -1667,7 +1667,7 @@ class HostExplore extends Window {
         if (!c || !Array.isArray(dbs)) continue;
         if (dbs.length) list.push(Object.assign({}, c.config, { databases: dbs.map(d => d.database) }));
         if (sample) {
-          list[0].databases = list[0].databases[0].slice(0, 1);
+          list[0].databases = [list[0].databases[0]];
           return list;
         }
       }
