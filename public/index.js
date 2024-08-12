@@ -305,6 +305,30 @@ const app = globalThis.app = new App({
       }),
       init: false,
     },
+    'settings.color'(v) {
+      const [dark, light] = {
+        green: ['#325932', '#447A43'],
+        purple: ['#3e3259', '#57437A'],
+        red: ['#593232', '#7A4343'],
+        orange: ['#a45500', '#bf6200'],
+        blue: ['#323859', '#43567A'],
+        gray: ['#383838', '#595959'],
+        yellow: ['#a48200', '#bf9900'],
+        pink: ['#593244', '#7A435A'],
+        teal: ['#325957', '#437A75'],
+        black: ['#000', '#151515'],
+      }[v || 'green'];
+      Ractive.styleSet({
+        'colors.darker': dark,
+        'colors.lighter': light,
+        'raui.menu.primary.fg': light,
+        'raui.window.title.bg': dark,
+      });
+    },
+    'settings.title'(v) {
+      if (v) document.title = `${v} - pg-difficult`;
+      else document.title = 'pg-difficult';
+    },
     '@.host': {
       handler(v) {
         if (v) {

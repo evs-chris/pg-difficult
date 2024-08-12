@@ -262,7 +262,7 @@
       <right hidden="{{menu.hidden}}" forced="{{menu.forced}}">
         <menu>
           <container>
-            <div style="display: flex; align-items: center; justify-content: space-around; height: 3.6em; background-color: #325932;">
+            <div style="display: flex; align-items: center; justify-content: space-around; height: 3.6em; background-color: {{@style.colors.darker || '#325932'}};">
               <span><a style="color: #eee; text-decoration: none;" href="https://github.com/evs-chris/pg-difficult" target=_blank>pg-difficult</a> <span class=version>- v{{~/status.VERSION || '-client-only'}}</span></span>
             </div>
           </container>
@@ -284,6 +284,7 @@
               <div style="height: 1.5em; font-size: 1.5em; cursor: pointer; user-select: none; margin-right: 1em;" title="Auto arrange windows" on-click="@.host.placeAll()">&#9638;</div>
               {{#if waiting}}<div style="height: 1.5em;">{{>loader}}</div>{{/if}}
             </left>
+            <center><div style="font-size: 1.5em;">{{~/settings.title}}</div></center>
             <right><div class=hamburger title="Toggle menu" on-click="@.toggle('menu.hidden')" /></right>
           </app-bar>
         {{/if}}
@@ -499,6 +500,20 @@
             <option value="dark">Dark</option>
             <option value="light">Light</option>
           </select></label>
+          <label as-field>Color <tip>If you are running multiple instances or have multiple storage namespaces e.g. 127.0.0.1:1999 and localhost:1999 and want to be able to visually distinguish them, you can select different colors here to make it a little more obvious which one you're looking at if you can remember which color goes with which instance.</tip><select value="{{~/settings.color}}">
+            <option value="{{undefined}}">The Default&trade;</option>
+            <option value="black">Black</option>
+            <option value="blue">Blue</option>
+            <option value="gray">Gray</option>
+            <option value="green">Green</option>
+            <option value="orange">Orange</option>
+            <option value="pink">Pink</option>
+            <option value="purple">Purple</option>
+            <option value="red">Red</option>
+            <option value="teal">Teal</option>
+            <option value="yellow">Yellow</option>
+          </select></label>
+          <label as-field>Title <tip>Set the title for clients attached to this namespace, for the same reasons you may want to set a different color.</tip><input value="{{~/settings.title}}" /></label>
           <label as-field>Paste Timeout ms<input type=number placeholder=10000 step=1000 value="{{~/settings.pasteTimeout}}" /></label>
         </fieldset>
         <fieldset style="margin-top: 1em;">
