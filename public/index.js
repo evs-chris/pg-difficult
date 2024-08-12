@@ -1680,9 +1680,14 @@ class HostExplore extends Window {
     const list = this.visibleDBs();
     if (!list.length) return;
 
+    let batch = +this.get('concurrency');
+    if (batch > 0) ;
+    else if (batch > 500) batch = 500;
+    else batch = undefined;
+
     this.blocked = true;
     const progress = this.host.toast('Processing queries...', { type: 'info', timeout: 0 });
-    const req = request({ action: 'query-all', clients: list, query: [query] });
+    const req = request({ action: 'query-all', clients: list, query: [query], batch });
     let total = 0;
     const listen = request.listen(`query-all-progress-${req.id}`, msg => {
       total = msg.total;
@@ -1738,8 +1743,12 @@ class HostExplore extends Window {
 
     if (source.type === 'query-all-sql') {
 
+      let batch = +this.get('concurrency');
+      if (batch > 0) ;
+      else if (batch > 500) batch = 500;
+      else batch = undefined;
       const progress = this.host.toast('Processing queries...', { type: 'info', timeout: 0 });
-      const req = request({ action: 'query-all', clients: connections, query: [source.query], params: [queryParams(report.definition, source, params)], });
+      const req = request({ action: 'query-all', clients: connections, query: [source.query], params: [queryParams(report.definition, source, params)], batch });
       let total = 0;
       const listen = request.listen(`query-all-progress-${req.id}`, msg => {
         total = msg.total;
