@@ -539,6 +539,7 @@
           <label as-field class=inline><input type=checkbox checked="{{~/settings.editor.highlightActive}}" /> Highlight active line?</label>
           <label as-field class=inline><input type=checkbox checked="{{~/settings.editor.highlightSelected}}" /> Highlight selected word?</label>
           <label as-field class=inline><input type=checkbox checked="{{~/settings.editor.printMargin}}" /> Show print margin?</label>
+          <label as-field class=inline><input type=checkbox twoway=false checked="{{~/settings.editor.softTabs}}" /> Use soft tabs?</label>
           <div class=break />
           <label as-field>Input Mode<select value="{{~/settings.editor.keymode}}">
             <option value="{{undefined}}">default</option>
@@ -549,6 +550,7 @@
           </select></label>
           <label as-field>Light Theme <tip>The Ace editor theme to use when retinal pain mode is selected.</tip><select value="{{~/settings.editor.lightTheme}}">{{>ace-themes}}</select></label>
           <label as-field>Dark Theme <tip>The Ace editor theme to use when the correct mode is selected.</tip><select value="{{~/settings.editor.darkTheme}}">{{>ace-themes}}</select></label>
+          <label as-field>Tab Size<input type=number placeholder=2 value="{{~/settings.editor.tabSize}}" /></label>
         </fieldset>
         {{#if !@global.clientOnly}}
           <fieldset style="margin-top: 1em;">
@@ -562,7 +564,7 @@
           <legend>Local Diff Options</legend>
           <label as-field>Default Left Mode<select value="{{~/settings.diff.leftview}}"><option value="{{undefined}}">tree</option><option>text</option></select></label>
           <label as-field>Default Right Mode<select value="{{~/settings.diff.rightview}}"><option value="{{undefined}}">tree</option><option>text</option></select></label>
-          <label as-field>Default Value Format<select value="{{~/settings.diff.format}}"><option value="{{undefined}}">raport</option><option>json</option></select></label>
+          <!--<label as-field>Default Value Format<select value="{{~/settings.diff.format}}"><option value="{{undefined}}">raport</option><option>json</option></select></label>-->
         </fieldset>
         <div style="margin-top: 1em;">
           <button on-click="@.exportSettings()">Export Settings</button>
@@ -647,7 +649,7 @@
   </div>
   <div class="query" style="position: relative;">
     <split>
-      <div size=20 class="query-text" as-tracked=`ace` as-ace="{ bind: '~/query', syntax: 'pgsql', theme: @style.theme == 'dark' ? (~/editor.darkTheme || 'tomorrow_night_eighties') : (~/editor.lightTheme || 'tomorrow'), wrap: ~/editor.wrap, highlightActive: ~/editor.highlightActive, fontSize: '1em', font: 'monospace', printMargin: ~/editor.printMargin, keymode: ~/editor.keymode, lineNumbers: ~/editor.lineNumbers, relativeLineNumbers: ~/editor.relativeLineNumbers, highlightSelected: ~/editor.highlightSelected }" on-keydown="@event.ctrlKey && @event.key === 'Enter' ? @.runQuery(~/query) : true" />
+      <div size=20 class="query-text" as-tracked=`ace` as-ace="{ bind: '~/query', syntax: 'pgsql', theme: @style.theme == 'dark' ? (~/editor.darkTheme || 'tomorrow_night_eighties') : (~/editor.lightTheme || 'tomorrow'), wrap: ~/editor.wrap, highlightActive: ~/editor.highlightActive, fontSize: '1em', font: 'monospace', printMargin: ~/editor.printMargin, keymode: ~/editor.keymode, lineNumbers: ~/editor.lineNumbers, relativeLineNumbers: ~/editor.relativeLineNumbers, highlightSelected: ~/editor.highlightSelected, softTabs: ~/editor.softTabs, tabSize: ~/editor.tabSize }" on-keydown="@event.ctrlKey && @event.key === 'Enter' ? @.runQuery(~/query) : true" />
       <div class="result">
         <data-table auto-titles no-wrap fixed-header allow-select=false on-init="@.set('@.table', $1)" items="{{~/result}}">
           <bottom>
@@ -1073,7 +1075,7 @@
   <div style="flex-grow: 1; position: relative; display: flex;">
     {{#if pad.syntax === 'raport'}}
       <split>
-        <div style="height: 100%;" as-tracked=`ace` as-ace="{ bind: 'pad.text', syntax: pad.syntax || 'plain_text', theme: @style.theme == 'dark' ? (~/editor.darkTheme || 'tomorrow_night_eighties') : (~/editor.lightTheme || 'tomorrow'), wrap: ~/editor.wrap, highlightActive: ~/editor.highlightActive, fontSize: '1em', font: 'monospace', printMargin: ~/editor.printMargin, keymode: ~/editor.keymode, lineNumbers: ~/editor.lineNumbers, relativeLineNumbers: ~/editor.relativeLineNumbers, highlightSelected: ~/editor.highlightSelected }" on-keydown="@event.ctrlKey && @event.key === 'Enter' ? @.evaluate(pad.text) : true" />
+        <div style="height: 100%;" as-tracked=`ace` as-ace="{ bind: 'pad.text', syntax: pad.syntax || 'plain_text', theme: @style.theme == 'dark' ? (~/editor.darkTheme || 'tomorrow_night_eighties') : (~/editor.lightTheme || 'tomorrow'), wrap: ~/editor.wrap, highlightActive: ~/editor.highlightActive, fontSize: '1em', font: 'monospace', printMargin: ~/editor.printMargin, keymode: ~/editor.keymode, lineNumbers: ~/editor.lineNumbers, relativeLineNumbers: ~/editor.relativeLineNumbers, highlightSelected: ~/editor.highlightSelected, softTabs: ~/editor.softTabs, tabSize: ~/editor.tabSize }" on-keydown="@event.ctrlKey && @event.key === 'Enter' ? @.evaluate(pad.text) : true" />
         <tabs pad flex size=0 style="height: 100%;">
           <tab>
             <title>{{~/evalerror ? 'Error' : 'Result'}}</title>
@@ -1127,7 +1129,7 @@
         </tabs>
       </split>
     {{elseif pad && 'text' in pad}}
-      <div style="flex-grow: 1;" as-ace="{ bind: 'pad.text', syntax: pad.syntax || 'plain_text', theme: @style.theme == 'dark' ? (~/editor.darkTheme || 'tomorrow_night_eighties') : (~/editor.lightTheme || 'tomorrow'), wrap: ~/editor.wrap, highlightActive: ~/editor.highlightActive, fontSize: '1em', font: 'monospace', printMargin: ~/editor.printMargin, keymode: ~/editor.keymode, lineNumbers: ~/editor.lineNumbers, relativeLineNumbers: ~/editor.relativeLineNumbers, highlightSelected: ~/editor.highlightSelected }" />
+      <div style="flex-grow: 1;" as-ace="{ bind: 'pad.text', syntax: pad.syntax || 'plain_text', theme: @style.theme == 'dark' ? (~/editor.darkTheme || 'tomorrow_night_eighties') : (~/editor.lightTheme || 'tomorrow'), wrap: ~/editor.wrap, highlightActive: ~/editor.highlightActive, fontSize: '1em', font: 'monospace', printMargin: ~/editor.printMargin, keymode: ~/editor.keymode, lineNumbers: ~/editor.lineNumbers, relativeLineNumbers: ~/editor.relativeLineNumbers, highlightSelected: ~/editor.highlightSelected, softTabs: ~/editor.softTabs, tabSize: ~/editor.tabSize }" />
     {{/if}}
   </div>
 </script>
@@ -1306,7 +1308,7 @@
           <tab title="Query">
             <div style="display: flex; flex-direction: column; flex-grow: 1;">
               <div style="padding: 0.3em;">Queries will run against all visible databases in the Host Explorer tree. Queries run here are useful to extend data available for filtering. Results may be provided for reports, but having a report with a query all source is preferable.</div>
-              <div style="flex-grow: 1; border: 1px solid rgba(128, 128, 128, 0.4); margin: 0.5em 0;" as-ace="{ bind: '~/queryall', syntax: 'pgsql', theme: @style.theme == 'dark' ? (~/editor.darkTheme || 'tomorrow_night_eighties') : (~/editor.lightTheme || 'tomorrow'), wrap: ~/editor.wrap, highlightActive: ~/editor.highlightActive, fontSize: '1em', font: 'monospace', printMargin: ~/editor.printMargin, keymode: ~/editor.keymode, lineNumbers: ~/editor.lineNumbers, relativeLineNumbers: ~/editor.relativeLineNumbers, highlightSelected: ~/editor.highlightSelected }" />
+              <div style="flex-grow: 1; border: 1px solid rgba(128, 128, 128, 0.4); margin: 0.5em 0;" as-ace="{ bind: '~/queryall', syntax: 'pgsql', theme: @style.theme == 'dark' ? (~/editor.darkTheme || 'tomorrow_night_eighties') : (~/editor.lightTheme || 'tomorrow'), wrap: ~/editor.wrap, highlightActive: ~/editor.highlightActive, fontSize: '1em', font: 'monospace', printMargin: ~/editor.printMargin, keymode: ~/editor.keymode, lineNumbers: ~/editor.lineNumbers, relativeLineNumbers: ~/editor.relativeLineNumbers, highlightSelected: ~/editor.highlightSelected, softTabs: ~/editor.softTabs, tabSize: ~/editor.tabSize }" />
               <div>
                 <label as-field title="Give a name to the result set to be available in the expression filter of this host explorer. Applied results are added to any existing results, so collapsing a host that already has results and rerunning a query will not remove the previous result. Applied results will also be available to any raport scratch pads as sources with their given names.">Apply As<input value="{{~/queryapply}}" /></label>
                 <label as-field><button on-click="@.queryAll(~/queryall, ~/queryapply), @.set('queryapply', '')">Run</button></label>
@@ -1369,7 +1371,7 @@
           <label as-field>Database<input value="{{source.config.database}}" /></label>
         </div>
       {{/if}}
-      <div style="flex-grow: 1; border: 1px solid rgba(128, 128, 128, 0.4); margin: 0.5em 0; min-height: 15em;" as-ace="{ bind: 'source.query', syntax: 'pgsql', theme: @style.theme == 'dark' ? (~/editor.darkTheme || 'tomorrow_night_eighties') : (~/editor.lightTheme || 'tomorrow'), wrap: ~/editor.wrap, highlightActive: ~/editor.highlightActive, fontSize: '1em', font: 'monospace', printMargin: ~/editor.printMargin, keymode: ~/editor.keymode, lineNumbers: ~/editor.lineNumbers, relativeLineNumbers: ~/editor.relativeLineNumbers, highlightSelected: ~/editor.highlightSelected }" />
+      <div style="flex-grow: 1; border: 1px solid rgba(128, 128, 128, 0.4); margin: 0.5em 0; min-height: 15em;" as-ace="{ bind: 'source.query', syntax: 'pgsql', theme: @style.theme == 'dark' ? (~/editor.darkTheme || 'tomorrow_night_eighties') : (~/editor.lightTheme || 'tomorrow'), wrap: ~/editor.wrap, highlightActive: ~/editor.highlightActive, fontSize: '1em', font: 'monospace', printMargin: ~/editor.printMargin, keymode: ~/editor.keymode, lineNumbers: ~/editor.lineNumbers, relativeLineNumbers: ~/editor.relativeLineNumbers, highlightSelected: ~/editor.highlightSelected, softTabs: ~/editor.softTabs, tabSize: ~/editor.tabSize }" />
       {{#if ~/error}}<div style="color: red;">{{~/error}}</div>{{/if}}
       <div>
         {{#each ~/paramArray}}
@@ -1381,7 +1383,7 @@
     {{elseif source.type === 'query-all'}}
       <label as-field>Result Name<input value="{{source.result}}" /></label>
     {{elseif source.type === 'query-all-sql'}}
-      <div style="flex-grow: 1; border: 1px solid rgba(128, 128, 128, 0.4); margin: 0.5em 0; min-height: 15em;" as-ace="{ bind: 'source.query', syntax: 'pgsql', theme: @style.theme == 'dark' ? (~/editor.darkTheme || 'tomorrow_night_eighties') : (~/editor.lightTheme || 'tomorrow'), wrap: ~/editor.wrap, highlightActive: ~/editor.highlightActive, fontSize: '1em', font: 'monospace', printMargin: ~/editor.printMargin, keymode: ~/editor.keymode, lineNumbers: ~/editor.lineNumbers, relativeLineNumbers: ~/editor.relativeLineNumbers, highlightSelected: ~/editor.highlightSelected }" />
+      <div style="flex-grow: 1; border: 1px solid rgba(128, 128, 128, 0.4); margin: 0.5em 0; min-height: 15em;" as-ace="{ bind: 'source.query', syntax: 'pgsql', theme: @style.theme == 'dark' ? (~/editor.darkTheme || 'tomorrow_night_eighties') : (~/editor.lightTheme || 'tomorrow'), wrap: ~/editor.wrap, highlightActive: ~/editor.highlightActive, fontSize: '1em', font: 'monospace', printMargin: ~/editor.printMargin, keymode: ~/editor.keymode, lineNumbers: ~/editor.lineNumbers, relativeLineNumbers: ~/editor.relativeLineNumbers, highlightSelected: ~/editor.highlightSelected, softTabs: ~/editor.softTabs, tabSize: ~/editor.tabSize }" />
       {{#if ~/error}}<div style="color: red;">{{~/error}}</div>{{/if}}
       <div>
         {{#each ~/paramArray}}
