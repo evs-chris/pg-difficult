@@ -1,4 +1,4 @@
-const { evaluate, registerOperator, parse, run, Root } = Raport;
+const { evaluate, template, registerOperator, parse, run, Root } = Raport;
 const { docs } = Raport.Design;
 const { Window } = RauiWindow;
 
@@ -1762,25 +1762,37 @@ class HostExplore extends Window {
     }
   }
   
-  async runReport(report, sample) {
+  async runReport(report, sample, dl) {
     const list = this.visibleDBs();
 
     if (!list.length) return;
+    let file;
+    const name = template(new Root({}, { parameters: this.get('params') }), report.definition.name) || report.definition.name || 'Report';
+    const csv = report.definition.type === 'delimited';
+    if (dl) {
+      file = await app.ask(`Please enter a file name:`, 'Report File Name', `${name}.${csv ? 'csv' : 'html'}`);
+      if (!file) return;
+    }
 
     const hosts = list.length;
     const dbs = list.reduce((a, c) => a + c.databases.length, 0);
     const queries = report.sources.filter(s => s.type === 'query-all-sql');
 
-    if (await app.confirm(`Do you want to run ${queries.length} queries on ${dbs} databases across ${hosts} servers?\n\n${queries.map(q => q.query).join('\n\n')}`), 'Run Report?') {
+    if (await app.confirm(`Do you want to run ${queries.length} queries on ${dbs} databases across ${hosts} servers?\n\n${queries.map(q => q.query).join('\n\n')}`, 'Run Report?')) {
       const data = {};
 
       for (const src of report.sources) {
         data[src.name] = await this.reportData(list, src, sample, this.get('params'), report);
       } // TODO: other sources?
 
-      const html = run(report.definition, data);
-      const w = new ViewReport({}, html);
-      this.host.addWindow(w, { title: `Report Viewer - ${report.definition.name}` });
+      let html = run(report.definition, data);
+      if (dl) {
+        download(file, html, csv ? 'text/csv' : 'text/html');
+      } else {
+        if (csv) html = csvToHtml(html);
+        const w = new ViewReport({}, html);
+        this.host.addWindow(w, { title: `Report Viewer - ${report.definition.name}` });
+      }
     }
   }
 
@@ -1809,9 +1821,17 @@ class HostExplore extends Window {
     }
   }
 
-  async runSingleReport(report, sample, params) {
+  async runSingleReport(report, sample, params, dl) {
     const selected = this.get('selectedDB.connection.config');
     if (!selected) return;
+
+    const name = template(new Root({}, { parameters: this.get('params') }), report.definition.name) || report.definition.name || 'Report';
+    const csv = report.definition.type === 'delimited';
+    if (dl) {
+      file = await app.ask(`Please enter a file name:`, 'Report File Name', `${name}.${csv ? 'csv' : 'html'}`);
+      if (!file) return;
+    }
+
     const client = Object.assign({}, selected, { database: this.get('selectedDB.entry.database') });
 
     this.blocked = true;
@@ -1825,9 +1845,14 @@ class HostExplore extends Window {
         }
       } // TODO: other sources?
 
-      const html = run(report.definition, data);
-      const w = new ViewReport({}, html);
-      this.host.addWindow(w, { title: `Report Viewer - ${report.definition.name}` });
+      let html = run(report.definition, data);
+      if (dl) {
+        download(file, html, csv ? 'text/csv' : 'text/html');
+      } else {
+        if (report.definition.type === 'delimited') html = csvToHtml(html);
+        const w = new ViewReport({}, html);
+        this.host.addWindow(w, { title: `Report Viewer - ${report.definition.name}` });
+      }
     } finally {
       this.blocked = false;
     }
@@ -2022,7 +2047,7 @@ class ViewReport extends Window {
 }
 Window.extendWith(ViewReport, {
   template: '#view-report',
-  options: { flex: true, resizeable: true, minimize: false, width: '70em', height: '45em', title: 'Report Viewer' },
+  options: { flex: true, resizable: true, minimize: false, width: '70em', height: '45em', title: 'Report Viewer' },
   css: `iframe { flex-grow: 1; border: 0; }`,
 });
 
@@ -2465,6 +2490,14 @@ function treeify(val, depth = 0) {
       return { type: 'node', children: Object.entries(val).reduce((a, [key, value]) => (a.push({ key, value: treeify(value, depth + 1) }), a), []), expand: !depth };
     }
   } else return { type: 'leaf', value: val === 'undefined' ? 'undefined' : JSON.stringify(val) };
+}
+
+function csvToHtml(text) {
+  const dark = Ractive.styleGet('theme') === 'dark';
+  return `<html>
+<head><style>body { margin: 0; padding: 1em; } pre { white-space: pre-wrap; margin: 0.5em; padding: 0.5em; background-color: ${dark ? '#333' : '#fff'}; color: ${dark ? '#ddd' : '#222'}; box-shadow: 0 0 10px rgba(${dark ? '255, 255, 255' : '0, 0, 0'}, 0.5); border: 1px solid; }</style></head>
+<body><pre><code>${text}</code></pre></body>
+</html>`;
 }
 
 window.addEventListener('beforeunload', unload);

@@ -1225,7 +1225,8 @@
                             {{/each}}
                           </div>
                           <div>
-                            <button on-click="@.runSingleReport(queryreport, false, ~/params)">Run Report</button>
+                            <button on-click="@.runSingleReport(queryreport, false, ~/params, false)">View Report</button>
+                            <button on-click="@.runSingleReport(queryreport, false, ~/params, true)">Download Report</button>
                           </div>
                         </tab>
                       </tabs>
@@ -1276,7 +1277,8 @@
                         {{/each}}
                       </div>
                       <div>
-                        <button on-click="@.runReport(allreport)">Run Report</button>
+                        <button on-click="@.runReport(allreport, false, false)">View Report</button>
+                        <button on-click="@.runReport(allreport, false, true)">Download Report</button>
                       </div>
                     </tab>
                   </tabs>
