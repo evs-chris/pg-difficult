@@ -1275,7 +1275,7 @@
                       </dl>
                     </tab>
                     <tab title="Run">
-                      <div style="padding: 0.3em; display: flex;"><div style="flex-shrink: 1;">Reports will run against all visible databases in the Host Explorer tree.</div><label style="width: 9em; flex-shrink: 0;" as-field>Concurrency <tip>The number of concurrent connections to utilize on the server. This is used for all requested databases, so up to this number could be used on a single target server or down to 1/x of this number where x is the number of visible databases.</tip><input type=number placeholder=10 value="{{~/concurrency}}" /></label></div>
+                      <div style="padding: 0.3em; display: flex;"><div style="flex-shrink: 1;">Reports will run against all visible databases in the Host Explorer tree.</div><label style="width: 9em; flex-shrink: 0;" as-field>Concurrency <tip>The number of concurrent connections to utilize on the server. This is used for all requested databases, so up to this number could be used on a single target server or down to 1/x of this number where x is the number of servers with visible databases.</tip><input type=number placeholder=10 value="{{~/concurrency}}" /></label></div>
                       <div>
                         {{#each ~/allreport.definition.parameters}}
                           <label as-field>{{.label || .name}}<input value="{{~/params[.name]}}" /></label>
