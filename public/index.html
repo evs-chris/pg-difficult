@@ -1229,6 +1229,9 @@
                             <button on-click="@.runSingleReport(queryreport, false, ~/params, true)">Download Report</button>
                           </div>
                         </tab>
+                        <tab button right hidden="{{!~/queryreport}}" on-click="@.unlink('queryreport')">
+                          <title><span title="Close report">&times;</span></title>
+                        </tab>
                       </tabs>
                     {{else}}
                       <div style="padding: 0.5em; opacity: 0.5;">
@@ -1280,6 +1283,9 @@
                         <button on-click="@.runReport(allreport, false, false)">View Report</button>
                         <button on-click="@.runReport(allreport, false, true)">Download Report</button>
                       </div>
+                    </tab>
+                    <tab button right hidden="{{!~/allreport}}" on-click="@.unlink('allreport')">
+                      <title><span title="Close report">&times;</span></title>
                     </tab>
                   </tabs>
                 {{else}}
