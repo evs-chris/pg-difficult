@@ -1440,6 +1440,7 @@ __NOTE:__ {note}
     const docs = {
         operators: [],
         operatorText: {},
+        languageReference,
     };
     {
         const ops = index.evaluate(operators);

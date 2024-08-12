@@ -5,6 +5,7 @@
     <link rel="shortcut icon" href="./icon.png" />
     <script src="./ractive@1.4.2.js"></script>
     <script src="./raport@0.24.8.js"></script>
+    <script src="./raport.design@0.24.8.js"></script>
     <script src="./raui@0.15.6/ace-editor.js"></script>
     <script src="./raui@0.15.6/button.js"></script>
     <script src="./raui@0.15.6/form.js"></script>
@@ -158,13 +159,11 @@
   }
 
   .striped:nth-child(odd), .striped-odd {
-    background-color: rgba(128, 128, 128, 0.02);
     padding: 0.3em;
     box-sizing: border-box;
     border-radius: 0.3em;
   }
   .striped, .striped-even {
-    background-color: rgba(128, 128, 128, 0.1);
     padding: 0.3em;
     box-sizing: border-box;
     border-radius: 0.3em;
@@ -263,7 +262,7 @@
       <right hidden="{{menu.hidden}}" forced="{{menu.forced}}">
         <menu>
           <container>
-            <div style="display: flex; align-items: center; justify-content: space-around; height: 3.6em; background-color: #325932;">
+            <div style="display: flex; align-items: center; justify-content: space-around; height: 3.6em; background-color: {{@style.colors.darker || '#325932'}};">
               <span><a style="color: #eee; text-decoration: none;" href="https://github.com/evs-chris/pg-difficult" target=_blank>pg-difficult</a> <span class=version>- v{{~/status.VERSION || '-client-only'}}</span></span>
             </div>
           </container>
@@ -285,6 +284,7 @@
               <div style="height: 1.5em; font-size: 1.5em; cursor: pointer; user-select: none; margin-right: 1em;" title="Auto arrange windows" on-click="@.host.placeAll()">&#9638;</div>
               {{#if waiting}}<div style="height: 1.5em;">{{>loader}}</div>{{/if}}
             </left>
+            <center><div style="font-size: 1.5em;">{{~/settings.title}}</div></center>
             <right><div class=hamburger title="Toggle menu" on-click="@.toggle('menu.hidden')" /></right>
           </app-bar>
         {{/if}}
@@ -500,6 +500,20 @@
             <option value="dark">Dark</option>
             <option value="light">Light</option>
           </select></label>
+          <label as-field>Color <tip>If you are running multiple instances or have multiple storage namespaces e.g. 127.0.0.1:1999 and localhost:1999 and want to be able to visually distinguish them, you can select different colors here to make it a little more obvious which one you're looking at if you can remember which color goes with which instance.</tip><select value="{{~/settings.color}}">
+            <option value="{{undefined}}">The Default&trade;</option>
+            <option value="black">Black</option>
+            <option value="blue">Blue</option>
+            <option value="gray">Gray</option>
+            <option value="green">Green</option>
+            <option value="orange">Orange</option>
+            <option value="pink">Pink</option>
+            <option value="purple">Purple</option>
+            <option value="red">Red</option>
+            <option value="teal">Teal</option>
+            <option value="yellow">Yellow</option>
+          </select></label>
+          <label as-field>Title <tip>Set the title for clients attached to this namespace, for the same reasons you may want to set a different color.</tip><input value="{{~/settings.title}}" /></label>
           <label as-field>Paste Timeout ms<input type=number placeholder=10000 step=1000 value="{{~/settings.pasteTimeout}}" /></label>
         </fieldset>
         <fieldset style="margin-top: 1em;">
@@ -525,6 +539,7 @@
           <label as-field class=inline><input type=checkbox checked="{{~/settings.editor.highlightActive}}" /> Highlight active line?</label>
           <label as-field class=inline><input type=checkbox checked="{{~/settings.editor.highlightSelected}}" /> Highlight selected word?</label>
           <label as-field class=inline><input type=checkbox checked="{{~/settings.editor.printMargin}}" /> Show print margin?</label>
+          <label as-field class=inline><input type=checkbox twoway=false checked="{{~/settings.editor.softTabs}}" /> Use soft tabs?</label>
           <div class=break />
           <label as-field>Input Mode<select value="{{~/settings.editor.keymode}}">
             <option value="{{undefined}}">default</option>
@@ -535,6 +550,7 @@
           </select></label>
           <label as-field>Light Theme <tip>The Ace editor theme to use when retinal pain mode is selected.</tip><select value="{{~/settings.editor.lightTheme}}">{{>ace-themes}}</select></label>
           <label as-field>Dark Theme <tip>The Ace editor theme to use when the correct mode is selected.</tip><select value="{{~/settings.editor.darkTheme}}">{{>ace-themes}}</select></label>
+          <label as-field>Tab Size<input type=number placeholder=2 value="{{~/settings.editor.tabSize}}" /></label>
         </fieldset>
         {{#if !@global.clientOnly}}
           <fieldset style="margin-top: 1em;">
@@ -548,7 +564,7 @@
           <legend>Local Diff Options</legend>
           <label as-field>Default Left Mode<select value="{{~/settings.diff.leftview}}"><option value="{{undefined}}">tree</option><option>text</option></select></label>
           <label as-field>Default Right Mode<select value="{{~/settings.diff.rightview}}"><option value="{{undefined}}">tree</option><option>text</option></select></label>
-          <label as-field>Default Value Format<select value="{{~/settings.diff.format}}"><option value="{{undefined}}">raport</option><option>json</option></select></label>
+          <!--<label as-field>Default Value Format<select value="{{~/settings.diff.format}}"><option value="{{undefined}}">raport</option><option>json</option></select></label>-->
         </fieldset>
         <div style="margin-top: 1em;">
           <button on-click="@.exportSettings()">Export Settings</button>
@@ -628,12 +644,12 @@
       </div>
     {{/if}}
     {{#if ~/result.length}}
-      <button title="Download this query result as delimited text (csv/tsv)." on-click="@.downloadQuery(~/result)">Download</button>
+      <button title="Download this query result as delimited text (csv/tsv). shit+click to make this result data available to raport scratch pads as *query" on-click="@event.shiftKey ? [appSet('scratchroot.sources.query', { value: ~/result }), @.host.toast('Results are now available to raport scratch pads as *query.', { type: 'info', timeout: 3000 })] : @.downloadQuery(~/result)">Download</button>
     {{/if}}
   </div>
   <div class="query" style="position: relative;">
     <split>
-      <div size=20 class="query-text" as-tracked=`ace` as-ace="{ bind: '~/query', syntax: 'pgsql', theme: @style.theme == 'dark' ? (~/editor.darkTheme || 'tomorrow_night_eighties') : (~/editor.lightTheme || 'tomorrow'), wrap: ~/editor.wrap, highlightActive: ~/editor.highlightActive, fontSize: '1em', font: 'monospace', printMargin: ~/editor.printMargin, keymode: ~/editor.keymode, lineNumbers: ~/editor.lineNumbers, relativeLineNumbers: ~/editor.relativeLineNumbers, highlightSelected: ~/editor.highlightSelected }" on-keydown="@event.ctrlKey && @event.key === 'Enter' ? @.runQuery(~/query) : true" />
+      <div size=20 class="query-text" as-tracked=`ace` as-ace="{ bind: '~/query', syntax: 'pgsql', theme: @style.theme == 'dark' ? (~/editor.darkTheme || 'tomorrow_night_eighties') : (~/editor.lightTheme || 'tomorrow'), wrap: ~/editor.wrap, highlightActive: ~/editor.highlightActive, fontSize: '1em', font: 'monospace', printMargin: ~/editor.printMargin, keymode: ~/editor.keymode, lineNumbers: ~/editor.lineNumbers, relativeLineNumbers: ~/editor.relativeLineNumbers, highlightSelected: ~/editor.highlightSelected, softTabs: ~/editor.softTabs, tabSize: ~/editor.tabSize }" on-keydown="@event.ctrlKey && @event.key === 'Enter' ? @.runQuery(~/query) : true" />
       <div class="result">
         <data-table auto-titles no-wrap fixed-header allow-select=false on-init="@.set('@.table', $1)" items="{{~/result}}">
           <bottom>
@@ -823,33 +839,35 @@
     <tab title=Tables>
       <virtual-list bind-items="tables" size=34 style="flex-grow: 1;">
         <header>
-          <div style="border-bottom: 1px solid;">
-            <div class="stretch-fields">
-              <label as-field>Search<input value="{{~/schemafilter}}" lazy=500 /></label>
-              <label as-field title="Available fields are column.{name, default, enum, type, pgtype, nullable, length, precision, pkey, schema, table, description}">Expression<input value="{{~/schemaexpr}}" lazy=500 /></label>
-              {{#if !~/compareSchema || ~/compareSchema.schema !== _schema}}
-                <label as-field style="flex-grow: 0;"><button on-click="@.compareSchema(_schema, _config)" title="Compare this schema to another database's schema.">Compare</button></label>
-              {{else}}
-                <label as-field style="flex-grow: 0;"><button on-click="@.set('compareSchema', undefined)" title="Cancel waiting for another schema to be selected to compare to this schema.">Cancel</button></label>
-              {{/if}}
-              <label as-field style="flex-grow: 0;"><button on-click="@.downloadSchema(_schema)" title="Download a file containing this schema.">Download</button></label>
+          <div style="position: relative;">
+            <div style="border-bottom: 1px solid;">
+              <div class="stretch-fields">
+                <label as-field>Search<input value="{{~/schemafilter}}" lazy=500 /></label>
+                <label as-field title="Available fields are column.{name, default, enum, type, pgtype, nullable, length, precision, pkey, schema, table, description}">Expression<input value="{{~/schemaexpr}}" lazy=500 /></label>
+                {{#if !~/compareSchema || ~/compareSchema.schema !== _schema}}
+                  <label as-field style="flex-grow: 0;"><button on-click="@.compareSchema(_schema, _config)" title="Compare this schema to another database's schema.">Compare</button></label>
+                {{else}}
+                  <label as-field style="flex-grow: 0;"><button on-click="@.set('compareSchema', undefined)" title="Cancel waiting for another schema to be selected to compare to this schema.">Cancel</button></label>
+                {{/if}}
+                <label as-field style="flex-grow: 0;"><button on-click="@event.shiftKey ? [appSet('scratchroot.sources.schema', { value: _schema }), @.host.toast('This schema is now available to raport scratch pads as *schema.', { type: 'info', timeout: 3000 })] : @.downloadSchema(_schema)" title="Download a file containing this schema. shift+click to expose this schema as *schema to any raport scratch pads.">Download</button></label>
+              </div>
+              <div class="schema-row" style="font-weight: bold;">
+                <div class="name" style="cursor: pointer;" title="Click to sort columns by {{~/schemasort === 'position' ? 'name' : 'position'}}" on-click="@.set('schemasort', ~/schemasort === 'position' ? 'name' : 'position')">Name ({{~/schemasort === 'position' ? '#' : 'A'}})</div>
+                <div class="nullable">Null</div>
+                <div class="default">Default</div>
+                <div class="type">Type</div>
+                <div class="size">Size</div>
+              </div>
             </div>
-            <div class="schema-row" style="font-weight: bold;">
-              <div class="name" style="cursor: pointer;" title="Click to sort columns by {{~/schemasort === 'position' ? 'name' : 'position'}}" on-click="@.set('schemasort', ~/schemasort === 'position' ? 'name' : 'position')">Name ({{~/schemasort === 'position' ? '#' : 'A'}})</div>
-              <div class="nullable">Null</div>
-              <div class="default">Default</div>
-              <div class="type">Type</div>
-              <div class="size">Size</div>
-            </div>
+            {{#if index && schemaexpanded.table[escapeKey(.table || .name)]}}
+              <div class="schema-row table sticky-header" style="position: absolute; padding: 0.5em; width: 100%; box-sizing: border-box; top: auto;" on-click="@.toggle('schemaexpanded.table.' + escapeKey(.table || .name))" style-z-index="{{index + 1}}">
+                <div class="name">{{.table || .name}}</div>
+                <div class="details">({{@.colsFor(.table || .name, 'tables')}} cols{{#if ~/schemafilter || ~/schemaexpr}}, {{~/schemaMatches.tables[.table || .name].length}} match{{/if}})</div>
+              </div>
+            {{/if}}
           </div>
-          {{#if index}}
-            <div class="schema-row table" style="padding: 0.5em;" on-click="@.toggle('schemaexpanded.table.' + escapeKey(.table || .name))">
-              <div class="name">{{.table || .name}}</div>
-              <div class="details">({{@.colsFor(.table || .name, 'tables')}} cols{{#if ~/schemafilter || ~/schemaexpr}}, {{~/schemaMatches.tables[.table || .name].length}} match{{/if}})</div>
-            </div>
-          {{/if}}
         </header>
-        <item class="striped-{{index % 2 ? 'odd' : 'even'}}">
+        <item class="striped-{{index % 2 ? 'odd' : 'even'}}" {{#if !.table}}style="position: relative; z-index: {{index}};"{{/if}}>
           {{#if !.table}}
             <div class="schema-row table" on-click="@.toggle('schemaexpanded.table.' + escapeKey(.name))">
               <div class="name" {{#if .description}}title="{{.description}}"{{/if}}>{{.name}}</div>
@@ -881,33 +899,35 @@
     <tab title=Views>
       <virtual-list bind-items="views" size=34 style="flex-grow: 1;">
         <header>
-          <div style="border-bottom: 1px solid;">
-            <div class="stretch-fields">
-              <label as-field>Search<input value="{{~/schemafilter}}" lazy=500 /></label>
-              <label as-field title="Available fields are column.{name, default, enum, type, pgtype, nullable, length, precision, pkey, schema, table}">Expression<input value="{{~/schemaexpr}}" lazy=500 /></label>
-              {{#if !~/compareSchema || ~/compareSchema.schema !== _schema}}
-                <label as-field style="flex-grow: 0;"><button on-click="@.compareSchema(_schema, _config)" title="Compare this schema to another database's schema.">Compare</button></label>
-              {{else}}
-                <label as-field style="flex-grow: 0;"><button on-click="@.set('compareSchema', undefined)" title="Cancel waiting for another schema to be selected to compare to this schema.">Cancel</button></label>
-              {{/if}}
-              <label as-field style="flex-grow: 0;"><button on-click="@.downloadSchema(_schema)" title="Download a file containing this schema.">Download</button></label>
+          <div style="position: relative;">
+            <div style="border-bottom: 1px solid;">
+              <div class="stretch-fields">
+                <label as-field>Search<input value="{{~/schemafilter}}" lazy=500 /></label>
+                <label as-field title="Available fields are column.{name, default, enum, type, pgtype, nullable, length, precision, pkey, schema, table}">Expression<input value="{{~/schemaexpr}}" lazy=500 /></label>
+                {{#if !~/compareSchema || ~/compareSchema.schema !== _schema}}
+                  <label as-field style="flex-grow: 0;"><button on-click="@.compareSchema(_schema, _config)" title="Compare this schema to another database's schema.">Compare</button></label>
+                {{else}}
+                  <label as-field style="flex-grow: 0;"><button on-click="@.set('compareSchema', undefined)" title="Cancel waiting for another schema to be selected to compare to this schema.">Cancel</button></label>
+                {{/if}}
+                <label as-field style="flex-grow: 0;"><button on-click="@.downloadSchema(_schema)" title="Download a file containing this schema.">Download</button></label>
+              </div>
+              <div class="schema-row" style="font-weight: bold;">
+                <div class="name" style="cursor: pointer;" title="Click to sort columns by {{~/schemasort === 'position' ? 'name' : 'position'}}" on-click="@.set('schemasort', ~/schemasort === 'position' ? 'name' : 'position')">Name ({{~/schemasort === 'position' ? '#' : 'A'}})</div>
+                <div class="nullable">Null</div>
+                <div class="default">Default</div>
+                <div class="type">Type</div>
+                <div class="size">Size</div>
+              </div>
             </div>
-            <div class="schema-row" style="font-weight: bold;">
-              <div class="name" style="cursor: pointer;" title="Click to sort columns by {{~/schemasort === 'position' ? 'name' : 'position'}}" on-click="@.set('schemasort', ~/schemasort === 'position' ? 'name' : 'position')">Name ({{~/schemasort === 'position' ? '#' : 'A'}})</div>
-              <div class="nullable">Null</div>
-              <div class="default">Default</div>
-              <div class="type">Type</div>
-              <div class="size">Size</div>
-            </div>
+            {{#if index && schemaexpanded.view[escapeKey(.table || .name)]}}
+              <div class="schema-row table sticky-header" style="position: absolute; padding: 0.5em; width: 100%; box-sizing: border-box; top: auto;" on-click="@.toggle('schemaexpanded.view.' + escapeKey(.table || .name))" style-z-index="{{index + 1}}">
+                <div class="name">{{.table || .name}}</div>
+                <div class="details">({{@.colsFor(.table || .name, 'views')}} cols{{#if ~/schemafilter || ~/schemaexpr}}, {{~/schemaMatches.tables[.table || .name].length}} match{{/if}})</div>
+              </div>
+            {{/if}}
           </div>
-          {{#if index}}
-            <div class="schema-row table" style="padding: 0.5em;" on-click="@.toggle('schemaexpanded.view.' + escapeKey(.table || .name))">
-              <div class="name">{{.table || .name}}</div>
-              <div class="details">({{@.colsFor(.table || .name, 'views')}} cols{{#if ~/schemafilter || ~/schemaexpr}}, {{~/schemaMatches.tables[.table || .name].length}} match{{/if}})</div>
-            </div>
-          {{/if}}
         </header>
-        <item class="striped-{{index % 2 ? 'odd' : 'even'}}">
+        <item class="striped-{{index % 2 ? 'odd' : 'even'}}" {{#if !.table}}style="position: relative; z-index: {{index}};"{{/if}}>
           {{#if !.table}}
             <div class="schema-row table" on-click="@.toggle('schemaexpanded.view.' + escapeKey(.name))">
               <div class="name" {{#if .description}}title="{{.description}}"{{/if}}>{{.name}}</div>
@@ -975,14 +995,14 @@
       {{#if pair[0] != null && pair[1] != null}}
         <div class="schema-diff striped">
           <div class="name" title="{{@key}}">{{@key}}</div>
-          <div class="left" title="{{pair[0]}}">{{pair[0]}}</div>
-          <div class="right" title="{{pair[1]}}">{{pair[1]}}</div>
+          <div class="left" title="{{pair[0]}}">{{typeof pair[0] === 'object' ? JSON.stringify(pair[0]) : pair[0]}}</div>
+          <div class="right" title="{{pair[1]}}">{{typeof pair[1] === 'object' ? JSON.stringify(pair[1]) : pair[1]}}</div>
         </div>
       {{else}}
         <div class="schema-diff whole striped">
           <div class="name">{{#if pair[0] == null}}Added{{else}}Removed{{/if}} {{@key}}</div>
           {{#each pair[0] || pair[1]}}
-            <div class="entry"><div class="key">{{@key}}</div><div class="value">{{.}}</div></div>
+            <div class="entry"><div class="key">{{@key}}</div><div class="value">{{typeof . === 'object' ? JSON.stringify(.) : .}}</div></div>
           {{/each}}
         </div>
       {{/if}}
@@ -993,8 +1013,10 @@
 </script>
 
 <script type=text/ractive id=scratch-pad>
-  <div style="display: flex; justify-content: space-between; flex-shrink: 0;">
+  <div style="display: flex; flex-shrink: 0;">
+    {{#if pad.syntax === 'raport'}}<label as-field class=inline><button class=flat on-click="@.evaluate(pad.text)" style="line-height: 2.5em; height: 2em;" title="Evaluate expression"><span style="font-size: 1.5em;">&#9658;</span></button></label>{{/if}}
     <label as-field class=inline><input value="{{pad.name}}" placeholder="Name..." lazy=1000 /></label>
+    <div style="flex-grow: 1;" />
     <label as-field class=inline><select value="{{pad.syntax}}" lazy=1000>
       <option value="{{undefined}}">plain text</option>
       <option>c_cpp</option>
@@ -1027,6 +1049,7 @@
       <option>php</option>
       <option>plain_text</option>
       <option>python</option>
+      <option>raport</option>
       <option>ruby</option>
       <option>rust</option>
       <option>sass</option>
@@ -1049,20 +1072,79 @@
       <option>zig</option>
     </select></label>
   </div>
-  <div style="flex-grow: 1;" as-ace="{ bind: 'pad.text', syntax: pad.syntax || 'plain_text', theme: @style.theme == 'dark' ? (~/editor.darkTheme || 'tomorrow_night_eighties') : (~/editor.lightTheme || 'tomorrow'), wrap: ~/editor.wrap, highlightActive: ~/editor.highlightActive, fontSize: '1em', font: 'monospace', printMargin: ~/editor.printMargin, keymode: ~/editor.keymode, lineNumbers: ~/editor.lineNumbers, relativeLineNumbers: ~/editor.relativeLineNumbers, highlightSelected: ~/editor.highlightSelected }" />
+  <div style="flex-grow: 1; position: relative; display: flex;">
+    {{#if pad.syntax === 'raport'}}
+      <split>
+        <div style="height: 100%;" as-tracked=`ace` as-ace="{ bind: 'pad.text', syntax: pad.syntax || 'plain_text', theme: @style.theme == 'dark' ? (~/editor.darkTheme || 'tomorrow_night_eighties') : (~/editor.lightTheme || 'tomorrow'), wrap: ~/editor.wrap, highlightActive: ~/editor.highlightActive, fontSize: '1em', font: 'monospace', printMargin: ~/editor.printMargin, keymode: ~/editor.keymode, lineNumbers: ~/editor.lineNumbers, relativeLineNumbers: ~/editor.relativeLineNumbers, highlightSelected: ~/editor.highlightSelected, softTabs: ~/editor.softTabs, tabSize: ~/editor.tabSize }" on-keydown="@event.ctrlKey && @event.key === 'Enter' ? @.evaluate(pad.text) : true" />
+        <tabs pad flex size=0 style="height: 100%;">
+          <tab>
+            <title>{{~/evalerror ? 'Error' : 'Result'}}</title>
+            <pre><code on-click="copyToClipboard(~/evalresult)" title="click to copy result to the clipboard">{{~/evalerror || ~/evaltext}}</code></pre>
+          </tab>
+          <tab hidden="{{~/evalerror}}" title="Tree" no-pad>
+            <div style="position: absolute; top: 0; right: 0; background-color: rgba(128, 128, 128, 0.2); border-radius: 0 0 0 1em;">
+              <label as-field class=inline style="min-height: 2.7em;"><input type="checkbox" checked="{{~/expandAll}}" /> Expand all?</label>
+            </div>
+            {{>root ~/treeresult}}
+          </tab>
+          <tab title="Language Reference" right no-pad>
+            <iframe style="border: none; flex-grow: 1; flex-shrink: 1; max-height: 100%;" srcdoc="{{~/docs.languageReference(100, @style.theme)}}" />
+          </tab>
+          <tab title="Operators" right no-pad>
+            <div class="ops-search" style="display: flex; justify-content: space-between; background: transparent; position: absolute; top: 0; width: 100%;">
+              <label as-field class=inline style="background-color: rgba(128, 128, 128, 0.2); border-radius: 0 0 1em 0; backdrop-filter: blur(5px);"><input lazy=500 placeholder="Search..." value="{{opDocSearch}}" style="width: 10em; margin: 0.5em;" title="Find any operators with docs containing the string entered here." /></label>
+              <label as-field class=inline style="background-color: rgba(128, 128, 128, 0.2); border-radius: 0 0 0 1em; backdrop-filter: blur(5px);"><input lazy=500 placeholder="Operator..." value="{{opDoc}}" style="width: 10em; margin: 0.5em;" title="Find any operators with a name containing the string entered here." /></label>
+            </div>
+            <div style="padding: 0.5rem; height: 100%; width: 100%; overflow: auto; box-sizing: border-box;">
+              <div style="max-width: 60em; margin: auto; color: {{@style.raui.primary.fg}};">
+                <h2 style="text-align: center;">Raport Operators</h2>
+                <dl>
+                  {{#each operators as op}}{{#if (!~/opDoc || op.0.includes(~/opDoc)) && (!~/opDocSearch || JSON.stringify(op.1).toLowerCase().includes(~/opDocSearch.toLowerCase()))}}
+                  <dt style="border-bottom: 1px dotted; margin-bottom: 0.25rem; margin-top: 2rem;"><h3>{{op.0.0 === '#' ? 'Format ' + op.0.slice(1) : op.0}}{{#if op.1.alias}} <em style="font-size: 0.8em;"> - (alias for <strong>{{op.1.alias}}</strong>)</em>{{/if}}</h3></dt>
+                    <dd>
+                      <dl>
+                        {{#each op.1.sig}}
+                          <dt>
+                            <strong>{{.proto}}</strong>{{#if .bin}} <em>or</em> <strong>arg1 {{op.0}} arg2</strong>{{/if}}{{#if .un}} or <strong>{{op.0}}arg1</strong>{{/if}}
+                            {{#if .agg}}<br /><em>arg1 can implicitly be <code>@source</code></em>{{/if}}
+                          </dt>
+                          <dd>{{.desc}}</dd>
+                        {{/each}}
+                      </dl>
+                      {{#if op.1.opts.length}}
+                        <h4>Options</h4>
+                        <dl>
+                          {{#each op.1.opts}}
+                          <dt><strong>{{Array.isArray(.name) ? .name.join(' or ') : .name}}{{#if .type}} - <em>{{.type}}</em>{{/if}}</strong></dt>
+                            <dd>{{.desc}}</dd>
+                          {{/each}}
+                        </dl>
+                      {{/if}}
+                    </dd>
+                    {{/if}}{{/each}}
+                </dl>
+              </div>
+            </div>
+          </tab>
+        </tabs>
+      </split>
+    {{elseif pad && 'text' in pad}}
+      <div style="flex-grow: 1;" as-ace="{ bind: 'pad.text', syntax: pad.syntax || 'plain_text', theme: @style.theme == 'dark' ? (~/editor.darkTheme || 'tomorrow_night_eighties') : (~/editor.lightTheme || 'tomorrow'), wrap: ~/editor.wrap, highlightActive: ~/editor.highlightActive, fontSize: '1em', font: 'monospace', printMargin: ~/editor.printMargin, keymode: ~/editor.keymode, lineNumbers: ~/editor.lineNumbers, relativeLineNumbers: ~/editor.relativeLineNumbers, highlightSelected: ~/editor.highlightSelected, softTabs: ~/editor.softTabs, tabSize: ~/editor.tabSize }" />
+    {{/if}}
+  </div>
 </script>
 
 <script type=text/ractive id=host-explore>
   <div style="display: flex; height: 100%;">
     <div style="width: 22em; flex-shrink: 0; flex-grow: 0; border-right: 1px solid; padding: 0.5em; overflow: auto;">
-      <div class=filter-pane style="position: sticky; top: -0.5em; border-bottom: 1px solid; padding: 0.5em; margin: -0.5em -0.5em 0.5em -0.5em; display: flex;" title="Filter visible databases using a raport expression. Visible databases will be condidates to query all, so collapsing a host node will prevent any databases on that node from being queried.{{'\n\n'}}Available fields are connection: { host, port, username, password, database, ssl, label }, entry: { access, collate, ctype, data, encoding, owner }, constr, db, index, query, last-query{{'\n\n'}}Any applied query results are also available here by their applied name as a property of query. If a query is run and not applied or saved as a result, it will be available as last-query.">
+      <div class=filter-pane style="position: sticky; top: -0.5em; border-bottom: 1px solid; padding: 0.5em; margin: -0.5em -0.5em 0.5em -0.5em; display: flex;" title="Filter visible databases using a raport expression. Visible databases will be condidates to query all, so collapsing a host node will prevent any databases on that node from being queried.{{'\n\n'}}Available fields are connection: { host, port, username, password, database, ssl, label }, entry: { access, collate, ctype, data, encoding, owner }, constr, db, index, query, last-query{{'\n\n'}}Any applied query results are also available here by their applied name as a property of query e.g. query.appliedname with the type { error: string } or { rows: any[], count: number }. If a query is run and not applied or saved as a result, it will be available as last-query.">
         <label as-field class=inline style="width: 100%;">
           <input value="{{~/filter}}" style="flex-grow: 1; padding: 0.25em;" lazy=1000 placeholder="Filter Expression" />
         </label>
       </div>
       {{#each ~/connections as con}}
-        <div class="host" style="display: flex; position: sticky; top: 4.1em; word-break: break-all; align-items: center; justify-content: space-between;" on-click="@.toggle('expanded.' + escapeKey(.constr))">
-          <div style="width: 1em; height: 1em; display: flex; border: 1px solid; align-items: center; justify-content: center; margin-right: 0.5em; flex-shrink: 0;">
+        <div class="host" style="display: flex; position: sticky; top: 4.1em; word-break: break-all; align-items: center; justify-content: space-between; cursor: pointer;" on-click="Array.isArray(~/hosts[.constr]) && @event.shiftKey ? [appSet('scratchroot.sources.databases', { value: ~/hosts[.constr] }), @.host.toast('Database list is now available to raport scratch pads as *databases.', { type: 'info', timeout: 3000 })] : @.toggle('expanded.' + escapeKey(.constr))" title="Click to expand.{{#if Array.isArray(~/hosts[.constr])}} shift+click to make database list available to raport scratch pads as *databases.{{/if}}">
+          <div style="width: 1em; height: 1em; display: flex; border: 1px solid; align-items: center; justify-content: center; margin-right: 0.5em; flex-shrink: 0; cursor: pointer;">
             {{#if ~/expanded[.constr]}}-{{else}}+{{/if}}
           </div>
           <div style="padding: 0.2em;">{{#if .label}}<strong>{{.label}}</strong> <em>({{.constr}})</em>{{else}}<em>{{.constr}}</em>{{/if}}{{#if ~/hosts && ~/expanded[.constr] && Array.isArray(~/hosts[.constr])}} ({{~/_entries[.constr].length}} / {{~/hosts[.constr].length}}){{/if}}</div>
@@ -1145,13 +1227,17 @@
                             {{/each}}
                           </div>
                           <div>
-                            <button on-click="@.runSingleReport(queryreport, false, ~/params)">Run Report</button>
+                            <button on-click="@.runSingleReport(queryreport, false, ~/params, false)">View Report</button>
+                            <button on-click="@.runSingleReport(queryreport, false, ~/params, true)">Download Report</button>
                           </div>
+                        </tab>
+                        <tab button right hidden="{{!~/queryreport}}" on-click="@.unlink('queryreport')">
+                          <title><span title="Close report">&times;</span></title>
                         </tab>
                       </tabs>
                     {{else}}
                       <div style="padding: 0.5em; opacity: 0.5;">
-                        Select a report...
+                        Select a report or <button on-click="@.reportDesigner()">Add Report</button>
                       </div>
                     {{/if}}
                   </div>
@@ -1189,20 +1275,24 @@
                       </dl>
                     </tab>
                     <tab title="Run">
-                      <div style="padding: 0.3em;">Reports will run against all visible databases in the Host Explorer tree.</div>
+                      <div style="padding: 0.3em; display: flex;"><div style="flex-shrink: 1;">Reports will run against all visible databases in the Host Explorer tree.</div><label style="width: 9em; flex-shrink: 0;" as-field>Concurrency <tip>The number of concurrent connections to utilize on the server. This is used for all requested databases, so up to this number could be used on a single target server or down to 1/x of this number where x is the number of visible databases.</tip><input type=number placeholder=10 value="{{~/concurrency}}" /></label></div>
                       <div>
                         {{#each ~/allreport.definition.parameters}}
                           <label as-field>{{.label || .name}}<input value="{{~/params[.name]}}" /></label>
                         {{/each}}
                       </div>
                       <div>
-                        <button on-click="@.runReport(allreport)">Run Report</button>
+                        <button on-click="@.runReport(allreport, false, false)" {{#unless @.visibleDBs().length}}disabled title="At least one database must be visible in the list of databases to run this report."{{/unless}}>View Report</button>
+                        <button on-click="@.runReport(allreport, false, true)" {{#unless @.visibleDBs().length}}disabled title="At least one database must be visible in the list of databases to run this report."{{/unless}}>Download Report</button>
                       </div>
+                    </tab>
+                    <tab button right hidden="{{!~/allreport}}" on-click="@.unlink('allreport')">
+                      <title><span title="Close report">&times;</span></title>
                     </tab>
                   </tabs>
                 {{else}}
                   <div style="padding: 0.5em; opacity: 0.5;">
-                    Select a report...
+                    Select a report or <button on-click="@.reportDesigner()">Add Report</button>
                   </div>
                 {{/if}}
               </div>
@@ -1216,16 +1306,18 @@
             </div>
           </tab>
           <tab title="Query">
-            <div style="padding: 0.3em;">Queries will run against all visible databases in the Host Explorer tree. Queries run here are useful to extend data available for filtering. Results may be provided for reports, but having a report with a query all source is preferable.</div>
-            <label as-field>SQL<textarea>{{~/queryall}}</textarea></label>
-            <div>
-              <label as-field title="Give a name to the result set to be available in the expression filter of this host explorer. Applied results are added to any existing results, so collapsing a host that already has results and rerunning a query will not remove the previous result.">Apply As<input value="{{~/queryapply}}" /></label>
-              <label as-field><button on-click="@.queryAll(~/queryall, ~/queryapply), @.set('queryapply', '')">Run</button></label>
-              <label as-field style="margin-left: 2em;"><button class-reject title="Clear cached results. To clear all, leave Apply As blank. To clear a specific set, fill the desired name in Apply As." on-click="@.set(~/queryapply ? 'results.' + escapeKey(~/queryapply) : 'results', {}), @.set('queryapply', '')">Clear Results</button></label>
-              <hr />
-              <label as-field title="Provide a result set with the given name, which will be available to any reports that have a provided query all source of the same name.">Provide Result<input value="{{~/queryname}}" /></label>
-              <label as-field><button on-click="@.queryAll(~/queryall, undefined, ~/queryname), @.set('queryname', '')">Run</button></label>
-              <label as-field style="margin-left: 2em;"><button class-reject title="Clear cached provided results. To clear all, leave Provided Result blank. To clear a specific set, fill the desired name in Provided Result." on-click="app.set(~/queryname ? 'results.' + escapeKey(~/queryname) : 'results', {}), @.set('queryname', '')">Clear Results</button></label>
+            <div style="display: flex; flex-direction: column; flex-grow: 1;">
+              <div style="padding: 0.3em; display: flex;"><div style="flex-shrink: 1;">Queries will run against all visible databases in the Host Explorer tree. Queries run here are useful to extend data available for filtering. Results may be provided for reports, but having a report with a query all source is preferable.</div><label style="width: 9em; flex-shrink: 0;" as-field>Concurrency <tip>The number of concurrent connections to utilize on the server. This is used for all requested databases, so up to this number could be used on a single target server or down to 1/x of this number where x is the number of visible databases.</tip><input type=number placeholder=10 value="{{~/concurrency}}" /></label></div>
+              <div style="flex-grow: 1; border: 1px solid rgba(128, 128, 128, 0.4); margin: 0.5em 0;" as-ace="{ bind: '~/queryall', syntax: 'pgsql', theme: @style.theme == 'dark' ? (~/editor.darkTheme || 'tomorrow_night_eighties') : (~/editor.lightTheme || 'tomorrow'), wrap: ~/editor.wrap, highlightActive: ~/editor.highlightActive, fontSize: '1em', font: 'monospace', printMargin: ~/editor.printMargin, keymode: ~/editor.keymode, lineNumbers: ~/editor.lineNumbers, relativeLineNumbers: ~/editor.relativeLineNumbers, highlightSelected: ~/editor.highlightSelected, softTabs: ~/editor.softTabs, tabSize: ~/editor.tabSize }" />
+              <div>
+                <label as-field title="Give a name to the result set to be available in the expression filter of this host explorer. Applied results are added to any existing results, so collapsing a host that already has results and rerunning a query will not remove the previous result. Applied results will also be available to any raport scratch pads as sources with their given names.">Apply As<input value="{{~/queryapply}}" /></label>
+                <label as-field><button on-click="@.queryAll(~/queryall, ~/queryapply), @.set('queryapply', '')">Run</button></label>
+                <label as-field style="margin-left: 2em;"><button class-reject title="Clear cached results. To clear all, leave Apply As blank. To clear a specific set, fill the desired name in Apply As." on-click="@.clearResult('applied', ~/queryapply)">Clear Results</button></label>
+                <hr />
+                <label as-field title="Provide a result set with the given name, which will be available to any reports that have a provided query all source of the same name. Provided sources will also be available to any raport scratch pads as sources with their given names.">Provide Result<input value="{{~/queryname}}" /></label>
+                <label as-field><button on-click="@.queryAll(~/queryall, undefined, ~/queryname), @.set('queryname', '')">Run</button></label>
+                <label as-field style="margin-left: 2em;"><button class-reject title="Clear cached provided results. To clear all, leave Provided Result blank. To clear a specific set, fill the desired name in Provided Result." on-click="@.clearResult('provided', ~/queryname)">Clear Results</button></label>
+              </div>
             </div>
           </tab>
         </tabs>
@@ -1279,7 +1371,7 @@
           <label as-field>Database<input value="{{source.config.database}}" /></label>
         </div>
       {{/if}}
-      <div><label as-field>Query<textarea>{{source.query}}</textarea></label></div>
+      <div style="flex-grow: 1; border: 1px solid rgba(128, 128, 128, 0.4); margin: 0.5em 0; min-height: 15em;" as-ace="{ bind: 'source.query', syntax: 'pgsql', theme: @style.theme == 'dark' ? (~/editor.darkTheme || 'tomorrow_night_eighties') : (~/editor.lightTheme || 'tomorrow'), wrap: ~/editor.wrap, highlightActive: ~/editor.highlightActive, fontSize: '1em', font: 'monospace', printMargin: ~/editor.printMargin, keymode: ~/editor.keymode, lineNumbers: ~/editor.lineNumbers, relativeLineNumbers: ~/editor.relativeLineNumbers, highlightSelected: ~/editor.highlightSelected, softTabs: ~/editor.softTabs, tabSize: ~/editor.tabSize }" />
       {{#if ~/error}}<div style="color: red;">{{~/error}}</div>{{/if}}
       <div>
         {{#each ~/paramArray}}
@@ -1291,7 +1383,7 @@
     {{elseif source.type === 'query-all'}}
       <label as-field>Result Name<input value="{{source.result}}" /></label>
     {{elseif source.type === 'query-all-sql'}}
-      <div><label as-field>Query<textarea>{{source.query}}</textarea></label></div>
+      <div style="flex-grow: 1; border: 1px solid rgba(128, 128, 128, 0.4); margin: 0.5em 0; min-height: 15em;" as-ace="{ bind: 'source.query', syntax: 'pgsql', theme: @style.theme == 'dark' ? (~/editor.darkTheme || 'tomorrow_night_eighties') : (~/editor.lightTheme || 'tomorrow'), wrap: ~/editor.wrap, highlightActive: ~/editor.highlightActive, fontSize: '1em', font: 'monospace', printMargin: ~/editor.printMargin, keymode: ~/editor.keymode, lineNumbers: ~/editor.lineNumbers, relativeLineNumbers: ~/editor.relativeLineNumbers, highlightSelected: ~/editor.highlightSelected, softTabs: ~/editor.softTabs, tabSize: ~/editor.tabSize }" />
       {{#if ~/error}}<div style="color: red;">{{~/error}}</div>{{/if}}
       <div>
         {{#each ~/paramArray}}
@@ -1357,7 +1449,7 @@
         {{#if ~/copied.recent}}
           <div class=paster on-click="@.paste('left', @event.shiftKey)"><span>click to paste<br/>shift+click to apply patch</span></div>
         {{elseif leftView === 'tree'}}
-          {{>root @.parse(.left)}}
+          {{>root .lefttree}}
         {{else}}
           <textarea style="flex-grow: 1; resize: none;" placeholder="Left value here..." lazy=1000>{{.left}}</textarea>
         {{/if}}
@@ -1366,7 +1458,7 @@
         <div style="display: flex; justify-content: space-evenly; align-items: center;">
           {{#if ~/leftView === 'tree' || ~/rightView === 'tree'}}<label style="font-size: 0.7em;"><input type=checkbox checked="{{~/expandAll}}"> Expand all tree nodes?</label>{{/if}}
           <h3>Diff</h3>
-          <select value="{{format}}"><option value="{{undefined}}">raport</option><option>json</option></select>
+          <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</div>
         </div>
         <pre style="overflow: auto;"><code>
         {{#each @.diff(.left, .right)}}
@@ -1387,7 +1479,7 @@
         {{#if ~/copied.recent}}
           <div class=paster on-click="@.paste('right', @event.shiftKey)"><span>click to paste<br/>shift+click to apply patch</span></div>
         {{elseif rightView === 'tree'}}
-          {{>root @.parse(.right)}}
+          {{>root .righttree}}
         {{else}}
           <textarea style="flex-grow: 1; resize: none;" placeholder="Right value here..." lazy=1000>{{.right}}</textarea>
         {{/if}}
@@ -1396,34 +1488,42 @@
   </div>
 
   {{#partial root}}
-    <div class=tree-view>
-      {{#if typeof . === 'object' && .}}<span style="color: #aaa; margin-left: 0.5em;">{{Array.isArray(.) ? '[' : '{'}}</span>{{/if}}
+    <div class=tree-view style="padding: 0.5em 0;">
       <div class=root>
-        {{>tree .}}
+        <div class=node>
+          {{>.type}}
+        </div>
       </div>
-      {{#if typeof . === 'object' && .}}<span style="color: #aaa; margin-left: 0.5em;">{{Array.isArray(.) ? ']' : '}'}}</span>{{/if}}
     </div>
   {{/partial}}
-
-  {{#partial tree}}
-    <div class=tree>
-      {{#each .}}
-        <div class=node>
-          <div class=key title="{{(@keypath + '').replace(/.*\)\./, '')}}">{{@key}}<span style="color: #aaa;">:</span>{{#if typeof . === 'object' && .}}<span style="color: #aaa; margin-left: 0.5em;">{{Array.isArray(.) ? '[' : '{'}}</span>{{/if}}</div>
-          {{#unless ~/expandAll}}<div class=expand {{#if typeof . === 'object' && .}}class-show on-click="@.toggle('expand.' + escapeKey(@keypath))"{{/if}}>{{#if ~/expand[@keypath]}}-{{else}}+{{/if}}</div>{{/unless}}
-          <div class=value class-children="typeof . === 'object' && . && (~/expandAll || ~/expand[@keypath])">
-            {{#if typeof . === 'object' && .}}
-              {{#if ~/expandAll || ~/expand[@keypath]}}
-                {{>tree .}}
-                <span style="color: #aaa; margin-left: 0.25em;">{{Array.isArray(.) ? ']' : '}'}}</span>
-              {{else}}
-                <div class=type>{{#if Array.isArray(.)}} ]{{else}} }{{/if}}</div>
-              {{/if}}
-            {{else}}{{@.string(.)}}{{/if}}
-          </div>
+  {{#partial leaf}}<div class=value>{{.value}}</div>{{/partial}}
+  {{#partial array}}
+      <div class=type style="margin-left: 0.5em;">[</div>
+      <div class=expand {{#if .children.length}}class-show on-click="@context.toggle('.expand')"{{/if}}>{{#if .expand}}-{{else}}+{{/if}}</div>
+      {{#if .expand || ~/expandAll}}
+        <div class=tree>
+        {{#each .children}}
+          <div class=node><span class=key>{{.index}}</span><span style="color: #aaa; margin-left: 0.5em;">:</span>{{>.value.type .value}}</div>
+        {{/each}}
         </div>
-      {{/each}}
-    </div>
+        <div class=type style="margin-left: 0.5em;">]</div>
+      {{else}}
+        <div class=type>]</div>
+      {{/if}}
+  {{/partial}}
+  {{#partial node}}
+      <div class=type style="margin-left: 0.5em;">{</div>
+      <div class=expand {{#if .children.length}}class-show on-click="@context.toggle('.expand')"{{/if}}>{{#if .expand}}-{{else}}+{{/if}}</div>
+      {{#if .expand || ~/expandAll}}
+        <div class=tree>
+        {{#each .children}}
+          <div class=node><span class=key>{{.key}}</span><span style="color: #aaa; margin-left: 0.5em;">:</span>{{>.value.type .value}}</div>
+        {{/each}}
+        </div>
+        <div class=type style="margin-left: 0.5em;">}</div>
+      {{else}}
+        <div class=type>}</div>
+      {{/if}}
   {{/partial}}
 </script>
 

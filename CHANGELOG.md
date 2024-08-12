@@ -1,3 +1,34 @@
+## 1.11.0
+
+2024-08-12
+
+### Bugs
+
+* Client-only-mode no longer shows some of the newer server settings.
+* If you happen to have two tabs open on the same browser instance pointed at the same pg-difficult server (storage namespace), settings changes in one will be propagated to the other a few seconds later. Scratch pads count as settings.
+* Local diff data is no longer persisted in browser storage. This was a holdover from the tool's origin.
+* Actions that required a ctrl+click will now also be triggered by a shift+click because Apple just has to be extra special.
+* Schemas will now compare views and functions in addition to tables.
+* Comparing two schemas from within the host explorer is now possible.
+* Provided query result report sources will now persist correctly.
+* The query all source for reports can now successfully run the query for sample data against the first visible database in the tree.
+* Object viewer trees will no longer spike browser resource usage quite so much.
+* Editor settings are now correctly applied to query views in the host explorer and report source editor.
+* Query all reports will no longer run if you select 'No' in the confirmation.
+* Delimited reports run from the host explorer will now show readable output in the viewer.
+
+### Features
+
+* Scratch pads now support raport expressions, and scratch pads in raport mode can evaluate expressions and view the results. Various bits of data can be exposed to raport pads as data sources by shift-clicking a download button, applying a query all, etc. There are also language and operator docs in the evaluation pane of the pad.
+* The sticky headers in the schema viewer are now slightly less confusing.
+* Query all queries will now show a progress toast as they are running.
+* There are now options to name and provide a different color set for a client. This should allow different instances to be distinguished more easily.
+* There is now an option to directly download host explorer reports rather than just viewing.
+* Tab size and soft tab mode are now options for the editor.
+* There is now a concurrency option for query all in the host explorer that allows using from 1 to 500 concurrent connections rather than the default 10.
+* You can now create reports from the host explorer and close a selected report once it has been selected. The run buttons for query all reports will now give you visual feedback if the report can't run because there are no active databases against which to run it.
+
+
 ## 1.10.0
 
 2024-08-07

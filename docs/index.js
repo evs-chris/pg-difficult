@@ -1,4 +1,5 @@
-const { evaluate, registerOperator, parse, run } = Raport;
+const { evaluate, template, registerOperator, parse, run, Root } = Raport;
+const { docs } = Raport.Design;
 const { Window } = RauiWindow;
 
 registerOperator({ type: 'value', names: ['log'], apply: (_name, args) => console.log.apply(console, args) });
@@ -29,6 +30,7 @@ Ractive.helpers.age = function(ts) {
   return evaluate({ d }, `d#date,'HH:mm EEE'`);
 }
 Ractive.helpers.escapeKey = Ractive.escapeKey;
+Ractive.helpers.evaluate = Raport.evaluate;
 
 Ractive.decorators.autofocus = function autofocus(node) {
   if (node) {
@@ -48,7 +50,7 @@ Ractive.decorators.tracked = function tracked(node, name) {
   }
   return { 
     teardown() {
-      this[name] = init;
+      if (this[name] === node) this[name] = init;
     }
   };
 }
@@ -56,6 +58,17 @@ Ractive.decorators.tracked = function tracked(node, name) {
 setInterval(() => {
   Ractive.sharedSet('now', new Date());
 }, 5000);
+
+let settingsLock = false;
+function readSettings() {
+  settingsLock = true;
+  app.set('connections', JSON.parse(localStorage.getItem('connections') || '[]'));
+  app.set('settings', JSON.parse(localStorage.getItem('settings') || '{}'));
+  app.set('savedQueries', JSON.parse(localStorage.getItem('savedQueries') || '[]'));
+  app.set('savedReports', JSON.parse(localStorage.getItem('savedReports') || '[]'));
+  app.set('scratchPads', JSON.parse(localStorage.getItem('scratchPads') || '[]'));
+  settingsLock = false;
+}
 
 Ractive.helpers.moveUp = (ctx, max) => {
   const idx = ctx.get('@index');
@@ -115,6 +128,8 @@ let request;
     msg.id = id++;
     let ok, fail;
     const pr = new Promise((o, f) => (ok = o, fail = f));
+    pr.message = msg;
+    pr.id = msg.id;
     listeners[msg.id] = [ok, fail];
     notify(msg);
     app.add('waiting', 1);
@@ -127,7 +142,7 @@ let request;
       delete listeners[id];
       listener[0](msg);
     }
-  }
+  };
   request.error = function error(id, msg) {
     const listener = listeners[id];
     if (Array.isArray(listener) && typeof listener[1] === 'function') {
@@ -135,7 +150,17 @@ let request;
       delete listeners[id];
       listener[1](msg);
     }
-  }
+  };
+  const notifiers = {};
+  request.listen = function listen(notify, handler) {
+    if (!notifiers[notify]) notifiers[notify] = [];
+    notifiers[notify].push(handler);
+    return { stop() { notifiers[notify].splice(notifiers[notify].indexOf(handler), 1); } };
+  };
+  request.notified = function notified(msg) {
+    const listeners = notifiers[msg.notify];
+    if (listeners) for (const l of listeners) l(msg);
+  };
 }
 
 let gate;
@@ -170,12 +195,49 @@ let gate;
   };
 }
 
+function expandSchema(schema) {
+  const res = {};
+  for (const t of schema.tables) {
+    if (!res[t.schema]) res[t.schema] = {};
+    if (!res[t.schema].tables) res[t.schema].tables = {};
+    const cols = res[t.schema].tables[t.name] = {};
+    for (const c of t.columns) cols[c.name] = Object.assign({}, c, { name: undefined });
+  }
+  for (const t of schema.views || []) {
+    if (!res[t.schema]) res[t.schema] = {};
+    if (!res[t.schema].views) res[t.schema].views = {};
+    const cols = res[t.schema].views[t.name] = {};
+    for (const c of t.columns) cols[c.name] = Object.assign({}, c, { name: undefined });
+  }
+  for (const f of schema.functions) {
+    if (!res[f.schema]) res[f.schema] = {};
+    if (!res[f.schema].functions) res[f.schema].functions = {};
+    const sig = `${f.name}(${f.arguments})`;
+    res[f.schema].functions[sig] = f;
+  }
+  return res;
+}
+
 let reportId = 0;
 let scratchId = 0;
 let localDiffId = 0;
 
 class App extends Ractive {
   constructor(opts) { super(opts); }
+
+  compareSchema(local, config) {
+    const target = this.get('compareSchema');
+    if (target && target.schema !== local) {
+      this.set('compareSchema', undefined);
+      const left = expandSchema(target.schema);
+      const right = expandSchema(local);
+      const w = new SchemaCompare({ data: { diff: evaluate({ left, right }, 'diff(left right)') } });
+      this.host.addWindow(w, { title: `Comparing schema ${constr(target.config)} to ${constr(config || 'Local File')}`});
+    } else {
+      this.set('compareSchema', { config: config || 'Local File', schema: local });
+      this.host.toast('Click Compare on another schema to compare', { type: 'info', timeout: 4000 });
+    }
+  }
 }
 Ractive.extendWith(App, {
   css(data) {
@@ -185,6 +247,9 @@ Ractive.extendWith(App, {
         color: ${data('raui.primary.fg') || data('raui.fg') || '#222'};
         background-color: ${data('raui.primary.bg') || data('raui.bg') || '#fff'};
       }
+      .schema-row.sticky-header { background-color: ${data('raui.primary.bg') || '#fff'}; }
+      .stiped:nth-child(odd), .striped-odd { background-color: ${data('theme') === 'dark' ? '#353535' : '#f2f2f2'}; }
+      .stiped:nth-child(even), .striped-even { background-color: ${data('theme') === 'dark' ? '#3b3b3b' : '#fdfdfd'}; }
     `;
   },
 });
@@ -232,7 +297,8 @@ const app = globalThis.app = new App({
       strict: true, init: false,
     },
     'connections savedQueries savedReports scratchPads': {
-      handler(v, _o, k) {
+      handler: debounce((v, _o, k) => {
+        if (settingsLock) return;
         localStorage.setItem(k, JSON.stringify(v || []));
         if (k === 'savedReports') {
           const min = Math.max.apply(Math, v.map(r => +r.id).concat([reportId]));
@@ -241,14 +307,39 @@ const app = globalThis.app = new App({
           const min = Math.max.apply(Math, v.map(r => +r.id).concat([scratchId]));
           scratchId = min;
         }
-      },
+      }),
       init: false,
     },
     'settings': {
-      handler(v) {
+      handler: debounce((v) => {
+        if (settingsLock) return;
         localStorage.setItem('settings', JSON.stringify(v || {}));
-      },
+      }),
       init: false,
+    },
+    'settings.color'(v) {
+      const [dark, light] = {
+        green: ['#325932', '#447A43'],
+        purple: ['#3e3259', '#57437A'],
+        red: ['#593232', '#7A4343'],
+        orange: ['#a45500', '#bf6200'],
+        blue: ['#323859', '#43567A'],
+        gray: ['#383838', '#595959'],
+        yellow: ['#a48200', '#bf9900'],
+        pink: ['#593244', '#7A435A'],
+        teal: ['#325957', '#437A75'],
+        black: ['#000', '#151515'],
+      }[v || 'green'];
+      Ractive.styleSet({
+        'colors.darker': dark,
+        'colors.lighter': light,
+        'raui.menu.primary.fg': light,
+        'raui.window.title.bg': dark,
+      });
+    },
+    'settings.title'(v) {
+      if (v) document.title = `${v} - pg-difficult`;
+      else document.title = 'pg-difficult';
     },
     '@.host': {
       handler(v) {
@@ -343,6 +434,7 @@ const app = globalThis.app = new App({
 
       this.host.toastDefaults.top = false;
       this.host.toastDefaults.bottom = true;
+      this.host.toastDefaults.stack = true;
     },
   },
   notify,
@@ -458,11 +550,9 @@ const app = globalThis.app = new App({
   },
 });
 
-app.set('connections', JSON.parse(localStorage.getItem('connections') || '[]'));
-app.set('settings', JSON.parse(localStorage.getItem('settings') || '{}'));
-app.set('savedQueries', JSON.parse(localStorage.getItem('savedQueries') || '[]'));
-app.set('savedReports', JSON.parse(localStorage.getItem('savedReports') || '[]'));
-app.set('scratchPads', JSON.parse(localStorage.getItem('scratchPads') || '[]'));
+Ractive.helpers.appSet = (p, v) => app.set(p, v);
+
+readSettings();
 
 class ControlPanel extends Window {
   constructor(opts) { super(opts); }
@@ -694,6 +784,7 @@ class Diff extends Window {
   constructor(opts) { super(opts); }
 
   diff(left, right) {
+    if (left === undefined || right === undefined) return {};
     const l = this.parse(left);
     const lcsv = this.get('csv');
     const r = this.parse(right);
@@ -707,15 +798,20 @@ class Diff extends Window {
 
   parse(val) {
     this.set('csv', false);
-    if (!val) return;
+    if (val == null) return;
     if (val[0] === '<') return evaluate({ val }, 'parse(val xml:1)');
-    const res = evaluate({ val }, 'parse(val)')?.v;
+    try {
+      return JSON.parse(val);
+    } catch {}
+    let res = evaluate({ val }, 'parse(val)')?.v;
     if (res === undefined || Object.keys(res).length === 1 && res.r && res.r.k) {
       this.set('csv', true);
-      return evaluate({ val, header: this.get('csvHeader') }, `parse(val csv:1 detect:1 header:header)`);
+      res = evaluate({ val, header: this.get('csvHeader') }, `parse(val csv:1 detect:1 header:header)`);
     }
     return res;
   }
+
+  treeify = treeify;
 
   string(val, comp) {
     if (val === undefined) return 'undefined';
@@ -744,6 +840,7 @@ class Diff extends Window {
 Window.extendWith(Diff, {
   template: '#diff',
   options: { flex: true, width: '60em', height: '45em', resizable: true },
+  noCssTransform: true,
   css(data) {
     return `
 h3 { padding: 0.5rem; text-align: center; }
@@ -752,13 +849,13 @@ pre { margin: 0; white-space: pre-wrap; word-break: break-all; }
 .tree-view { overflow: auto; flex-grow: 1; }
 .tree { margin-left: 0.5em; padding-left: 0.5em; border-left: 1px dotted #aaa; }
 .tree:hover { border-left-color: blue; }
-.tree .node { white-space: nowrap; }
-.tree .key { margin-left: 0.5em; display: inline-block; }
-.tree .type { color: #aaa; display: inline-block; }
-.tree .value { display: inline-block; vertical-align: top; white-space: pre-wrap; word-break: break-all; }
-.tree .children { display: block; }
-.tree .expand { display: none; width: 1em; height: 1em; box-sizing: border-box; border: 1px solid #aaa; color: #999; vertical-align: middle; line-height: 0.8em; text-align: center; display: none; cursor: pointer; }
-.tree .expand.show { display: inline-block; }
+.root .node { white-space: nowrap; }
+.root .key { margin-left: 0.5em; display: inline-block; }
+.root .type { color: #aaa; display: inline-block; }
+.root .value { margin-left: 0.5em; display: inline-block; vertical-align: top; white-space: pre-wrap; word-break: break-all; }
+.root .children { display: block; }
+.root .expand { display: none; width: 1em; height: 1em; box-sizing: border-box; border: 1px solid #aaa; color: #999; vertical-align: middle; line-height: 0.8em; text-align: center; display: none; cursor: pointer; }
+.root .expand.show { display: inline-block; }
 .highlight { background-color: yellow; }
 .paster { display: flex; width: 100%; height: 100%; opacity: 0.8; justify-content: space-around; align-items: center; cursor: pointer; }
 ${data('theme') === 'dark' ? `
@@ -777,8 +874,17 @@ ${data('theme') === 'dark' ? `
     },
   },
   observe: {
-    'left right format'() {
-      window.localStorage.setItem('diff', JSON.stringify({ left: this.get('left'), right: this.get('right'), format: this.get('format') }));
+    'left right leftView rightView': {
+      handler(_v, _o, k) {
+        if (k.startsWith('left')) {
+          if (this.get('leftView') !== 'tree') return;
+          this.set('lefttree', treeify(this.parse(this.get('left'))));
+        } else {
+          if (this.get('rightView') !== 'tree') return;
+          this.set('righttree', treeify(this.parse(this.get('right'))));
+        }
+      },
+      strict: true,
     }
   },
 });
@@ -985,7 +1091,7 @@ res
     return res;
   }
   download() {
-    if (this.event?.event?.ctrlKey) return this.openHtml();
+    if (this.event?.event?.ctrlKey || this.event?.event?.shiftKey) return this.openHtml();
     const db = this.source ? this.source.replace(/.*@([^:]+).*\/(.*)/, '$1-$2') : this.get('loaded') ? 'Local file' : 'multiple';
     const name = `diff ${db} ${evaluate(`#now##date,'yyyy-MM-dd HH mm'`)}`;
     const ext = this.event?.event?.shiftKey ? 'html' : 'pgdd';
@@ -1075,7 +1181,7 @@ res
     const reverse = entries.map(e => reverseEntry(e, schema)).filter(e => e);
     if (reverse.length !== entries.length) return this.host.toast(`Undo is not supported for this segment`, { type: 'error', timeout: 3000 });
 
-    if (!this.event?.event?.ctrlKey) await request({ action: 'segment', segment: `Undo ${entry.segment}` });
+    if (!this.event?.event?.ctrlKey || this.event?.event?.shiftKey) await request({ action: 'segment', segment: `Undo ${entry.segment}` });
 
     request({ action: 'query', query: reverse.map(p => p[0]), params: reverse.map(p => p[1]), client: Object.values(app.get('status.clients') || {}).find(c => c.source === this.source).config });
   }
@@ -1114,7 +1220,7 @@ res
   }
 
   clearEntries() {
-    if (this.event?.event?.ctrlKey || !this.source) notify({ action: 'clear' });
+    if (this.event?.event?.ctrlKey || this.event?.event?.shiftKey || !this.source) notify({ action: 'clear' });
     else notify({ action: 'clear', source: this.source });
   }
 }
@@ -1288,17 +1394,7 @@ class Schema extends Window {
     return Object.values(matches || {}).reduce((a, c) => a + (c?.length || 0), 0);
   }
   compareSchema(local, config) {
-    const target = this.get('compareSchema');
-    if (target && target.schema !== local) {
-      this.set('compareSchema', undefined);
-      const left = target.schema.tables.reduce((a, t) => (a[t.name] = { schema: t.schema }, t.columns.reduce((a, c) => (a[`${t.name}.${c.name}`] = c, a), a), a), {});
-      const right = local.tables.reduce((a, t) => (a[t.name] = { schema: t.schema }, t.columns.reduce((a, c) => (a[`${t.name}.${c.name}`] = c, a), a), a), {});
-      const w = new SchemaCompare({ data: { diff: evaluate({ left, right }, 'diff(left right)') } });
-      this.host.addWindow(w, { title: `Comparing schema ${constr(target.config)} to ${constr(this.config || 'Local File')}` });
-    } else {
-      this.set('compareSchema', { config: config || 'Local File', schema: local });
-      this.host.toast('Click Compare on another schema to compare', { type: 'info', timeout: 4000 });
-    }
+    app.compareSchema(local, config);
   }
   colCount(schema, which) {
     const tables = schema?.[which] || [];
@@ -1377,8 +1473,10 @@ Window.extendWith(SchemaCompare, {
 class ScratchPad extends Window {
   constructor(opts, pad) {
     super(opts);
-    const id = this.get('scratchId') || ++scratchId;
-    pad = pad || { id, syntax: 'markdown' };
+    const id = pad?.id || this.get('scratchId') || ++scratchId;
+    pad = pad || { id, syntax: 'markdown', text: '' };
+    this.upstream = pad;
+    if (!('text' in pad)) pad.text = '';
     setTimeout(() => this.set('pad', JSON.parse(JSON.stringify(pad))));
   }
   save() {
@@ -1388,23 +1486,120 @@ class ScratchPad extends Window {
     const idx = saved.findIndex(r => r.id === pad.id);
     if (~idx) app.splice('scratchPads', idx, 1, pad);
     else app.push('scratchPads', pad);
+    this.upstream = Object.assign({}, pad);
+  }
+  saveDebounced = debounce(() => this.save(), 2000);
+  evaluate(txt) {
+    if (this.ace) {
+      const sel = this.getContext(this.ace).decorators.ace.editor.getSelectedText();
+      if (sel) txt = sel;
+    }
+    const ok = parse(txt, { consumeAll: true });
+    if (ok && 'cause' in ok) {
+      this.set({
+        evalresult: '',
+        evalerror: `Invalid expression: ${ok.message}\n\n${ok.marked}`,
+      });
+    } else {
+      const opts = app.get('scratchroot') || {};
+      const root = new Root({}, opts);
+      root.sources = Object.assign({}, opts.sources);
+      if (opts.all) {
+        for (const k in opts.all.apply || {}) if (opts.all.apply[k]) root.sources[k] = { value: opts.all.apply[k] };
+        for (const k in opts.all.provide || {}) if (opts.all.provide[k]) root.sources[k] = { value: opts.all.provide[k] };
+      }
+      const res = evaluate(root, ok);
+      let evaltext = res === undefined ? 'undefined' : JSON.stringify(res);
+      if (evaltext.length > 100000) evaltext = `${evaltext.slice(0, 100000)}...`;
+      this.set({
+        evalresult: res,
+        evaltext,
+        treeresult: treeify(res),
+        evalerror: '',
+      });
+    }
+    const split = this.findComponent('split');
+    if (split) {
+      const sp = split.get('splits.1');
+      if (sp.min) {
+        split.set('splits.1.min', false);
+        if (sp.lastSize < 0.5) split.set('splits.1', { curSize: 40, lastSize: 40, min: false }, { deep: true });
+        else split.set('splits.1.curSize', sp.lastSize);
+      } else if (sp.curSize < 0.5) split.set('splits.1', { curSize: 40, lastSize: 40, min: false }, { deep: true });
+    }
+    const tabs = this.findComponent('tabs');
+    if (tabs && tabs.selection > 1) tabs.select(0);
+  }
+  string(v) {
+    return v === undefined ? 'undefined' : JSON.stringify(v);
   }
 }
 Window.extendWith(ScratchPad, {
   template: '#scratch-pad',
+  css: `
+h3 { text-align: left; }
+dt { margin-top: 1rem; font-family: monospace; }
+dd { margin: 0.5em 0 1em 2em; white-space: pre-wrap; }
+.ops-search { opacity: 0.2; }
+.ops-search:hover { opacity: 1; }
+`,
   options: { flex: true, resizable: true, minimize: false, width: '50em', height: '35em' },
   on: {
     init() {
       this.link('settings.editor', 'editor', { instance: app });
+      const ps = Diff.prototype.template.p;
+      this.partials.root = ps.root;
+      this.partials.array = ps.array;
+      this.partials.leaf = ps.leaf;
+      this.partials.node = ps.node;
+      this.watch = app.observe('scratchPads', v => {
+        const id = this.get('pad.id');
+        const txt = this.get('pad.text');
+        if (v) {
+          const up = v.find(p => p.id == id);
+          if (up) {
+            this.set('pad.syntax', up.syntax);
+            this.set('pad.name', up.name);
+            if (up.text !== txt) {
+              if (this.upstream?.text === txt) {
+                this.set('pad.text', up.text);
+                this.set('diff', false);
+              } else this.set('diff', true);
+            } else this.set('diff', false);
+            this.upstream = up;
+          }
+        }
+      }, { strict: true });
+    },
+    destruct() {
+      if (this.watch) this.watch.cancel();
     }
+  },
+  data() {
+    return { docs, ops: evaluate(docs.operators), expand: {} };
+  },
+  computed: {
+    operators() {
+      const map = this.get('ops').reduce((a, c) => (Array.isArray(c.op) ? c.op.forEach(o => a.push([o, c])) : a.push([c.op, c]), a), []);
+      let ops = evaluate({ map }, `sort(map =>if _.0[0] == '#' then 'zz[_.0]' elif _.0[0] == '|' then ' {_.0}' else _.0)`)
+      const search = this.get('opsearch');
+      if (search) {
+        const re = new RegExp(search.replace(/([*.\\\/$^()[\]{}+])/g, '\\$1'), 'i');
+        ops = ops.filter(p => re.test(p[0]) || re.test(docs.operatorText[p[0]]));
+      }
+      return ops;
+    },
   },
   observe: {
     'pad.name'(n) {
       this.title = `Scratch Pad${n ? ` - ${n}` : ''}`;
       this.save();
     },
+    'pad.syntax'() {
+      if (typeof this.get('pad.text') === 'string') this.save();
+    },
     'pad.text'(v) {
-      if (typeof v === 'string') this.save();
+      if (typeof v === 'string') this.saveDebounced();
     },
   },
 });
@@ -1472,7 +1667,7 @@ class HostExplore extends Window {
         if (!c || !Array.isArray(dbs)) continue;
         if (dbs.length) list.push(Object.assign({}, c.config, { databases: dbs.map(d => d.database) }));
         if (sample) {
-          list[0].databases = list[0].databases[0].slice(0, 1);
+          list[0].databases = [list[0].databases[0]];
           return list;
         }
       }
@@ -1485,9 +1680,25 @@ class HostExplore extends Window {
     const list = this.visibleDBs();
     if (!list.length) return;
 
-    this.blocked = true;
+    let batch = +this.get('concurrency');
+    if (batch > 0) ;
+    else if (batch > 500) batch = 500;
+    else batch = undefined;
 
-    const res = await request({ action: 'query-all', clients: list, query: [query] });
+    this.blocked = true;
+    const progress = this.host.toast('Processing queries...', { type: 'info', timeout: 0 });
+    const req = request({ action: 'query-all', clients: list, query: [query], batch });
+    let total = 0;
+    const listen = request.listen(`query-all-progress-${req.id}`, msg => {
+      total = msg.total;
+      progress.message = `Queries ${msg.done} of ${msg.total} complete...`;
+    });
+    const res = await req;
+    listen.stop();
+    progress.message = `${total} ${total !== 1 ? 'queries' : 'query'} processed.`;
+    progress.type = 'success';
+    progress.close(3000);
+
     if (apply) {
       const old = this.get(`results.${Ractive.escapeKey(apply)}`);
       this.set(`results.${Ractive.escapeKey(apply)}`, Object.assign({}, old, res.result));
@@ -1503,8 +1714,24 @@ class HostExplore extends Window {
       app.set(`results.${Ractive.escapeKey(result)}`, set);
     }
     if (!apply && !result) this.set('lastresults', res.result);
+    if (apply) app.set(`scratchroot.all.apply.${Ractive.escapeKey(apply)}`, res.result);
+    if (result) app.set(`scratchroot.all.provide.${Ractive.escapeKey(result)}`, res.result);
 
     this.blocked = false;
+  }
+
+  clearResult(type, name) {
+    if (type === 'applied') {
+      this.set(name ? `results.${Ractive.escapeKey(name)}` : 'results', {});
+      if (name) app.set(`scratchroot.all.apply.${Ractive.escapeKey(name)}`, undefined);
+      else app.set('scratchroot.all.apply', {});
+      this.set('queryapply', '');
+    } else if (type === 'provided') {
+      app.set(name ? `results.${Ractive.escapeKey(name)}` : 'results', {});
+      if (name) app.set(`scratchroot.all.provide.${Ractive.escapeKey(name)}`, undefined);
+      else app.set('scratchroot.all.provide', {});
+      this.set('queryname', '')
+    }
   }
 
   async reportData(connections, source, sample, params, report) {
@@ -1515,7 +1742,24 @@ class HostExplore extends Window {
     if (!connections.length) return { value: {} };
 
     if (source.type === 'query-all-sql') {
-      const res = await request({ action: 'query-all', clients: connections, query: [source.query], params: [queryParams(report.definition, source, params)], });
+
+      let batch = +this.get('concurrency');
+      if (batch > 0) ;
+      else if (batch > 500) batch = 500;
+      else batch = undefined;
+      const progress = this.host.toast('Processing queries...', { type: 'info', timeout: 0 });
+      const req = request({ action: 'query-all', clients: connections, query: [source.query], params: [queryParams(report.definition, source, params)], batch });
+      let total = 0;
+      const listen = request.listen(`query-all-progress-${req.id}`, msg => {
+        total = msg.total;
+        progress.message = `Queries ${msg.done} of ${msg.total} complete...`;
+      });
+      const res = await req;
+      listen.stop();
+      progress.message = `${total} ${total !== 1 ? 'queries' : 'query'} processed.`;
+      progress.type = 'success';
+      progress.close(3000);
+
       const set = [];
       for (const l of connections) {
         for (const d of l.databases) {
@@ -1527,25 +1771,37 @@ class HostExplore extends Window {
     }
   }
   
-  async runReport(report, sample) {
+  async runReport(report, sample, dl) {
     const list = this.visibleDBs();
 
     if (!list.length) return;
+    let file;
+    const name = template(new Root({}, { parameters: this.get('params') }), report.definition.name) || report.definition.name || 'Report';
+    const csv = report.definition.type === 'delimited';
+    if (dl) {
+      file = await app.ask(`Please enter a file name:`, 'Report File Name', `${name}.${csv ? 'csv' : 'html'}`);
+      if (!file) return;
+    }
 
     const hosts = list.length;
     const dbs = list.reduce((a, c) => a + c.databases.length, 0);
     const queries = report.sources.filter(s => s.type === 'query-all-sql');
 
-    if (await app.confirm(`Do you want to run ${queries.length} queries on ${dbs} databases across ${hosts} servers?\n\n${queries.map(q => q.query).join('\n\n')}`), 'Run Report?') {
+    if (await app.confirm(`Do you want to run ${queries.length} queries on ${dbs} databases across ${hosts} servers?\n\n${queries.map(q => q.query).join('\n\n')}`, 'Run Report?')) {
       const data = {};
 
       for (const src of report.sources) {
         data[src.name] = await this.reportData(list, src, sample, this.get('params'), report);
       } // TODO: other sources?
 
-      const html = run(report.definition, data);
-      const w = new ViewReport({}, html);
-      this.host.addWindow(w, { title: `Report Viewer - ${report.definition.name}` });
+      let html = run(report.definition, data);
+      if (dl) {
+        download(file, html, csv ? 'text/csv' : 'text/html');
+      } else {
+        if (csv) html = csvToHtml(html);
+        const w = new ViewReport({}, html);
+        this.host.addWindow(w, { title: `Report Viewer - ${report.definition.name}` });
+      }
     }
   }
 
@@ -1574,9 +1830,17 @@ class HostExplore extends Window {
     }
   }
 
-  async runSingleReport(report, sample, params) {
+  async runSingleReport(report, sample, params, dl) {
     const selected = this.get('selectedDB.connection.config');
     if (!selected) return;
+
+    const name = template(new Root({}, { parameters: this.get('params') }), report.definition.name) || report.definition.name || 'Report';
+    const csv = report.definition.type === 'delimited';
+    if (dl) {
+      file = await app.ask(`Please enter a file name:`, 'Report File Name', `${name}.${csv ? 'csv' : 'html'}`);
+      if (!file) return;
+    }
+
     const client = Object.assign({}, selected, { database: this.get('selectedDB.entry.database') });
 
     this.blocked = true;
@@ -1590,9 +1854,14 @@ class HostExplore extends Window {
         }
       } // TODO: other sources?
 
-      const html = run(report.definition, data);
-      const w = new ViewReport({}, html);
-      this.host.addWindow(w, { title: `Report Viewer - ${report.definition.name}` });
+      let html = run(report.definition, data);
+      if (dl) {
+        download(file, html, csv ? 'text/csv' : 'text/html');
+      } else {
+        if (report.definition.type === 'delimited') html = csvToHtml(html);
+        const w = new ViewReport({}, html);
+        this.host.addWindow(w, { title: `Report Viewer - ${report.definition.name}` });
+      }
     } finally {
       this.blocked = false;
     }
@@ -1675,17 +1944,7 @@ class HostExplore extends Window {
     download(`schema ${db} ${evaluate(`#now##date,'yyyy-MM-dd HH mm'`)}.pgds`, JSON.stringify(this.get(`schemas.${Ractive.escapeKey(selected.connection.constr + '@' + selected.entry.database)}.schema`)), 'application/pg-difficult-schema');
   }
   compareSchema(local, config) {
-    const target = this.get('compareSchema');
-    if (target && target.schema !== local) {
-      this.set('compareSchema', undefined);
-      const left = target.schema.reduce((a, t) => (a[t.name] = { schema: t.schema }, t.columns.reduce((a, c) => (a[`${t.name}.${c.name}`] = c, a), a), a), {});
-      const right = local.reduce((a, t) => (a[t.name] = { schema: t.schema }, t.columns.reduce((a, c) => (a[`${t.name}.${c.name}`] = c, a), a), a), {});
-      const w = new SchemaCompare({ data: { diff: evaluate({ left, right }, 'diff(left right)') } });
-      this.host.addWindow(w, { title: `Comparing schema ${constr(target.config)} to ${constr(config || 'Local File')}` });
-    } else {
-      this.set('compareSchema', { config: config || 'Local File', schema: local });
-      this.host.toast('Click Compare on another schema to compare', { type: 'info', timeout: 4000 });
-    }
+    app.compareSchema(local, config);
   }
 
   clicked(ev, col, rec) {
@@ -1737,7 +1996,7 @@ dd { white-space: pre-wrap; }
     },
   },
   data() {
-    return { meta: {}, expanded: {}, schemaexpanded: { table: {} } };
+    return { hosts: {}, meta: {}, expanded: {}, schemaexpanded: { table: {} } };
   },
   observe: {
     'hosts filter'() {
@@ -1797,7 +2056,7 @@ class ViewReport extends Window {
 }
 Window.extendWith(ViewReport, {
   template: '#view-report',
-  options: { flex: true, resizeable: true, minimize: false, width: '70em', height: '45em', title: 'Report Viewer' },
+  options: { flex: true, resizable: true, minimize: false, width: '70em', height: '45em', title: 'Report Viewer' },
   css: `iframe { flex-grow: 1; border: 0; }`,
 });
 
@@ -1960,7 +2219,7 @@ class SourceEdit extends Window {
     if (this.get('error')) return;
     const source = this.get('source');
     const arr = this.get('paramArray');
-    if (arr.length) {
+    if (arr && arr.length) {
       source.parameters = source.parameters || [];
       source.parameters = source.parameters.slice(0, arr.length);
     } else {
@@ -1975,6 +2234,11 @@ Window.extendWith(SourceEdit, {
 .field.textarea textarea { height: calc(100% - 1.6em); }
   `,
   options: { close: false, flex: true, resizable: true, maximize: false, minimize: false, width: '40em', height: '30em' },
+  on: {
+    init() {
+      this.link('settings.editor', 'editor', { instance: app });
+    }
+  },
   observe: {
     'source.query'(q) {
       if (q) {
@@ -2059,6 +2323,10 @@ function message(msg) {
     case 'leaks':
       for (const k in msg.map) app.set(`status.leaks.${k}.current`, msg.map[k]);
       app.set('status.lastUpdate', new Date());
+      break;
+
+    case 'notify':
+      request.notified(msg);
       break;
   }
 
@@ -2158,6 +2426,7 @@ Ractive.helpers.copyToClipboard = (function() {
       if (cur === id) app.set('copied.recent', false);
     }, app.get('settings.pasteTimeout') || 10000);
 
+    if (text.length > 500000) return Promise.resolve(false);
     if (!clipEl) {
       clipEl = document.createElement('textarea');
       clipEl.id = 'clipEl';
@@ -2214,8 +2483,35 @@ function unloading() {
   clearTimeout(unloadTm);
 }
 
+function debounce(fn, timeout = 1000, target) {
+  let tm;
+  return (function(...args) {
+    if (tm) clearTimeout(tm);
+    tm = setTimeout(() => fn.apply(target, args), timeout);
+  });
+}
+
+function treeify(val, depth = 0) {
+  if (typeof val === 'object' && val) {
+    if (Array.isArray(val)) {
+      return { type: 'array', children: val.reduce((a, c, index) => (a.push({ index, value: treeify(c, depth + 1) }), a), []), expand: !depth };
+    } else {
+      return { type: 'node', children: Object.entries(val).reduce((a, [key, value]) => (a.push({ key, value: treeify(value, depth + 1) }), a), []), expand: !depth };
+    }
+  } else return { type: 'leaf', value: val === 'undefined' ? 'undefined' : JSON.stringify(val) };
+}
+
+function csvToHtml(text) {
+  const dark = Ractive.styleGet('theme') === 'dark';
+  return `<html>
+<head><style>body { margin: 0; padding: 1em; } pre { white-space: pre-wrap; margin: 0.5em; padding: 0.5em; background-color: ${dark ? '#333' : '#fff'}; color: ${dark ? '#ddd' : '#222'}; box-shadow: 0 0 10px rgba(${dark ? '255, 255, 255' : '0, 0, 0'}, 0.5); border: 1px solid; }</style></head>
+<body><pre><code>${text}</code></pre></body>
+</html>`;
+}
+
 window.addEventListener('beforeunload', unload);
 window.addEventListener('unload', unloading);
+window.addEventListener('storage', debounce(readSettings, 5000));
 
 // Set up debug helper
 let el;

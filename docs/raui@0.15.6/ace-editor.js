@@ -54,6 +54,7 @@
         if (options.syntax) { editor.getSession().setMode('ace/mode/' + options.syntax); }
         if (options.theme) { editor.setTheme('ace/theme/' + options.theme); }
         session.setTabSize(options.tabSize || 2);
+        if (typeof options.softTabs === 'boolean') session.setUseSoftTabs(options.softTabs);
         if (typeof options.margin === 'boolean') { editor.setShowPrintMargin(options.margin); }
         if (typeof options.wrap === 'boolean') { session.setUseWrapMode(options.wrap); }
         if (typeof options.highlightActive === 'boolean') { editor.setHighlightActiveLine(options.highlightActive); }
