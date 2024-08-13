@@ -254,6 +254,17 @@
     text-align: center;
     margin: 0 0.5em;
   }
+
+  .tree-line { height: 1.5em; line-height: 1.5em; }
+  .tree-children .back-dots { position: absolute; left: -1px; height: 0.6em; width: 0.75em; border-bottom: 1px dotted; }
+  .tree-children .expander { display: inline-block; border: 1px solid; opacity: 0.5; width: 1em; height: 1em; text-align: center; margin-left: 0.25em; margin-right: 0.5em; cursor: pointer; line-height: 1em; }
+  .tree-children .name { cursor: pointer; line-height: 1.5em; }
+  .tree-children { position: relative; border-left: 1px dotted; margin-left: 0.75em; padding-left: 0.75em; }
+  .tree-children:after { content: ' '; position: absolute; display: block; width: 0.75em; height: 0.85em; bottom: 0; left: -0.32em; }
+  .tree-children .tree-leaf { height: 1.5em; display: flex; justify-content: space-between; margin-left: 0.5em; border-bottom: 1px solid rgba(128, 128, 128, 0.05); transition: background-color 0.2s ease; }
+  .tree-children .tree-leaf:hover { background-color: rgba(128, 128, 128, 0.05); }
+  .tree-children .remove-button { cursor: pointer; margin-left: 1em; opacity: 0.5; transition: opacity 0.2s ease; }
+  .tree-children .remove-button:hover { opacity: 1; }
 </style>
 <!-- HEAD -->
 <script type=text/ractive id=template>
@@ -474,21 +485,37 @@
       <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.3em;">
         <div style="padding: 0.3em;">Scratch pads are a place to write bits of text that are automatically saved to browser local storage when they are edited.</div>
         <div style="flex-shrink: 0;"><button title="Open a new scratch pad." on-click="@.scratch()">New Scratch Pad</button></div>
+        <div style="flex-shrink: 0;"><button title="Switch view mode." on-click="@.set('~/settings.scratchView', ~/settings.scratchView === 'tree' ? undefined : 'tree')">{{~/settings.scratchView === 'tree' ? 'List' : 'Tree'}}</button></div>
       </div>
       <div style="overflow: auto;">
-        {{#each scratchPads}}
-          <div class="scratch striped">
-            <div class=name>{{.name}}</div>
-            <div class=actions>
-              <button class=flat disabled="{{@index === 0}}" on-click="moveUp(@context, @event.shiftKey || @event.ctrlKey)" title="Move up, hold shift or ctrl to move to top">&#9650;</button>
-              <button class=flat disabled="{{@index === @last}}" on-click="moveDown(@context, @event.shiftKey || @event.ctrlKey)" title="Move down, hold shift or ctrl to move to bottom">&#9660;</button>
-              <button on-click="@.scratch(.)" title="Open this scratch pad.">Open</button>
-              <button on-click="@.splice('scratchPads', @index, 1)" title="Remove this scratch pad from browser storage.">Remove</button>
+        {{#partial node}}
+          <div class=tree-line>{{#if .name}}<div class=back-dots /><span class=expander on-click="@context.toggle('.expand')">{{.expand ? '-' : '+'}}</span> <span class=name on-click="@context.toggle('.expand')"> {{.name}}/</span>{{else}}<span style="display: inline-block; width: 0.5em;" /> <span>{{.name}}/{{/if}}</div>
+          {{#if .expand}}
+            <div class=tree-children>
+              {{#each .nodes}}{{>.type}}{{/each}}
             </div>
-          </div>
+          {{/if}}
+        {{/partial}}
+        {{#partial leaf}}
+          <div class=back-dots /><div class=tree-leaf><span class=name on-click="@.scratch(.report)">{{.name}}</span> <span style="line-height: 1.5em;">{{.report.syntax}} <span class=remove-button title="Remove this scrath pad." on-click="@.removeScratch(.report)">&times;</span></span></div>
+        {{/partial}}
+        {{#if ~/settings.scratchView === 'tree'}}
+          {{>node ~/scratchPadTree}}
         {{else}}
-          No scratch pads have been saved.
-        {{/each}}
+          {{#each scratchPads}}
+            <div class="scratch striped">
+              <div class=name>{{.name}}</div>
+              <div class=actions>
+                <button class=flat disabled="{{@index === 0}}" on-click="moveUp(@context, @event.shiftKey || @event.ctrlKey)" title="Move up, hold shift or ctrl to move to top">&#9650;</button>
+                <button class=flat disabled="{{@index === @last}}" on-click="moveDown(@context, @event.shiftKey || @event.ctrlKey)" title="Move down, hold shift or ctrl to move to bottom">&#9660;</button>
+                <button on-click="@.scratch(.)" title="Open this scratch pad.">Open</button>
+                <button on-click="@.removeScratch(.)" title="Remove this scratch pad from browser storage.">Remove</button>
+              </div>
+            </div>
+          {{else}}
+            No scratch pads have been saved.
+          {{/each}}
+        {{/if}}
       </div>
     </tab>
     <tab title="Settings">
@@ -1015,7 +1042,7 @@
 <script type=text/ractive id=scratch-pad>
   <div style="display: flex; flex-shrink: 0;">
     {{#if pad.syntax === 'raport'}}<label as-field class=inline><button class=flat on-click="@.evaluate(pad.text)" style="line-height: 2.5em; height: 2em;" title="Evaluate expression"><span style="font-size: 1.5em;">&#9658;</span></button></label>{{/if}}
-    <label as-field class=inline><input value="{{pad.name}}" placeholder="Name..." lazy=1000 /></label>
+    <label as-field class=inline title="Separating segments of a file name with / will result in the pad appearing in a sub-node of the scratch pad tree view."><input value="{{pad.name}}" placeholder="Name..." lazy=1000 /></label>
     <div style="flex-grow: 1;" />
     <label as-field class=inline><select value="{{pad.syntax}}" lazy=1000>
       <option value="{{undefined}}">plain text</option>

@@ -672,6 +672,15 @@ class ControlPanel extends Window {
   scratch(pad) {
     app.openScratch(pad);
   }
+  async removeScratch(pad) {
+    const pads = this.get('scratchPads') || [];
+    const idx = pads.findIndex(p => p.id === pad.id);
+    if (~idx && await app.confirm(`Remove ${pad.syntax} pad ${pad.name}?`, 'Remove Pad')) {
+      this.splice('scratchPads', idx, 1);
+      const w = this.host.getWindow(`scratch-${pad.id}`);
+      if (w) w.close();
+    }
+  }
   localDiff() {
     app.openLocalDiff();
   }
@@ -701,7 +710,7 @@ class ControlPanel extends Window {
 }
 Window.extendWith(ControlPanel, {
   template: '#control-panel',
-  css: `
+  css(data) { return `
 .record { display: flex; align-items: center; justify-content: space-between; }
 .connection { display: flex; flex-direction: column; }
 .connection .constr { display: flex; flex-grow: 1; min-width: 20em; align-items: center; }
@@ -711,7 +720,8 @@ Window.extendWith(ControlPanel, {
 .query .sql { width: 60%; }
 .query .actions { width: 25%; }
 .report, .scratch { display: flex; align-items: center; justify-content: space-between; }
-`,
+.tree-children:after { background-color: ${data('raui.primary.bg') || '#fff'}; }
+`; },
   options: { title: 'Control Panel', flex: true, close: false, resizable: true, width: '60em', height: '45em', id: 'control-panel' },
   on: {
     init() {
@@ -735,7 +745,42 @@ Window.extendWith(ControlPanel, {
       if (v && v !== this.get('status.segment')) this.next(v);
     },
   },
+  computed: {
+    scratchPadTree() {
+      const v = this.get('scratchPads');
+      const tree = { type: 'node', name: '', nodes: [], expand: true };
+      const oldtree = this.get('_scratchPadTree');
+      if (Array.isArray(v)) {
+        for (const r of v) {
+          const parts = (r.name || '').split('/');
+          const path = parts.slice(0, -1).filter(v => v);
+          const name = parts.slice(-1)[0] || '<unnamed>';
+          let dir = tree;
+          let old = oldtree;
+          for (const p of path) {
+            let n = dir.nodes.find(n => n.name === p);
+            old = old && old.nodes.find(n => n.name === p);
+            if (!n) {
+              n = { type: 'node', name: p, nodes: [] };
+              if (old) n.expand = old.expand;
+              dir.nodes.push(n);
+              dir.nodes.sort(byName);
+            }
+            dir = n;
+          }
+          dir.nodes.push({ type: 'leaf', name, report: r });
+          dir.nodes.sort(byName);
+        }
+      }
+      this.set('_scratchPadTree', tree);
+      return tree;
+    },
+  },
 });
+
+function byName(l, r) {
+  return l.name.toLowerCase() > r.name.toLowerCase() ? 1 : l.name.toLowerCase() < r.name.toLowerCase() ? -1 : l.name > r.name ? 1 : l.name < r.name ? -1 : 0;
+}
 
 app.host.addWindow(new ControlPanel());
 
