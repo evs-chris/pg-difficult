@@ -2,6 +2,7 @@
 <html lang="en-US">
   <head>
     <title>pg-difficult</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
     <link rel="shortcut icon" href="./icon.png" />
     <script src="./ractive@1.4.2.js"></script>
     <script src="./raport@0.24.8.js"></script>
@@ -527,6 +528,7 @@
             <option value="dark">Dark</option>
             <option value="light">Light</option>
           </select></label>
+          <label as-field>Scale <tip>Mobile browsers and even some desktops have default scaling that's just not right for every case. Some browsers force the zoom level to be global, and that makes for unpleasantness elsewhere. You can set your zoom level in percent for just pg-difficult here, because life is just better when you can change the scale of stuff at will.</tip><input type=number min=25 max=400 value="{{~/settings.scale}}" placeholder=100 /></label>
           <label as-field>Color <tip>If you are running multiple instances or have multiple storage namespaces e.g. 127.0.0.1:1999 and localhost:1999 and want to be able to visually distinguish them, you can select different colors here to make it a little more obvious which one you're looking at if you can remember which color goes with which instance.</tip><select value="{{~/settings.color}}">
             <option value="{{undefined}}">The Default&trade;</option>
             <option value="black">Black</option>
@@ -541,7 +543,7 @@
             <option value="yellow">Yellow</option>
           </select></label>
           <label as-field>Title <tip>Set the title for clients attached to this namespace, for the same reasons you may want to set a different color.</tip><input value="{{~/settings.title}}" /></label>
-          <label as-field>Paste Timeout ms<input type=number placeholder=10000 step=1000 value="{{~/settings.pasteTimeout}}" /></label>
+          <label as-field>Paste Timeout ms <tip>Some actions, like clicking on an evaluated result in a raport scratch pad, will automatically copy the value to the clipboard and an internal storage area tha can be accessed by other tools, like the local diff tool. These tools will offer to load the value just copied with a click for a limited amount of time. This is that limit.</tip><input type=number placeholder=10000 step=1000 value="{{~/settings.pasteTimeout}}" /></label>
         </fieldset>
         <fieldset style="margin-top: 1em;">
           <legend>Diff Entries Options</legend>

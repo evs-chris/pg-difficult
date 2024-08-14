@@ -240,9 +240,11 @@ class App extends Ractive {
   }
 }
 Ractive.extendWith(App, {
+  noCssTransform: true,
+  cssId: 'app',
   css(data) {
     return `
-      .html { color: ${data('raui.primary.fg') || '#222'}; background-color: ${data('raui.primary.bg') || '#fff'}; }
+      html { color: ${data('raui.primary.fg') || '#222'}; background-color: ${data('raui.primary.bg') || '#fff'}; font-size: ${data('scale') || 100}%; }
       .query-text textarea {
         color: ${data('raui.primary.fg') || data('raui.fg') || '#222'};
         background-color: ${data('raui.primary.bg') || data('raui.bg') || '#fff'};
@@ -340,6 +342,9 @@ const app = globalThis.app = new App({
     'settings.title'(v) {
       if (v) document.title = `${v} - pg-difficult`;
       else document.title = 'pg-difficult';
+    },
+    'settings.scale'(v) {
+      Ractive.styleSet('scale', v);
     },
     '@.host': {
       handler(v) {
@@ -2560,7 +2565,11 @@ window.addEventListener('storage', debounce(readSettings, 5000));
 
 // Set up debug helper
 let el;
-document.addEventListener('click', ev => el = ev.target);
+document.addEventListener('click', ev => {
+  el = ev.target;
+  let tip;
+  if (el.classList.contains('field-tip') && (tip = el.getAttribute('title'))) app.host.toast(tip, { type: 'info', timeout: 6000 });
+}, { capture: true });
 document.addEventListener('focus', ev => el = ev.target);
 
 Object.defineProperty(globalThis, 'R', {
