@@ -346,7 +346,7 @@
         <button style="flex-shrink: 0;" on-click="@.editConnection()" title="Add a saved connection for this browser at this url.">Add Connection</button>
       </div>
       <div style="overflow: auto;">
-        {{#each store.connections}}
+        {{#each ~/connections}}
           <div class="connection striped">
             <div class="constr">
               <div style="flex-grow: 1;">{{#if .label}}<strong>{{.label}}</strong> ({{constr(.)}}){{else}}{{constr(.)}}{{/if}}<tip>{{`Maximium value length: ${.diffopts.maxlen || 'none'}\nChanged record capture: ${.diffopts.change === 'whole' ? 'both whole records' : .diffopts.change === 'whole-old' ? 'whole old record, new changes' : 'changes only'}\nIgnored tables: ${.diffopts.ignore.length ? .diffopts.ignore.join(', ') : 'none'}`}}</tip></div>
@@ -1142,7 +1142,7 @@
             {{#if ~/expanded[.constr]}}-{{else}}+{{/if}}
           </div>
           <div style="padding: 0.2em;">{{#if .label}}<strong>{{.label}}</strong> <em>({{.constr}})</em>{{else}}<em>{{.constr}}</em>{{/if}}{{#if ~/hosts && ~/expanded[.constr] && Array.isArray(~/hosts[.constr])}} ({{~/_entries[.constr].length}} / {{~/hosts[.constr].length}}){{/if}}</div>
-          <div class="round fade" on-click="@.refreshHost(con), false" title="Refresh host database list">&#10227;</div>
+          <div class="round fade" on-click="@event.shiftKey ? @.editHost(con) : @.refreshHost(con), false" title="Refresh host database list. shift+click to edit connection settings.">&#10227;</div>
         </div>
         <div style="padding-left: 1.5em;">
           {{#if ~/expanded[.constr]}}
@@ -1158,6 +1158,9 @@
           {{/if}}
         </div>
       {{/each}}
+      <div style="margin-top: 2em; display: flex; justify-content: space-around;">
+        <button style="opacity: 0.7;" on-click="@.editHost()">Add Connection</button>
+      </div>
     </div>
     <tabs pad style="overflow: hidden;" flex>
       <tab no-pad title="Database">
@@ -1406,25 +1409,32 @@
       <option value="{{false}}">None</option>
     </select></label>
     <label as-field>Label<input value="{{~/config.label}}" /></label>
-    <fieldset style="margin: 1em 0.5em;">
-      <legend>Diff Options</legend>
-      <label as-field>Max Length <tip>The maximum allowable length of any value of any column to be recorded directly in a diff. Any values with lengths that exceed this number will instead be checksummed. This will affect your ability to undo diffs, as the checksummed value may not be valid in the source column. This defaults to 0, which disables the feature.</tip><input type=number value="{{~/config.diffopts.maxlen}}" placeholder="0" /></label>
-      <label as-field>Change Records<select value="{{~/config.diffopts.changes}}">
-        <option value="{{undefined}}">Record only changed fields and keys if possible.</option>
-        <option value="whole">Always record the full old and new records.</option>
-        <option value="whole-old">Always record the full old record and only changed fields and keys in the new record if possible.</option>
-      </select></label>
-      <field tip="This can be a table name, a schema.table name, or an ilike pattern that matches either table or schema.table. '__pgdifficult_%' and 'pgdifficult.%' are automatically ignored." label="Ignore Patterns" value="{{~/ignore}}"><button on-click="@.push('config.diffopts.ignore', ~/ignore), @.set('ignore', '')">Add</button></field>
-      <h3 style="border-bottom: 1px solid; margin: 1em 0 0.5em 0;">Ignored Pattern List</h3>
-      {{#each ~/config.diffopts.ignore}}
-        <div class="wrapper striped-{{@index % 2 == 0 ? 'even' : 'odd'}}" style="display: flex;">
-          <label as-field class=inline style="flex-grow: 1;"><input value="{{.}}" /></label>
-          <label as-field class=inline style="flex-shrink: 0;"><button on-click="@.splice('~/config.diffopts.ignore', @index, 1)">Remove</button></label>
-        </div>
-      {{else}}
-        <em>No ignored patterns</em>
-      {{/each}}
-    </fieldset>
+    <label as-field>Use<select value="{{~/config.use}}">
+      <option value="{{undefined}}">All</option>
+      <option value="diff">Diff</option>
+      <option value="host">Host Explorer</option>
+    </select></label>
+    {{#if !~/config.use || ~/config.use === 'diff'}}
+      <fieldset style="margin: 1em 0.5em;">
+        <legend>Diff Options</legend>
+        <label as-field>Max Length <tip>The maximum allowable length of any value of any column to be recorded directly in a diff. Any values with lengths that exceed this number will instead be checksummed. This will affect your ability to undo diffs, as the checksummed value may not be valid in the source column. This defaults to 0, which disables the feature.</tip><input type=number value="{{~/config.diffopts.maxlen}}" placeholder="0" /></label>
+        <label as-field>Change Records<select value="{{~/config.diffopts.changes}}">
+          <option value="{{undefined}}">Record only changed fields and keys if possible.</option>
+          <option value="whole">Always record the full old and new records.</option>
+          <option value="whole-old">Always record the full old record and only changed fields and keys in the new record if possible.</option>
+        </select></label>
+        <field tip="This can be a table name, a schema.table name, or an ilike pattern that matches either table or schema.table. '__pgdifficult_%' and 'pgdifficult.%' are automatically ignored." label="Ignore Patterns" value="{{~/ignore}}"><button on-click="@.push('config.diffopts.ignore', ~/ignore), @.set('ignore', '')">Add</button></field>
+        <h3 style="border-bottom: 1px solid; margin: 1em 0 0.5em 0;">Ignored Pattern List</h3>
+        {{#each ~/config.diffopts.ignore}}
+          <div class="wrapper striped-{{@index % 2 == 0 ? 'even' : 'odd'}}" style="display: flex;">
+            <label as-field class=inline style="flex-grow: 1;"><input value="{{.}}" /></label>
+            <label as-field class=inline style="flex-shrink: 0;"><button on-click="@.splice('~/config.diffopts.ignore', @index, 1)">Remove</button></label>
+          </div>
+        {{else}}
+          <em>No ignored patterns</em>
+        {{/each}}
+      </fieldset>
+    {{/if}}
   </div>
   <buttons>
     <button left class=flat on-click="@.cancel()">Cancel</button>

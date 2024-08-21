@@ -951,10 +951,8 @@ Window.extendWith(ControlPanel, {
   on: {
     init() {
       // map in the data from the root instance
-      this.link('connections', 'connections', { instance: app });
       this.link('status', 'status', { instance: app });
       this.link('entries', 'entries', { instance: app });
-      this.link('settings', 'settings', { instance: app });
       this.link('newSegment', 'newSegment', { instance: app });
       this.link('loadedQuery', 'loadedQuery', { instance: app });
       this.link('store', 'store', { instance: app });
@@ -969,6 +967,10 @@ Window.extendWith(ControlPanel, {
     },
   },
   computed: {
+    connections() {
+      const all = this.get('store.connections') || [];
+      return all.filter(c => !c.use || c.use === 'diff');
+    },
     scratchPadTree() {
       const old = this.get('_scratchPadTree');
       const tree = dirify(this.get('store.scratch.list'), old);
@@ -1903,6 +1905,14 @@ class HostExplore extends Window {
     }
   }
 
+  async editHost(con) {
+    const config = con?.config || { type: 'connection', use: 'host' };
+    const wnd = new Connect({ data: { config: Object.assign({ type: 'connection' }, config) } });
+    this.host.addWindow(wnd, { block: this });
+    const res = await wnd.result;
+    if (res !== false) await store.save(res);
+  }
+
   async refreshSchema(selected) {
     this.blocked = true;
 
@@ -2264,7 +2274,7 @@ dd { white-space: pre-wrap; }
   computed: {
     connections() {
       const cons = this.get('_connections');
-      return cons.map(c => {
+      return cons.filter(c => !c.use || c.use === 'host').map(c => {
         return {
           constr: `${c.username || 'postgres'}@${c.host || 'localhost'}:${c.port || 5432}/${c.database}`,
           label: c.label,
@@ -2274,7 +2284,7 @@ dd { white-space: pre-wrap; }
     },
   },
   data() {
-    return { hosts: {}, meta: {}, expanded: {}, schemaexpanded: { table: {} } };
+    return { hosts: {}, schemas: {}, meta: {}, expanded: {}, schemaexpanded: { table: {} } };
   },
   observe: {
     'hosts filter'() {
