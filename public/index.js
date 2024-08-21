@@ -916,6 +916,12 @@ class ControlPanel extends Window {
   exploreHosts() {
     app.exploreHosts();
   }
+  evalPad() {
+    const scratch = new ScratchPad();
+    this.host.addWindow(scratch, { title: 'Eval Pad' });
+    scratch.set('pad.syntax', 'raport');
+    scratch.findComponent('split')?.resize(0, 50);
+  }
   async exportSettings() {
     const json = {};
     const settings = app.get('settings');
@@ -1819,6 +1825,15 @@ dd { margin: 0.5em 0 1em 2em; white-space: pre-wrap; }
       this.partials.leaf = ps.leaf;
       this.partials.node = ps.node;
     },
+    raise() {
+      setTimeout(() => {
+        const el = this.find('.editor-el');
+        if (el) {
+          const ctx = this.getContext(el);
+          ctx.decorators?.ace?.focus();
+        }
+      });
+    },
     destruct() {
       if (this.get('pad._id')) store.release('scratch', this.get('pad._id'));
     }
@@ -1841,13 +1856,13 @@ dd { margin: 0.5em 0 1em 2em; white-space: pre-wrap; }
   observe: {
     'pad.name'(n) {
       this.title = `Scratch Pad${n ? ` - ${n}` : ''}`;
-      this.saveDebounced();
+      this.saveDebounced && this.saveDebounced();
     },
     'pad.syntax'() {
-      if (typeof this.get('pad.text') === 'string') this.saveDebounced();
+      if (typeof this.get('pad.text') === 'string') this.saveDebounced && this.saveDebounced();
     },
     'pad.text'(v) {
-      if (typeof v === 'string') this.saveDebounced();
+      if (typeof v === 'string') this.saveDebounced && this.saveDebounced();
     },
   },
 });

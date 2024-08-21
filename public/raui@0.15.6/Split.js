@@ -112,6 +112,16 @@
       this._adjustSizes();
     };
 
+    Split.prototype.resize = function resize (idx, size) {
+      if (this.get("splits." + idx)) {
+        const sets = {};
+        sets["splits." + idx + ".lastSet"] = sets["splits." + idx + ".curSize"] = sets["splits." + idx + ".size"] = size;
+        this.set(sets);
+        this._adjustSizes();
+      }
+    }
+
+
     return Split;
   }(Ractive$1));
 
