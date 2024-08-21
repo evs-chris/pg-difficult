@@ -49,6 +49,14 @@
         lock = false;
       }
 
+      editor.commands.addCommand({
+        name: 'save',
+        bindKey: { win: 'Ctrl-S', mac: 'Command-S', sender: 'editor|cli' }, 
+        exec: function() {
+          ctx.raise('save');
+        }
+      });
+
       handle.update = function(options) {
         if (!options) { return; }
         if (options.syntax) { editor.getSession().setMode('ace/mode/' + options.syntax); }

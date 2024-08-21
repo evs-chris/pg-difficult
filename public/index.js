@@ -1751,6 +1751,7 @@ class ScratchPad extends Window {
       const res = await store.save(pad);
       await this.load(res._id);
     }
+    this.saveDebounced.cancel();
     this.set('unsaved', false);
   }
   saveDebounced = debounce(() => this.save(), 15000, {
@@ -1836,7 +1837,10 @@ dd { margin: 0.5em 0 1em 2em; white-space: pre-wrap; }
     },
     destruct() {
       if (this.get('pad._id')) store.release('scratch', this.get('pad._id'));
-    }
+    },
+    render() {
+      this.saveDebounced.timeout = this.get('editor.autosave') ?? 15000;
+    },
   },
   data() {
     return { docs, ops: evaluate(docs.operators), expand: {}, pad: { name: '', syntax: 'markdown', text: '' } };
@@ -1864,6 +1868,9 @@ dd { margin: 0.5em 0 1em 2em; white-space: pre-wrap; }
     'pad.text'(v) {
       if (typeof v === 'string') this.saveDebounced && this.saveDebounced();
     },
+    'editor.autosave'(v) {
+      if (this.saveDebounced) this.saveDebounced.timeout = v ?? 15000;
+    }
   },
 });
 
@@ -2804,14 +2811,28 @@ function unloading() {
 function debounce(fn, timeout = 1000, opts) {
   let tm;
   opts = opts || {};
-  return (function(...args) {
-    if (typeof opts.check === 'function' && !opts.check.apply(opts.target, args)) {
-      if (tm) clearTimeout(tm);
-      return;
+  let lastArgs;
+  const cancel = () => {
+    if (tm) {
+      clearTimeout(tm);
+      tm = null;
     }
-    if (tm) clearTimeout(tm);
-    tm = setTimeout(() => fn.apply(opts.target, args), timeout);
+  };
+  const callback = () => {
+    fn.apply(opts.target, lastArgs);
+    tm = null;
+  };
+  let res;
+  res = (function(...args) {
+    cancel();
+    if (typeof opts.check === 'function' && !opts.check.apply(opts.target, args)) return;
+    if (res.timeout < 0) return;
+    if (res.timeout < 200 || isNaN(res.timeout)) res.timeout = 1000;
+    tm = setTimeout(callback, res.timeout);
   });
+  res.timeout = timeout;
+  res.cancel = cancel;
+  return res;
 }
 
 function tryJSON(what) {

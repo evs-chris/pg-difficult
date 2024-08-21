@@ -474,7 +474,7 @@
             <option value="dark">Dark</option>
             <option value="light">Light</option>
           </select></label>
-          <label as-field>Scale <tip>Mobile browsers and even some desktops have default scaling that's just not right for every case. Some browsers force the zoom level to be global, and that makes for unpleasantness elsewhere. You can set your zoom level in percent for just pg-difficult here, because life is just better when you can change the scale of stuff at will.</tip><input type=number min=25 max=400 value="{{~/store.settings.scale}}" placeholder=100 /></label>
+          <label as-field>Scale <tip>Mobile browsers and even some desktops have default scaling that's just not right for every case. Some browsers force the zoom level to be global, and that makes for unpleasantness elsewhere. You can set your zoom level in percent for just pg-difficult here, because life is just better when you can change the scale of stuff at will.</tip><input type=number min=25 max=400 value="{{~/store.settings.scale}}" lazy placeholder=100 /></label>
           <label as-field>Color <tip>If you are running multiple instances or have multiple storage namespaces e.g. 127.0.0.1:1999 and localhost:1999 and want to be able to visually distinguish them, you can select different colors here to make it a little more obvious which one you're looking at if you can remember which color goes with which instance.</tip><select value="{{~/store.settings.color}}">
             <option value="{{undefined}}">The Default&trade;</option>
             <option value="black">Black</option>
@@ -526,6 +526,7 @@
           <label as-field>Light Theme <tip>The Ace editor theme to use when retinal pain mode is selected.</tip><select value="{{~/store.settings.editor.lightTheme}}">{{>ace-themes}}</select></label>
           <label as-field>Dark Theme <tip>The Ace editor theme to use when the correct mode is selected.</tip><select value="{{~/store.settings.editor.darkTheme}}">{{>ace-themes}}</select></label>
           <label as-field>Tab Size<input type=number placeholder=2 value="{{~/store.settings.editor.tabSize}}" /></label>
+          <label as-field>Autosave Timeout MS<tip>The number of milliseconds after a change is made to wait before triggering a save of the content. For editors that don't have a save action, this will do nothing. -1 will disable autosave. The default is 15000 (15 seconds).</tip><input type=number value="{{~/store.settings.editor.autosave}}" placeholder=15000 lazy /></label>
         </fieldset>
         {{#if !@global.clientOnly}}
           <fieldset style="margin-top: 1em;">
@@ -1068,7 +1069,7 @@
   <div style="flex-grow: 1; position: relative; display: flex;">
     {{#if pad.syntax === 'raport'}}
       <split>
-        <div style="height: 100%;" class="editor-el" as-tracked=`ace` as-ace="{ bind: 'pad.text', syntax: pad.syntax || 'plain_text', theme: @style.theme == 'dark' ? (~/editor.darkTheme || 'tomorrow_night_eighties') : (~/editor.lightTheme || 'tomorrow'), wrap: ~/editor.wrap, highlightActive: ~/editor.highlightActive, fontSize: '1em', font: 'monospace', printMargin: ~/editor.printMargin, keymode: ~/editor.keymode, lineNumbers: ~/editor.lineNumbers, relativeLineNumbers: ~/editor.relativeLineNumbers, highlightSelected: ~/editor.highlightSelected, softTabs: ~/editor.softTabs, tabSize: ~/editor.tabSize }" on-keydown="@event.ctrlKey && @event.key === 'Enter' ? @.evaluate(pad.text) : true" />
+        <div style="height: 100%;" class="editor-el" as-tracked=`ace` as-ace="{ bind: 'pad.text', syntax: pad.syntax || 'plain_text', theme: @style.theme == 'dark' ? (~/editor.darkTheme || 'tomorrow_night_eighties') : (~/editor.lightTheme || 'tomorrow'), wrap: ~/editor.wrap, highlightActive: ~/editor.highlightActive, fontSize: '1em', font: 'monospace', printMargin: ~/editor.printMargin, keymode: ~/editor.keymode, lineNumbers: ~/editor.lineNumbers, relativeLineNumbers: ~/editor.relativeLineNumbers, highlightSelected: ~/editor.highlightSelected, softTabs: ~/editor.softTabs, tabSize: ~/editor.tabSize }" on-save="@.save()" on-keydown="@event.ctrlKey && @event.key === 'Enter' ? @.evaluate(pad.text) : true" />
         <tabs pad flex size=0 style="height: 100%;">
           <tab>
             <title>{{~/evalerror ? 'Error' : 'Result'}}</title>
@@ -1562,6 +1563,7 @@
     vim.map('k', 'gk', 'normal');
     vim.map('jk', '<Esc>', 'insert');
     vim.map('kj', '<Esc>', 'insert');
+    vim.defineEx('write', 'w', cm => cm.ace.execCommand('save'));
   });
 </script>
   </body>
