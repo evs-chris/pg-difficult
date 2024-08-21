@@ -1745,10 +1745,13 @@ class ScratchPad extends Window {
       const res = await store.save(pad);
       await this.load(res._id);
     }
+    this.set('unsaved', false);
   }
   saveDebounced = debounce(() => this.save(), 15000, {
     check() {
-      return !this.lock && this.get('pad._id');
+      const res = !this.lock && this.get('pad._id');
+      if (res) this.set('unsaved', true);
+      return res;
     },
     target: this,
   });
