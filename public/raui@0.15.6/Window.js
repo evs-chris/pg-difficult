@@ -625,6 +625,18 @@
       return promise.then(function () { return window; });
     };
 
+    Host.prototype.changeWindowId = function changeWindowId (id, newId) {
+      var wnd = this.getWindow(id);
+      if (!wnd) return;
+      wnd.set('@.id', newId);
+      this.set('windows.' + escape(newId), this.get('windows.' + escape(id)));
+      wnd.link(`windows.${escape(newId)}`, 'control', { instance: this });
+      this.set('windows.' + escape(id), undefined);
+      delete this.get('windows')[id];
+      this.set('windows.' + escape(newId) + '.id', newId);
+    }
+
+
     Host.prototype.getWindow = function getWindow (id) {
       return this.children.byName.window && this.children.byName.window.filter(function (w) { return w.instance.id === id; }).map(function (w) { return w.instance; })[0];
     };

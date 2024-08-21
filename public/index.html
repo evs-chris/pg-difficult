@@ -19,6 +19,7 @@
     <script src="./raui@0.15.6/Tabs.js"></script>
     <script src="./raui@0.15.6/Table.js"></script>
     <script src="./raui@0.15.6/VirtualList.js"></script>
+    <script src="./pouchdb@9.0.0.js"></script>
 <style>
   html, body {
     margin: 0;
@@ -345,17 +346,13 @@
         <button style="flex-shrink: 0;" on-click="@.editConnection()" title="Add a saved connection for this browser at this url.">Add Connection</button>
       </div>
       <div style="overflow: auto;">
-        {{#each connections}}
+        {{#each store.connections}}
           <div class="connection striped">
             <div class="constr">
               <div style="flex-grow: 1;">{{#if .label}}<strong>{{.label}}</strong> ({{constr(.)}}){{else}}{{constr(.)}}{{/if}}<tip>{{`Maximium value length: ${.diffopts.maxlen || 'none'}\nChanged record capture: ${.diffopts.change === 'whole' ? 'both whole records' : .diffopts.change === 'whole-old' ? 'whole old record, new changes' : 'changes only'}\nIgnored tables: ${.diffopts.ignore.length ? .diffopts.ignore.join(', ') : 'none'}`}}</tip></div>
-              <div style="width: 9em; flex-shrink: 0;">
-                <button class=flat disabled="{{@index === 0}}" on-click="moveUp(@context, @event.shiftKey || @event.ctrlKey)" title="Move up, hold shift or ctrl to move to top">&#9650;</button>
-                <button class=flat disabled="{{@index === @last}}" on-click="moveDown(@context, @event.shiftKey || @event.ctrlKey)" title="Move down, hold shift or ctrl to move to bottom">&#9660;</button>
-              </div>
               <div style="width: 13em; flex-shrink: 0;">
-                <button class=flat on-click="@.editConnection(@index)" {{#if @.hasDiff(.) || @.hasLeak(.)}}disabled title="Stop active watchers to modify this connection"{{else}}title="Edit this saved connection."{{/if}}>Edit</button>
-                <button class=flat on-click="@.splice('connections', @index, 1)" {{#if @.hasDiff(.) || @.hasLeak(.)}}disabled title="Stop active watchers to modify this connection"{{else}}title="Remove this saved connection."{{/if}}>Remove</button><br/>
+                <button class=flat on-click="@.editConnection(.)" {{#if @.hasDiff(.) || @.hasLeak(.)}}disabled title="Stop active watchers to modify this connection"{{else}}title="Edit this saved connection."{{/if}}>Edit</button>
+                <button class=flat on-click="@.remove(.)" {{#if @.hasDiff(.) || @.hasLeak(.)}}disabled title="Stop active watchers to modify this connection"{{else}}title="Remove this saved connection."{{/if}}>Remove</button><br/>
               </div>
             </div>
             <div class="actions">
@@ -439,97 +436,46 @@
       </div>
     </tab>
     <tab title="Saved Queries" hidden="@global.clientOnly">
-      <div style="padding: 0.3em;">Queries are saved in browser storage.</div>
+      <div style="padding: 0.3em; display: flex; justify-content: space-between; align-items: center; min-height: 2.75em;">
+        <span>Queries are saved in browser storage. Click a query to make it available to load in a query window.</span>
+        {{#if ~/loadedQuery}}<button on-click="@.set('loadedQuery', undefined)">Cancel</button>{{/if}}
+      </div>
       <div style="overflow: auto;">
-        {{#each savedQueries}}
-          <div class="query striped">
-            <div class="name">{{.name}}</div>
-            <div class="sql">{{.sql}}</div>
-            <div class="actions">
-              <button class=flat disabled="{{@index === 0}}" on-click="moveUp(@context, @event.shiftKey || @event.ctrlKey)" title="Move up, hold shift or ctrl to move to top">&#9650;</button>
-              <button class=flat disabled="{{@index === @last}}" on-click="moveDown(@context, @event.shiftKey || @event.ctrlKey)" title="Move down, hold shift or ctrl to move to bottom">&#9660;</button>
-              {{#if ~/loadedQuery === .}}
-                <button on-click="@.set('loadedQuery', undefined)" title="Click to cancel waiting to load this query from a query window.">Cancel</button>
-              {{else}}
-                <button on-click="@.set('loadedQuery', .)" title="Set this query up to be loaded from a query window.">Load</button>
-              {{/if}}
-              <button on-click="@.splice('savedQueries', @index, 1)" title="Remove this query from browser storage.">Remove</button>
-            </div>
-          </div>
-        {{else}}
-          No queries have been saved.
-        {{/each}}
+        {{>node ~/queryTree}}
       </div>
     </tab>
     <tab title="Reports">
       <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.3em;">
         <div style="padding: 0.3em;">Reports can be set up to run against a Diff, a Schema, a Provided Result from querying multiple database, a Query for multiple database, a Query for a single database, or a JSON blob. Query-based reports can be managed from the Host Explorer.</div>
-        <div style="flex-shrink: 0;"><button title="Open a new report designer." on-click="@.report()">New Designer</button></div>
+        <div style="flex-shrink: 0;"><button title="Open a new report designer." on-click="@.open({ type: 'report' })">New Designer</button></div>
       </div>
       <div style="overflow: auto;">
-        {{#each savedReports}}
-          <div class="report striped">
-            <div class=name>{{.definition.name}}</div>
-            <div class=actions>
-              <button class=flat disabled="{{@index === 0}}" on-click="moveUp(@context, @event.shiftKey || @event.ctrlKey)" title="Move up, hold shift or ctrl to move to top">&#9650;</button>
-              <button class=flat disabled="{{@index === @last}}" on-click="moveDown(@context, @event.shiftKey || @event.ctrlKey)" title="Move down, hold shift or ctrl to move to bottom">&#9660;</button>
-              <button on-click="@.report(.)" {{#if @.reportHasQuerySql(.)}}disabled title="This report uses SQL queries and must be accessed from the Host Explorer"{{else}}title="Open this report in the designer."{{/if}}>Designer</button>
-              <button on-click="@.splice('savedReports', @index, 1)" title="Remove this report from browser storage.">Remove</button>
-            </div>
-          </div>
-        {{else}}
-          No reports have been saved.
-        {{/each}}
+        {{#partial leaf}}
+          <div class=back-dots /><div class=tree-leaf><span class=name {{#if .value.host}}style="cursor: not-allowed;" title="This report utilizes SQL query sources, making it only accessible from a Host Explorer."{{else}}on-click="@.open(.value)"{{/if}}>{{.name}}</span> <span style="line-height: 1.5em;">{{.value.kind}} <span class=remove-button title="Remove this {{.value.type}}." on-click="@.remove(.value)">&times;</span></span></div>
+        {{/partial}}
+        {{>node ~/reportTree}}
       </div>
     </tab>
     <tab title="Scratch Pads">
       <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.3em;">
         <div style="padding: 0.3em;">Scratch pads are a place to write bits of text that are automatically saved to browser local storage when they are edited.</div>
-        <div style="flex-shrink: 0;"><button title="Open a new scratch pad." on-click="@.scratch()">New Scratch Pad</button></div>
-        <div style="flex-shrink: 0;"><button title="Switch view mode." on-click="@.set('~/settings.scratchView', ~/settings.scratchView === 'tree' ? undefined : 'tree')">{{~/settings.scratchView === 'tree' ? 'List' : 'Tree'}}</button></div>
+        <div style="flex-shrink: 0;"><button title="Open a new scratch pad." on-click="@.open({ type: 'scratch' })">New Scratch Pad</button></div>
       </div>
       <div style="overflow: auto;">
-        {{#partial node}}
-          <div class=tree-line>{{#if .name}}<div class=back-dots /><span class=expander on-click="@context.toggle('.expand')">{{.expand ? '-' : '+'}}</span> <span class=name on-click="@context.toggle('.expand')"> {{.name}}/</span>{{else}}<span style="display: inline-block; width: 0.5em;" /> <span>{{.name}}/{{/if}}</div>
-          {{#if .expand}}
-            <div class=tree-children>
-              {{#each .nodes}}{{>.type}}{{/each}}
-            </div>
-          {{/if}}
-        {{/partial}}
-        {{#partial leaf}}
-          <div class=back-dots /><div class=tree-leaf><span class=name on-click="@.scratch(.report)">{{.name}}</span> <span style="line-height: 1.5em;">{{.report.syntax}} <span class=remove-button title="Remove this scrath pad." on-click="@.removeScratch(.report)">&times;</span></span></div>
-        {{/partial}}
-        {{#if ~/settings.scratchView === 'tree'}}
-          {{>node ~/scratchPadTree}}
-        {{else}}
-          {{#each scratchPads}}
-            <div class="scratch striped">
-              <div class=name>{{.name}}</div>
-              <div class=actions>
-                <button class=flat disabled="{{@index === 0}}" on-click="moveUp(@context, @event.shiftKey || @event.ctrlKey)" title="Move up, hold shift or ctrl to move to top">&#9650;</button>
-                <button class=flat disabled="{{@index === @last}}" on-click="moveDown(@context, @event.shiftKey || @event.ctrlKey)" title="Move down, hold shift or ctrl to move to bottom">&#9660;</button>
-                <button on-click="@.scratch(.)" title="Open this scratch pad.">Open</button>
-                <button on-click="@.removeScratch(.)" title="Remove this scratch pad from browser storage.">Remove</button>
-              </div>
-            </div>
-          {{else}}
-            No scratch pads have been saved.
-          {{/each}}
-        {{/if}}
+        {{>node ~/scratchPadTree}}
       </div>
     </tab>
     <tab title="Settings">
       <div style="display: flex; flex-direction: column;">
         <fieldset>
           <legend>Client Options</legend>
-          <label as-field>Theme<select value="{{~/settings.theme}}">
+          <label as-field>Theme<select value="{{~/store.settings.theme}}">
             <option value="{{undefined}}">Auto</option>
             <option value="dark">Dark</option>
             <option value="light">Light</option>
           </select></label>
-          <label as-field>Scale <tip>Mobile browsers and even some desktops have default scaling that's just not right for every case. Some browsers force the zoom level to be global, and that makes for unpleasantness elsewhere. You can set your zoom level in percent for just pg-difficult here, because life is just better when you can change the scale of stuff at will.</tip><input type=number min=25 max=400 value="{{~/settings.scale}}" placeholder=100 /></label>
-          <label as-field>Color <tip>If you are running multiple instances or have multiple storage namespaces e.g. 127.0.0.1:1999 and localhost:1999 and want to be able to visually distinguish them, you can select different colors here to make it a little more obvious which one you're looking at if you can remember which color goes with which instance.</tip><select value="{{~/settings.color}}">
+          <label as-field>Scale <tip>Mobile browsers and even some desktops have default scaling that's just not right for every case. Some browsers force the zoom level to be global, and that makes for unpleasantness elsewhere. You can set your zoom level in percent for just pg-difficult here, because life is just better when you can change the scale of stuff at will.</tip><input type=number min=25 max=400 value="{{~/store.settings.scale}}" placeholder=100 /></label>
+          <label as-field>Color <tip>If you are running multiple instances or have multiple storage namespaces e.g. 127.0.0.1:1999 and localhost:1999 and want to be able to visually distinguish them, you can select different colors here to make it a little more obvious which one you're looking at if you can remember which color goes with which instance.</tip><select value="{{~/store.settings.color}}">
             <option value="{{undefined}}">The Default&trade;</option>
             <option value="black">Black</option>
             <option value="blue">Blue</option>
@@ -542,58 +488,58 @@
             <option value="teal">Teal</option>
             <option value="yellow">Yellow</option>
           </select></label>
-          <label as-field>Title <tip>Set the title for clients attached to this namespace, for the same reasons you may want to set a different color.</tip><input value="{{~/settings.title}}" /></label>
-          <label as-field>Paste Timeout ms <tip>Some actions, like clicking on an evaluated result in a raport scratch pad, will automatically copy the value to the clipboard and an internal storage area tha can be accessed by other tools, like the local diff tool. These tools will offer to load the value just copied with a click for a limited amount of time. This is that limit.</tip><input type=number placeholder=10000 step=1000 value="{{~/settings.pasteTimeout}}" /></label>
+          <label as-field>Title <tip>Set the title for clients attached to this namespace, for the same reasons you may want to set a different color.</tip><input value="{{~/store.settings.title}}" /></label>
+          <label as-field>Paste Timeout ms <tip>Some actions, like clicking on an evaluated result in a raport scratch pad, will automatically copy the value to the clipboard and an internal storage area tha can be accessed by other tools, like the local diff tool. These tools will offer to load the value just copied with a click for a limited amount of time. This is that limit.</tip><input type=number placeholder=10000 step=1000 value="{{~/store.settings.pasteTimeout}}" /></label>
         </fieldset>
         <fieldset style="margin-top: 1em;">
           <legend>Diff Entries Options</legend>
           {{#if !@global.clientOnly}}
-            <label as-field class=inline><input type=checkbox bind-checked="~/settings.allowUndoSegment" /> Enable undoing diff segments by default?</label>
-            <label as-field class=inline><input type=checkbox bind-checked="~/settings.allowUndoSingle" /> Enable undoing individual diff entries by default?</label>
+            <label as-field class=inline><input type=checkbox bind-checked="~/store.settings.allowUndoSegment" /> Enable undoing diff segments by default?</label>
+            <label as-field class=inline><input type=checkbox bind-checked="~/store.settings.allowUndoSingle" /> Enable undoing individual diff entries by default?</label>
           {{/if}}
-          <label as-field class=inline><input type=checkbox bind-checked="~/settings.hideBlankFields" /> Hide empty string fields in diff records by default?</label>
-          <label as-field class=inline><input type=checkbox bind-checked="~/settings.hideDefaultFields" /> Hide defaulted fields in diff records by default?</label>
+          <label as-field class=inline><input type=checkbox bind-checked="~/store.settings.hideBlankFields" /> Hide empty string fields in diff records by default?</label>
+          <label as-field class=inline><input type=checkbox bind-checked="~/store.settings.hideDefaultFields" /> Hide defaulted fields in diff records by default?</label>
         </fieldset>
         {{#if !@global.clientOnly}}
           <fieldset style="margin-top: 1em;">
             <legend>Query Options</legend>
-            <label as-field class=inline><input type=checkbox bind-checked="~/settings.queryOrderColumns" /> Order query result columns alphabetically?</label>
+            <label as-field class=inline><input type=checkbox bind-checked="~/store.settings.queryOrderColumns" /> Order query result columns alphabetically?</label>
           </fieldset>
         {{/if}}
         <fieldset style="margin-top: 1em;">
           <legend>Editor Options</legend>
-          <label as-field class=inline><input type=checkbox checked="{{~/settings.editor.wrap}}" /> Word wrap?</label>
-          <label as-field class=inline><input type=checkbox checked="{{~/settings.editor.lineNumbers}}" /> Show line numbers?</label>
-          {{#if ~/settings.editor.lineNumbers}}<label as-field class=inline><input type=checkbox checked="{{~/settings.editor.relativeLineNumbers}}" /> Relative line numbers?</label>{{/if}}
-          <label as-field class=inline><input type=checkbox checked="{{~/settings.editor.highlightActive}}" /> Highlight active line?</label>
-          <label as-field class=inline><input type=checkbox checked="{{~/settings.editor.highlightSelected}}" /> Highlight selected word?</label>
-          <label as-field class=inline><input type=checkbox checked="{{~/settings.editor.printMargin}}" /> Show print margin?</label>
-          <label as-field class=inline><input type=checkbox twoway=false checked="{{~/settings.editor.softTabs}}" /> Use soft tabs?</label>
+          <label as-field class=inline><input type=checkbox checked="{{~/store.settings.editor.wrap}}" /> Word wrap?</label>
+          <label as-field class=inline><input type=checkbox checked="{{~/store.settings.editor.lineNumbers}}" /> Show line numbers?</label>
+          {{#if ~/store.settings.editor.lineNumbers}}<label as-field class=inline><input type=checkbox checked="{{~/store.settings.editor.relativeLineNumbers}}" /> Relative line numbers?</label>{{/if}}
+          <label as-field class=inline><input type=checkbox checked="{{~/store.settings.editor.highlightActive}}" /> Highlight active line?</label>
+          <label as-field class=inline><input type=checkbox checked="{{~/store.settings.editor.highlightSelected}}" /> Highlight selected word?</label>
+          <label as-field class=inline><input type=checkbox checked="{{~/store.settings.editor.printMargin}}" /> Show print margin?</label>
+          <label as-field class=inline><input type=checkbox twoway=false checked="{{~/store.settings.editor.softTabs}}" /> Use soft tabs?</label>
           <div class=break />
-          <label as-field>Input Mode<select value="{{~/settings.editor.keymode}}">
+          <label as-field>Input Mode<select value="{{~/store.settings.editor.keymode}}">
             <option value="{{undefined}}">default</option>
             <option>emacs</option>
             <option>sublime</option>
             <option>vim</option>
             <option>vscode</option>
           </select></label>
-          <label as-field>Light Theme <tip>The Ace editor theme to use when retinal pain mode is selected.</tip><select value="{{~/settings.editor.lightTheme}}">{{>ace-themes}}</select></label>
-          <label as-field>Dark Theme <tip>The Ace editor theme to use when the correct mode is selected.</tip><select value="{{~/settings.editor.darkTheme}}">{{>ace-themes}}</select></label>
-          <label as-field>Tab Size<input type=number placeholder=2 value="{{~/settings.editor.tabSize}}" /></label>
+          <label as-field>Light Theme <tip>The Ace editor theme to use when retinal pain mode is selected.</tip><select value="{{~/store.settings.editor.lightTheme}}">{{>ace-themes}}</select></label>
+          <label as-field>Dark Theme <tip>The Ace editor theme to use when the correct mode is selected.</tip><select value="{{~/store.settings.editor.darkTheme}}">{{>ace-themes}}</select></label>
+          <label as-field>Tab Size<input type=number placeholder=2 value="{{~/store.settings.editor.tabSize}}" /></label>
         </fieldset>
         {{#if !@global.clientOnly}}
           <fieldset style="margin-top: 1em;">
             <legend>Delimited Text Options</legend>
-            <label as-field title="The delimiter to use between fields when rendering a data set as delimited text e.g. , (comma), \t (tab), | (pipe). Defaults to ,">Field Delimiter<input value="{{~/settings.csv.field}}" placeholder="," /></label>
-            <label as-field title="The delimiter to use between records when rendering a data set as delimited text e.g. \n (line feed), \r (carriage return), \r\n (carriage return, line feed). Defaults to \n">Record Delimiter<input value="{{~/settings.csv.record}}" placeholder="\n" /></label>
-            <label as-field title="The quote to use around fields when rendering a data set as delimited text e.g. ' (single quote), &quot; (double quote), $$ (dollar, dollar). Defaults to none">Field Quote<input value="{{~/settings.csv.quote}}" /></label>
+            <label as-field title="The delimiter to use between fields when rendering a data set as delimited text e.g. , (comma), \t (tab), | (pipe). Defaults to ,">Field Delimiter<input value="{{~/store.settings.csv.field}}" placeholder="," /></label>
+            <label as-field title="The delimiter to use between records when rendering a data set as delimited text e.g. \n (line feed), \r (carriage return), \r\n (carriage return, line feed). Defaults to \n">Record Delimiter<input value="{{~/store.settings.csv.record}}" placeholder="\n" /></label>
+            <label as-field title="The quote to use around fields when rendering a data set as delimited text e.g. ' (single quote), &quot; (double quote), $$ (dollar, dollar). Defaults to none">Field Quote<input value="{{~/store.settings.csv.quote}}" /></label>
           </fieldset>
         {{/if}}
         <fieldset style="margin-top: 1em;">
           <legend>Local Diff Options</legend>
-          <label as-field>Default Left Mode<select value="{{~/settings.diff.leftview}}"><option value="{{undefined}}">tree</option><option>text</option></select></label>
-          <label as-field>Default Right Mode<select value="{{~/settings.diff.rightview}}"><option value="{{undefined}}">tree</option><option>text</option></select></label>
-          <!--<label as-field>Default Value Format<select value="{{~/settings.diff.format}}"><option value="{{undefined}}">raport</option><option>json</option></select></label>-->
+          <label as-field>Default Left Mode<select value="{{~/store.settings.diff.leftview}}"><option value="{{undefined}}">tree</option><option>text</option></select></label>
+          <label as-field>Default Right Mode<select value="{{~/store.settings.diff.rightview}}"><option value="{{undefined}}">tree</option><option>text</option></select></label>
+          <!--<label as-field>Default Value Format<select value="{{~/store.settings.diff.format}}"><option value="{{undefined}}">raport</option><option>json</option></select></label>-->
         </fieldset>
         <div style="margin-top: 1em;">
           <button on-click="@.exportSettings()">Export Settings</button>
@@ -609,6 +555,17 @@
     {{/unless}}
     <button left title="Open a new two-way diff window for local data." on-click="@.localDiff()">Local Diff</button>
   </buttons>
+  {{#partial node}}
+    <div class=tree-line>{{#if .name}}<div class=back-dots /><span class=expander on-click="@context.toggle('.expand')">{{.expand ? '-' : '+'}}</span> <span class=name on-click="@context.toggle('.expand')"> {{.name}}/</span>{{else}}<span style="display: inline-block; width: 0.5em;" /> <span>{{.name}}/{{/if}}</div>
+    {{#if .expand}}
+      <div class=tree-children>
+        {{#each .nodes}}{{>.type}}{{/each}}
+      </div>
+    {{/if}}
+  {{/partial}}
+  {{#partial leaf}}
+    <div class=back-dots /><div class=tree-leaf><span class=name on-click="@.open(.value)">{{.name}}</span> <span style="line-height: 1.5em;">{{.value.syntax}} <span class=remove-button title="Remove this scrath pad." on-click="@.remove(.value)">&times;</span></span></div>
+  {{/partial}}
   {{#partial ace-themes}}
     <option value="{{undefined}}">The Default&trade;</option>
     <option>ambiance</option>
@@ -661,15 +618,15 @@
 </script>
 
 <script type=text/ractive id=query>
-  <div style="border-bottom: 1px solid; display: flex; justify-content: space-between;">
-    <button on-click="@.runQuery(~/query)" title="Execute this query and return the result. (ctrl+Enter){{'\n\n'}}Highlight text to execute only the highlighted portion as a query.">Run</button>
+  <div style="border-bottom: 1px solid; display: flex; justify-content: space-between; align-items: center;">
+    <button on-click="@.runQuery(~/loaded ? ~/loaded.sql : ~/query)" title="Execute this query and return the result. (ctrl+Enter){{'\n\n'}}Highlight text to execute only the highlighted portion as a query.">Run</button>
     <label as-field class=inline><input type=checkbox bind-checked="~/settings.queryOrderColumns" /> Order query result columns alphabetically?</label>
     {{#if ~/loadedQuery}}
-      <button on-click="@.loadQuery()" title="Load the selected saved query in this window.">Load Query</button>
-    {{elseif ~/query}}
-      <div>
-        <button on-click="@.saveQuery()" title="Save this query to the control panel Saved Queries.">Save</button>
-        {{#if ~/name}}<button on-click="@.set('name', undefined)" title="This query is currently saved as {{~/name}}. Click here to disconnect this query from that named query. When the query is disconnected, it may be saved with a different name.">Unload</button>{{/if}}
+      <button on-click="@.loadQuery(~/loadedQuery)" title="Load the selected saved query in this window.">Load Query</button>
+    {{else}}
+      <div style="display: flex; align-items: center;">
+        {{#if ~/loaded.sql || ~/query}}<button on-click="@.saveQuery()" title="Save this query to the control panel Saved Queries.">Save</button>{{/if}}
+        {{#if ~/loaded.name}}<button on-click="@.loadQuery()" title="This query is currently saved as {{~/loaded.name}}. Click here to disconnect this query from that named query. When the query is disconnected, it may be saved with a different name.">Unload</button>{{/if}}
       </div>
     {{/if}}
     {{#if ~/result.length}}
@@ -678,7 +635,7 @@
   </div>
   <div class="query" style="position: relative;">
     <split>
-      <div size=20 class="query-text" as-tracked=`ace` as-ace="{ bind: '~/query', syntax: 'pgsql', theme: @style.theme == 'dark' ? (~/editor.darkTheme || 'tomorrow_night_eighties') : (~/editor.lightTheme || 'tomorrow'), wrap: ~/editor.wrap, highlightActive: ~/editor.highlightActive, fontSize: '1em', font: 'monospace', printMargin: ~/editor.printMargin, keymode: ~/editor.keymode, lineNumbers: ~/editor.lineNumbers, relativeLineNumbers: ~/editor.relativeLineNumbers, highlightSelected: ~/editor.highlightSelected, softTabs: ~/editor.softTabs, tabSize: ~/editor.tabSize }" on-keydown="@event.ctrlKey && @event.key === 'Enter' ? @.runQuery(~/query) : true" />
+      <div size=20 class="query-text" as-tracked=`ace` as-ace="{ bind: ~/loaded ? '~/loaded.sql' : '~/query', syntax: 'pgsql', theme: @style.theme == 'dark' ? (~/editor.darkTheme || 'tomorrow_night_eighties') : (~/editor.lightTheme || 'tomorrow'), wrap: ~/editor.wrap, highlightActive: ~/editor.highlightActive, fontSize: '1em', font: 'monospace', printMargin: ~/editor.printMargin, keymode: ~/editor.keymode, lineNumbers: ~/editor.lineNumbers, relativeLineNumbers: ~/editor.relativeLineNumbers, highlightSelected: ~/editor.highlightSelected, softTabs: ~/editor.softTabs, tabSize: ~/editor.tabSize }" on-keydown="@event.ctrlKey && @event.key === 'Enter' ? @.runQuery(~/loaded ? ~/loaded/sql : ~/query) : true" />
       <div class="result">
         <data-table auto-titles no-wrap fixed-header allow-select=false on-init="@.set('@.table', $1)" items="{{~/result}}">
           <bottom>
@@ -1045,7 +1002,9 @@
   <div style="display: flex; flex-shrink: 0;">
     {{#if pad.syntax === 'raport'}}<label as-field class=inline><button class=flat on-click="@.evaluate(pad.text)" style="line-height: 2.5em; height: 2em;" title="Evaluate expression"><span style="font-size: 1.5em;">&#9658;</span></button></label>{{/if}}
     <label as-field class=inline title="Separating segments of a file name with / will result in the pad appearing in a sub-node of the scratch pad tree view."><input value="{{pad.name}}" placeholder="Name..." lazy=1000 /></label>
-    <div style="flex-grow: 1;" />
+    <div style="flex-grow: 1; text-align: center;">
+      {{#unless ~/pad._id}}<button on-click="@.save()">Save</button>{{/unless}}
+    </div>
     <label as-field class=inline><select value="{{pad.syntax}}" lazy=1000>
       <option value="{{undefined}}">plain text</option>
       <option>c_cpp</option>
@@ -1260,7 +1219,7 @@
                             <button on-click="@.runSingleReport(queryreport, false, ~/params, true)">Download Report</button>
                           </div>
                         </tab>
-                        <tab button right hidden="{{!~/queryreport}}" on-click="@.unlink('queryreport')">
+                        <tab button right hidden="{{!~/queryreport}}" on-click="@.swapReport('queryreport')">
                           <title><span title="Close report">&times;</span></title>
                         </tab>
                       </tabs>
@@ -1271,9 +1230,9 @@
                     {{/if}}
                   </div>
                   <div style="width: 15em; flex-shrink: 0; background-color: rgba(128, 128, 128, 0.05); border-left: 1px solid #222;">
-                    {{#each ~/reports}}
-                      {{#if @.isJustQueryReport(.)}}
-                        <div style="padding: 0.5em;" on-click="@.link(@keypath, 'queryreport')" class-selected="~/queryreport === .">{{.definition.name}}</div>
+                    {{#each ~/report.list}}
+                      {{#if .query}}
+                        <div style="padding: 0.5em;" on-click="@.swapReport('queryreport', .)" class-selected="~/queryreport._id === .id">{{.name}}</div>
                       {{/if}}
                     {{/each}}
                   </div>
@@ -1315,7 +1274,7 @@
                         <button on-click="@.runReport(allreport, false, true)" {{#unless @.visibleDBs().length}}disabled title="At least one database must be visible in the list of databases to run this report."{{/unless}}>Download Report</button>
                       </div>
                     </tab>
-                    <tab button right hidden="{{!~/allreport}}" on-click="@.unlink('allreport')">
+                    <tab button right hidden="{{!~/allreport}}" on-click="@.swapReport('allreport')">
                       <title><span title="Close report">&times;</span></title>
                     </tab>
                   </tabs>
@@ -1326,9 +1285,9 @@
                 {{/if}}
               </div>
               <div style="width: 15em; flex-shrink: 0; background-color: rgba(128, 128, 128, 0.05); border-left: 1px solid #222;">
-                {{#each ~/reports}}
-                  {{#if @.isQueryAllReport(.)}}
-                    <div style="padding: 0.5em;" on-click="@.link(@keypath, 'allreport')" class-selected="~/allreport === .">{{.definition.name}}</div>
+                {{#each ~/report.list}}
+                  {{#if .queryAll}}
+                    <div style="padding: 0.5em;" on-click="@.swapReport('allreport', .)" class-selected="~/allreport._id === .id">{{.name}}</div>
                   {{/if}}
                 {{/each}}
               </div>

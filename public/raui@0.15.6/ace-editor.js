@@ -69,10 +69,12 @@
         else { editor.setKeyboardHandler(null); }
 
         if (options.bind !== binding) {
-          if (observer) { observer.cancel(); }
+          var old = observer;
+          if (old) { observer.cancel(); }
           if (options.bind) {
             binding = options.bind;
             observer = ctx.observe(binding, observed, { init: false });
+            if (old) setTimeout(function() { observed(ctx.get(options.bind)); });
           }
         }
       };
