@@ -72,6 +72,20 @@ setInterval(() => {
   Ractive.sharedSet('now', new Date());
 }, 5000);
 
+let syncLock;
+function readSync() {
+  if (syncLock) return;
+  syncLock = true;
+  app.set('sync', tryJSON(localStorage.getItem('pgdiff-sync')) || {});
+  syncLock = false;
+}
+function writeSync() {
+  if (syncLock) return;
+  syncLock = true;
+  localStorage.setItem('pgdiff-sync', JSON.stringify(app.get('sync')));
+  syncLock = false;
+}
+
 const store = globalThis.store = {};
 {
   let deinit;
@@ -90,11 +104,15 @@ const store = globalThis.store = {};
     let design = await store.get('_design/pgdiff'); 
     let changed = false;
     if (!design) {
-      design = { _id: '_design/pgdiff', views: {} };
+      design = { _id: '_design/pgdiff' };
       changed = true;
     }
-    if (typeof design.views !== 'object') {
+    if (!design.views || typeof design.views !== 'object') {
       design.views = {};
+      changed = true;
+    }
+    if (!design.views || typeof design.filters !== 'object') {
+      design.filters = {};
       changed = true;
     }
 
@@ -124,6 +142,21 @@ const store = globalThis.store = {};
       }
     }
 
+    const filts = {
+      by_type: function(d, req) {
+        var q = req.query || {};
+        var types = Array.isArray(q.types) ? q.types : typeof q.types === 'string' ? q.types.split(',') : typeof q.type === 'string' ? q.type.split(',') : [];
+        return !!~types.indexOf(d.type);
+      }.toString(),
+    }
+
+    for (const k in filts) {
+      if (design.filters[k] !== filts[k]) {
+        design.filters[k] = filts[k];
+        changed = true;
+      }
+    }
+
     if (changed) await store.save(design);
 
     // TODO: update export settings to have local storage for sync config and all docs for pouch
@@ -132,6 +165,7 @@ const store = globalThis.store = {};
     const changes = pdb.changes({ since: 'now', live: true, include_docs: true });
     deinit.push(changes.cancel);
     changes.on('change', async ({ doc }) => {
+      let old;
       try {
         store.writing = true;
         switch (doc.type) {
@@ -141,7 +175,8 @@ const store = globalThis.store = {};
 
           case 'scratch':
             app.set('store.scratch.list', await store.list('scratch'));
-            if (app.get(`store.scratch.${doc._id}`)) app.set(`store.scratch.${doc._id}`, doc);
+            old = app.get(`store.scratch.${doc._id}`);
+            if (old && old._rev !== doc._rev) app.set(`store.scratch.${doc._id}`, doc);
             break;
 
           case 'connection':
@@ -150,16 +185,18 @@ const store = globalThis.store = {};
 
           case 'query':
             app.set('store.query.list', await store.list('query'));
-            if (app.get(`store.query.${doc._id}`)) app.set(`store.query.${doc._id}`, doc);
+            old = app.get(`store.query.${doc._id}`);
+            if (old && old._rev !== doc._rev) app.set(`store.query.${doc._id}`, doc);
             break;
 
           case 'report':
             app.set('store.report.list', await store.list('report'))
-            if (app.get(`store.report.${doc._id}`)) app.set(`store.report.${doc._id}`, doc);
+            old = app.get(`store.report.${doc._id}`);
+            if (old && old._rev !== doc._rev) app.set(`store.report.${doc._id}`, doc);
             break;
         }
       } catch (e) {
-        // TODO: do something with the error?
+        console.error('pouchdb change tracking error', e);
       } finally {
         store.writing = false;
       }
@@ -269,22 +306,29 @@ const store = globalThis.store = {};
   }
 
   let desync;
-  store.sync = function sync(settings) {
-    if (desync) for (const c of desync) c();
+  store.sync = function sync(servers) {
+    if ((servers || []).map(s => JSON.stringify(s)).sort().join('') === (desync || []).map(d => d._pgdiff).sort().join('')) return;
+    // TODO: install a backoff function that doesn't go back to 10 minues maybe?
+    if (desync) for (const s of desync) s.cancel();
     desync = [];
     // TODO: use active and paused events to show status in ui
-    if (Array.isArray(settings.sync)) {
-      for (const s of settings.sync) {
-        const url = `https://${s.user ? `${s.user}:${s.password}@` : ''}${s.host}/${s.db}`;
+    if (Array.isArray(servers)) {
+      for (const s of servers) {
+        if (!s.valid) continue;
+        const url = `${s.protocol}://${s.user ? `${s.user}:${s.password}@` : ''}${s.host}:${s.port}/${s.db}`;
         const types = s.types;
         const sync = pdb.sync(url, {
-          filter(d) {
-            return types.includes(d.type);
-          },
+          filter: 'pgdiff/by_type',
+          query_params: { types },
           live: true, retry: true,
+          since: 0, style: 'main_only',
         });
         sync.on('error', e => app.host.toast(e, { type: 'error', timeout: 6000 }));
-        desync.push(sync.cancel);
+        sync.on('active', () => console.log('syncing'));
+        sync.on('paused', e => console.log('sync paused', e || 'no error'));
+        sync.on('change', c => console.log('sync change', c));
+        desync.push(sync);
+        sync._pgdiff = JSON.stringify(s);
       }
     }
   }
@@ -309,6 +353,19 @@ const store = globalThis.store = {};
       } else if (!cur) {
         await store.save(d);
       }
+    }
+  }
+
+  store.validate = async function validate(config) {
+    const url = `${config.protocol}://${config.user ? `${config.user}:${config.password}@` : ''}${config.host}:${config.port}/${config.db}`;
+    const p = new PouchDB(url);
+    try {
+      await p.info();
+      p.close();
+      return true;
+    } catch (e) {
+      console.warn(`Could not validate sync server connection`, e);
+      return false;
     }
   }
 }
@@ -462,7 +519,6 @@ function expandSchema(schema) {
 }
 
 let reportId = 0;
-let scratchId = 0;
 let localDiffId = 0;
 
 class App extends Ractive {
@@ -497,6 +553,19 @@ Ractive.extendWith(App, {
       .stiped:nth-child(even), .striped-even { background-color: ${data('theme') === 'dark' ? '#3b3b3b' : '#fdfdfd'}; }
     `;
   },
+  observe: {
+    sync: {
+      handler: debounce(() => {
+        writeSync();
+        store.sync(app.get('sync.servers'));
+      }, 5000, {
+        check() {
+          return !syncLock;
+        }
+      }),
+      init: false,
+    }
+  }
 });
 
 const app = globalThis.app = new App({
@@ -543,7 +612,10 @@ const app = globalThis.app = new App({
     },
     'store.settings': {
       handler: debounce(v => {
-        if (v) store.save(v);
+        if (v) {
+          if (v.type !== 'settings') v.type = 'settings';
+          store.save(v);
+        }
       }, 15000, {
         check(v) {
           return v && !store.writing;
@@ -784,6 +856,8 @@ const app = globalThis.app = new App({
 Ractive.helpers.appSet = (p, v) => app.set(p, v);
 
 store.init();
+readSync();
+store.sync(app.get('sync.servers'));
 
 class ControlPanel extends Window {
   constructor(opts) { super(opts); }
@@ -932,6 +1006,10 @@ class ControlPanel extends Window {
     const file = (await load('.pgdconf', false)).text;
     store.restore(JSON.parse(file).store);
   }
+  async validateSync(path) {
+    const config = this.get(path);
+    this.set(`${path}.valid`, await store.validate(config));
+  }
 }
 Window.extendWith(ControlPanel, {
   template: '#control-panel',
@@ -951,6 +1029,7 @@ Window.extendWith(ControlPanel, {
   on: {
     init() {
       // map in the data from the root instance
+      this.link('sync', 'sync', { instance: app });
       this.link('status', 'status', { instance: app });
       this.link('entries', 'entries', { instance: app });
       this.link('newSegment', 'newSegment', { instance: app });
@@ -1219,8 +1298,8 @@ Window.extendWith(Query, {
 `,
   on: {
     init() {
-      this.set('settings', Object.assign({}, app.get('settings')));
-      this.link('settings.editor', 'editor', { instance: app });
+      this.set('settings', Object.assign({}, app.get('store.settings')));
+      this.link('store.settings.editor', 'editor', { instance: app });
       this.link('loadedQuery', 'loadedQuery', { instance: app });
     },
     raise() {
@@ -1758,7 +1837,7 @@ class ScratchPad extends Window {
   }
   saveDebounced = debounce(() => this.save(), 15000, {
     check() {
-      const res = !this.lock && this.get('pad._id');
+      const res = !store.writing && !this.lock && this.get('pad._id');
       if (res) this.set('unsaved', true);
       return res;
     },
@@ -2838,6 +2917,7 @@ function debounce(fn, timeout = 1000, opts) {
     if (typeof opts.check === 'function' && !opts.check.apply(opts.target, args)) return;
     if (res.timeout < 0) return;
     if (res.timeout < 200 || isNaN(res.timeout)) res.timeout = 1000;
+    lastArgs = args;
     tm = setTimeout(callback, res.timeout);
   });
   res.timeout = timeout;
@@ -2897,10 +2977,6 @@ function csvToHtml(text) {
 <head><style>body { margin: 0; padding: 1em; } pre { white-space: pre-wrap; margin: 0.5em; padding: 0.5em; background-color: ${dark ? '#333' : '#fff'}; color: ${dark ? '#ddd' : '#222'}; box-shadow: 0 0 10px rgba(${dark ? '255, 255, 255' : '0, 0, 0'}, 0.5); border: 1px solid; }</style></head>
 <body><pre><code>${text}</code></pre></body>
 </html>`;
-}
-
-function readSync() {
-  // TODO: handle sync settings here
 }
 
 window.addEventListener('beforeunload', unload);
