@@ -547,7 +547,7 @@
           <legend>Local Diff Options</legend>
           <label as-field>Default Left Mode<select value="{{~/store.settings.diff.leftview}}"><option value="{{undefined}}">tree</option><option>text</option></select></label>
           <label as-field>Default Right Mode<select value="{{~/store.settings.diff.rightview}}"><option value="{{undefined}}">tree</option><option>text</option></select></label>
-          <!--<label as-field>Default Value Format<select value="{{~/store.settings.diff.format}}"><option value="{{undefined}}">raport</option><option>json</option></select></label>-->
+          <label as-field>Default Value Format<select value="{{~/store.settings.diff.format}}"><option value="{{undefined}}">json</option><option>raport</option></select></label>
         </fieldset>
         <fieldset style="margin-top: 1em;">
           <legend>Sync Servers <tip>Local data can by configured to sync with CouchDB and PouchDB servers.</tip></legend>
@@ -1508,7 +1508,7 @@
         <div style="display: flex; justify-content: space-evenly; align-items: center;">
           {{#if ~/leftView === 'tree' || ~/rightView === 'tree'}}<label style="font-size: 0.7em;"><input type=checkbox checked="{{~/expandAll}}"> Expand all tree nodes?</label>{{/if}}
           <h3>Diff</h3>
-          <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</div>
+          <div><select value="{{strings}}"><option value="{{undefined}}">json</option><option>raport</option></select></div>
         </div>
         <pre style="overflow: auto;"><code>
         {{#each @.diff(.left, .right)}}

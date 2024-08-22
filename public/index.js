@@ -1,4 +1,4 @@
-const { evaluate, template, registerOperator, parse, run, Root } = Raport;
+const { evaluate, template, registerOperator, parse, run, Root, stringify } = Raport;
 const { docs } = Raport.Design;
 const { Window } = RauiWindow;
 
@@ -1208,21 +1208,25 @@ ${data('theme') === 'dark' ? `
   on: {
     init() {
       this.link('copied', 'copied', { instance: app });
-      const s = app.get('settings.diff') || {};
+      const s = app.get('store.settings.diff') || {};
       this.set('leftView', s.leftview === 'text' ? undefined : 'tree');
       this.set('rightView', s.rightview === 'text' ? undefined : 'tree');
-      this.set('format', s.format);
+      this.set('strings', s.format);
     },
   },
   observe: {
-    'left right leftView rightView': {
+    'left right leftView rightView strings': {
       handler(_v, _o, k) {
-        if (k.startsWith('left')) {
+        let left = k.startsWith('left'), right = k.startsWith('right');
+        const strings = this.get('strings');
+        if (k === 'strings') left = right = true;
+        if (left) {
           if (this.get('leftView') !== 'tree') return;
-          this.set('lefttree', treeify(this.parse(this.get('left'))));
-        } else {
+          this.set('lefttree', treeify(this.parse(this.get('left')), 0, strings));
+        }
+        if (right) {
           if (this.get('rightView') !== 'tree') return;
-          this.set('righttree', treeify(this.parse(this.get('right'))));
+          this.set('righttree', treeify(this.parse(this.get('right')), 0, strings));
         }
       },
       strict: true,
@@ -2937,14 +2941,14 @@ function tryJSON(what) {
   }
 }
 
-function treeify(val, depth = 0) {
+function treeify(val, depth = 0, mode = 'json') {
   if (typeof val === 'object' && val) {
     if (Array.isArray(val)) {
-      return { type: 'array', children: val.reduce((a, c, index) => (a.push({ index, value: treeify(c, depth + 1) }), a), []), expand: !depth };
+      return { type: 'array', children: val.reduce((a, c, index) => (a.push({ index, value: treeify(c, depth + 1, mode) }), a), []), expand: !depth };
     } else {
-      return { type: 'node', children: Object.entries(val).reduce((a, [key, value]) => (a.push({ key, value: treeify(value, depth + 1) }), a), []), expand: !depth };
+      return { type: 'node', children: Object.entries(val).reduce((a, [key, value]) => (a.push({ key, value: treeify(value, depth + 1, mode) }), a), []), expand: !depth };
     }
-  } else return { type: 'leaf', value: val === 'undefined' ? 'undefined' : JSON.stringify(val) };
+  } else return { type: 'leaf', value: mode === 'raport' ? stringify({ v: val }) : (val === 'undefined' ? 'undefined' : JSON.stringify(val)) };
 }
 
 function dirify(v, oldtree) {
