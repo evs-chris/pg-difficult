@@ -1005,7 +1005,7 @@ class ControlPanel extends Window {
     download(`${settings.title ? `${settings.title} - ` : ''}${window.location.host} ${evaluate('@date#timestamp')} settings.pgdconf`.replace(/:/g, '-'), JSON.stringify(json), 'application/pg-difficult-config');
   }
   async importSettings() {
-    const file = JSON.parse(await load('.pgdconf', false)).text);
+    const file = JSON.parse((await load('.pgdconf', false)).text);
     if (file.store) store.restore(file.store);
     // TODO: ask what to restore and how (store mode)
   }
