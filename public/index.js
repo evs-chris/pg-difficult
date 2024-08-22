@@ -999,13 +999,15 @@ class ControlPanel extends Window {
   }
   async exportSettings() {
     const json = {};
-    const settings = app.get('settings');
+    const settings = app.get('store.settings') || {};
     json.store = await store.dump();
+    json.sync = app.get('sync');
     download(`${settings.title ? `${settings.title} - ` : ''}${window.location.host} ${evaluate('@date#timestamp')} settings.pgdconf`.replace(/:/g, '-'), JSON.stringify(json), 'application/pg-difficult-config');
   }
   async importSettings() {
-    const file = (await load('.pgdconf', false)).text;
-    store.restore(JSON.parse(file).store);
+    const file = JSON.parse(await load('.pgdconf', false)).text);
+    if (file.store) store.restore(file.store);
+    // TODO: ask what to restore and how (store mode)
   }
   async validateSync(path) {
     const config = this.get(path);
