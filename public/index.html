@@ -1019,16 +1019,16 @@
   <div class=content-wrapper>
     {{#each diff as pair}}
       {{#if pair[0] != null && pair[1] != null}}
-        <div class="schema-diff striped">
+        <div class="schema-diff striped striped-{{@index % 2 === 0 ? 'even' : 'odd'}}">
           <div class="name" title="{{@key}}">{{@key}}</div>
-          <div class="left" title="{{pair[0]}}">{{typeof pair[0] === 'object' ? JSON.stringify(pair[0]) : pair[0]}}</div>
-          <div class="right" title="{{pair[1]}}">{{typeof pair[1] === 'object' ? JSON.stringify(pair[1]) : pair[1]}}</div>
+          <div class="left" title="{{pair[0]}}" on-click="copyToClipboard(pair[0], 'Copied value to clipboard.'), false">{{typeof pair[0] === 'object' ? JSON.stringify(pair[0]) : pair[0]}}</div>
+          <div class="right" title="{{pair[1]}}" on-click="copyToClipboard(pair[1], 'Copied value to clipboard.'), false">{{typeof pair[1] === 'object' ? JSON.stringify(pair[1]) : pair[1]}}</div>
         </div>
       {{else}}
-        <div class="schema-diff whole striped">
+        <div class="schema-diff whole striped striped-{{@index % 2 === 0 ? 'even' : 'odd'}}" on-click="@event.shiftKey ? copyToClipboard(pair[0] || {}, 'Copied old value to clipboard.') : copyToClipboard(pair[1] || {}, 'Copied new value to clipboard.'), false">
           <div class="name">{{#if pair[0] == null}}Added{{else}}Removed{{/if}} {{@key}}</div>
           {{#each pair[0] || pair[1]}}
-            <div class="entry"><div class="key">{{@key}}</div><div class="value">{{typeof . === 'object' ? JSON.stringify(.) : .}}</div></div>
+            <div class="entry" on-click="copyToClipboard(., 'Copied value to clipboard.'), false"><div class="key">{{@key}}</div><div class="value">{{typeof . === 'object' ? JSON.stringify(.) : .}}</div></div>
           {{/each}}
         </div>
       {{/if}}

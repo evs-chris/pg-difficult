@@ -507,8 +507,8 @@ function expandSchema(schema) {
   for (const t of schema.views || []) {
     if (!res[t.schema]) res[t.schema] = {};
     if (!res[t.schema].views) res[t.schema].views = {};
-    const cols = res[t.schema].views[t.name] = {};
-    for (const c of t.columns) cols[c.name] = Object.assign({}, c, { name: undefined });
+    const view = res[t.schema].views[t.name] = { defintion: t.definition, columns: {} };
+    for (const c of t.columns) view.columns[c.name] = Object.assign({}, c, { name: undefined });
   }
   for (const f of schema.functions) {
     if (!res[f.schema]) res[f.schema] = {};
@@ -1809,7 +1809,7 @@ Window.extendWith(SchemaCompare, {
 .schema-diff .name, .schema-diff .left, .schema-diff .right { width: 33%; }
 .schema-diff .name { font-weight: bold; }
 .schema-diff.whole .name { width: 100%; }
-.entry { padding: 0.2em; }
+.entry { padding: 0.2em 0.2em 0.2em 1em; }
 .entry .key { font-weight: bold; }
 `,
 });
