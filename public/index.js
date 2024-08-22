@@ -1610,16 +1610,16 @@ Window.extendWith(Entries, {
   on: {
     complete() {
       this.set({
-        hideBlankFields: app.get('settings.hideBlankFields'),
-        hideDefaultFields: app.get('settings.hideDefaultFields'),
+        hideBlankFields: app.get('store.settings.hideBlankFields'),
+        hideDefaultFields: app.get('store.settings.hideDefaultFields'),
       });
       if (this.get('loaded')) {
         this.link('loaded.schemas', 'schemas');
       } else {
         this.link(`schemas`, 'schemas', { instance: app });
         this.set({
-          allowUndoSegment: app.get('settings.allowUndoSegment'),
-          allowUndoSingle: app.get('settings.allowUndoSingle'),
+          allowUndoSegment: app.get('store.settings.allowUndoSegment'),
+          allowUndoSingle: app.get('store.settings.allowUndoSingle'),
         });
       }
       this.scroller = this.find('.rvlist');
@@ -2657,7 +2657,7 @@ Window.extendWith(SourceEdit, {
   options: { close: false, flex: true, resizable: true, maximize: false, minimize: false, width: '40em', height: '30em' },
   on: {
     init() {
-      this.link('settings.editor', 'editor', { instance: app });
+      this.link('store.settings.editor', 'editor', { instance: app });
     }
   },
   observe: {
@@ -2791,7 +2791,7 @@ function load(ext, multi) {
 }
 
 async function downloadQuery(result) {
-  const settings = app.get('settings');
+  const settings = app.get('store.settings');
   const field = settings.csv.field || ',';
   const record = settings.csv.record || '\n';
   const quote = settings.csv.quote || undefined;
@@ -2845,7 +2845,7 @@ Ractive.helpers.copyToClipboard = (function() {
     app.set('copied.recent', true);
     setTimeout(() => {
       if (cur === id) app.set('copied.recent', false);
-    }, app.get('settings.pasteTimeout') || 10000);
+    }, app.get('store.settings.pasteTimeout') || 10000);
 
     if (text.length > 500000) return Promise.resolve(false);
     if (!clipEl) {
