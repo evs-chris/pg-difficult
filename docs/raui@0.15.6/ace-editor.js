@@ -49,6 +49,14 @@
         lock = false;
       }
 
+      editor.commands.addCommand({
+        name: 'save',
+        bindKey: { win: 'Ctrl-S', mac: 'Command-S', sender: 'editor|cli' }, 
+        exec: function() {
+          ctx.raise('save');
+        }
+      });
+
       handle.update = function(options) {
         if (!options) { return; }
         if (options.syntax) { editor.getSession().setMode('ace/mode/' + options.syntax); }
@@ -69,10 +77,12 @@
         else { editor.setKeyboardHandler(null); }
 
         if (options.bind !== binding) {
-          if (observer) { observer.cancel(); }
+          var old = observer;
+          if (old) { observer.cancel(); }
           if (options.bind) {
             binding = options.bind;
             observer = ctx.observe(binding, observed, { init: false });
+            if (old) setTimeout(function() { observed(ctx.get(options.bind)); });
           }
         }
       };

@@ -55,19 +55,320 @@ Ractive.decorators.tracked = function tracked(node, name) {
   };
 }
 
+const colors = {
+  green: ['#325932', '#447A43'],
+  purple: ['#3e3259', '#57437A'],
+  red: ['#593232', '#7A4343'],
+  orange: ['#a45500', '#bf6200'],
+  blue: ['#323859', '#43567A'],
+  gray: ['#383838', '#595959'],
+  yellow: ['#a48200', '#bf9900'],
+  pink: ['#593244', '#7A435A'],
+  teal: ['#325957', '#437A75'],
+  black: ['#000', '#151515'],
+};
+
 setInterval(() => {
   Ractive.sharedSet('now', new Date());
 }, 5000);
 
-let settingsLock = false;
-function readSettings() {
-  settingsLock = true;
-  app.set('connections', JSON.parse(localStorage.getItem('connections') || '[]'));
-  app.set('settings', JSON.parse(localStorage.getItem('settings') || '{}'));
-  app.set('savedQueries', JSON.parse(localStorage.getItem('savedQueries') || '[]'));
-  app.set('savedReports', JSON.parse(localStorage.getItem('savedReports') || '[]'));
-  app.set('scratchPads', JSON.parse(localStorage.getItem('scratchPads') || '[]'));
-  settingsLock = false;
+let syncLock;
+function readSync() {
+  if (syncLock) return;
+  syncLock = true;
+  app.set('sync', tryJSON(localStorage.getItem('pgdiff-sync')) || {});
+  syncLock = false;
+}
+function writeSync() {
+  if (syncLock) return;
+  syncLock = true;
+  localStorage.setItem('pgdiff-sync', JSON.stringify(app.get('sync')));
+  syncLock = false;
+}
+
+const store = globalThis.store = {};
+{
+  let deinit;
+  let pdb;
+  let linkMap;
+
+  // init pouchdb
+  store.init = async function init() {
+    if (deinit) for (const c of deinit) c();
+    if (pdb) pdb.close();
+    deinit = [];
+    linkMap = { query: {}, report: {}, scratch: {} };
+    store._pdb = pdb = new PouchDB('pgdifficult');
+
+    // make sure views are in place
+    let design = await store.get('_design/pgdiff'); 
+    let changed = false;
+    if (!design) {
+      design = { _id: '_design/pgdiff' };
+      changed = true;
+    }
+    if (!design.views || typeof design.views !== 'object') {
+      design.views = {};
+      changed = true;
+    }
+    if (!design.views || typeof design.filters !== 'object') {
+      design.filters = {};
+      changed = true;
+    }
+
+    const maps = {
+      by_type: function(d) { emit(d.type, d.name || d.label || (d.definition || {}).name); }.toString(),
+      scratch_list: function(d) { if (d.type === 'scratch') emit(d.name, d.syntax); }.toString(),
+      report_list: function(d) {
+        if (d.type === 'report' && d.definition) {
+          const qo = !!(d.sources || []).find(s => s.type === 'query');
+          const qoh = !!(d.sources || []).find(s => s.type === 'query' && !s.config);
+          const qa = !!(d.sources || []).find(s => s.type === 'query-all-sql');
+          emit(d.definition.name, {
+            host: qa || qoh,
+            query: qo,
+            queryAll: qa,
+            kind: d.definition.type,
+          });
+        }
+      }.toString(),
+    };
+
+    for (const k in maps) {
+      if (!design.views[k] || design.views[k].map !== maps[k]) {
+        if (typeof design.views[k] !== 'object' || !design.views[k]) design.views[k] = {};
+        design.views[k].map = maps[k];
+        changed = true;
+      }
+    }
+
+    const filts = {
+      by_type: function(d, req) {
+        var q = req.query || {};
+        var types = Array.isArray(q.types) ? q.types : typeof q.types === 'string' ? q.types.split(',') : typeof q.type === 'string' ? q.type.split(',') : [];
+        return !!~types.indexOf(d.type);
+      }.toString(),
+    }
+
+    for (const k in filts) {
+      if (design.filters[k] !== filts[k]) {
+        design.filters[k] = filts[k];
+        changed = true;
+      }
+    }
+
+    if (changed) await store.save(design);
+
+    // TODO: update export settings to have local storage for sync config and all docs for pouch
+
+    // listen for changes
+    const changes = pdb.changes({ since: 'now', live: true, include_docs: true });
+    deinit.push(changes.cancel);
+    changes.on('change', async ({ doc }) => {
+      let old;
+      try {
+        store.writing = true;
+        switch (doc.type) {
+          case 'settings':
+            app.set('store.settings', doc);
+            break;
+
+          case 'scratch':
+            app.set('store.scratch.list', await store.list('scratch'));
+            old = app.get(`store.scratch.${doc._id}`);
+            if (old && old._rev !== doc._rev) app.set(`store.scratch.${doc._id}`, doc);
+            break;
+
+          case 'connection':
+            app.set('store.connections', await store.list('connection'));
+            break;
+
+          case 'query':
+            app.set('store.query.list', await store.list('query'));
+            old = app.get(`store.query.${doc._id}`);
+            if (old && old._rev !== doc._rev) app.set(`store.query.${doc._id}`, doc);
+            break;
+
+          case 'report':
+            app.set('store.report.list', await store.list('report'))
+            old = app.get(`store.report.${doc._id}`);
+            if (old && old._rev !== doc._rev) app.set(`store.report.${doc._id}`, doc);
+            break;
+        }
+      } catch (e) {
+        console.error('pouchdb change tracking error', e);
+      } finally {
+        store.writing = false;
+      }
+    });
+
+    store.writing = true;
+    // check for old localstorage state
+    let local = tryJSON(localStorage.getItem('settings'));
+    // can't load every time because the report designer also uses localStorage.settings
+    if (!await store.get('settings')) {
+      localStorage.removeItem('settings');
+      if (local) await store.save(Object.assign({}, await store.get('settings'), { _id: 'settings', type: 'settings' }, local));
+    }
+    local = tryJSON(localStorage.getItem('connections'));
+    localStorage.removeItem('connections');
+    if (Array.isArray(local)) for (const i of local) await store.save(Object.assign(i, { type: 'connection' }));
+    local = tryJSON(localStorage.getItem('savedQueries'));
+    localStorage.removeItem('savedQueries');
+    if (Array.isArray(local)) for (const i of local) await store.save(Object.assign(i, { type: 'query' }));
+    local = tryJSON(localStorage.getItem('savedReports'));
+    localStorage.removeItem('savedReports');
+    if (Array.isArray(local)) for (const i of local) await store.save(Object.assign(i, { type: 'report' }));
+    local = tryJSON(localStorage.getItem('scratchPads'));
+    localStorage.removeItem('scratchPads');
+    if (Array.isArray(local)) for (const i of local) await store.save(Object.assign(i, { type: 'scratch' }));
+
+    app.set('store.connections', await store.list('connection'));
+    app.set('store.query.list', await store.list('query'));
+    app.set('store.report.list', await store.list('report'));
+    app.set('store.scratch.list', await store.list('scratch'));
+    app.set('store.settings', await store.get('settings') || { _id: 'settings', type: 'settings' });
+    store.writing = false;
+  };
+
+  store.get = async function get(id) {
+    if (!pdb) throw new Error('Storage has not been initialized.');
+    try {
+      return await pdb.get(id);
+    } catch {
+      return undefined;
+    }
+  }
+
+  store.save = async function save(rec) {
+    if (!rec) return;
+    if (!pdb) throw new Error('Storage has not been initialized.');
+    if (!rec._id) {
+      const r = await pdb.post(rec);
+      rec._id = r.id;
+      rec._rev = r._rev;
+    } else  {
+      const r = await pdb.put(rec);
+      rec._rev = r._rev;
+    }
+    return rec;
+  };
+
+  store.remove = async function remove(rec) {
+    if (!rec) return;
+    if (!pdb) throw new Error('Storage has not been initialized.');
+    if (typeof rec === 'string') rec = await store.get(rec);
+    if (!rec) throw new Error('Invalid record');
+    rec._deleted = true;
+    const r = await pdb.put(rec);
+    rec._rev = r._rev;
+    return rec;
+  };
+
+  store.acquire = async function acquire(which, id) {
+    if (!['query', 'report', 'scratch'].includes(which)) return;
+    if (typeof linkMap[which]?.[id] === 'number') linkMap[which][id] += 1;
+    else linkMap[which][id] = 1;
+
+    if (!app.get(`store.${which}.${id}`)) app.set(`store.${which}.${id}`, await pdb.get(id));
+    return app.get(`store.${which}.${id}`);
+  }
+
+  store.release = async function release(which, id) {
+    if (!['query', 'report', 'scratch'].includes(which)) return;
+    if (typeof linkMap[which]?.[id] === 'number' && linkMap[which]?.[id]) linkMap[which][id] -= 1;
+    if ((linkMap[which]?.[id] || 0) === 0) {
+      const store = app.get(`store.${which}`);
+      if (id in store) {
+        delete store[id];
+        app.update(`store.${which}`);
+      }
+    }
+  }
+
+  store.refCount = function refCount(which, id) {
+    return linkMap[which]?.[id] || 0;
+  }
+
+  store.refCounts = function refCounts(which) {
+    return structuredClone(linkMap[which] || linkMap);
+  }
+
+  store.list = async function list(which) {
+    if (!['query', 'report', 'scratch', 'connection'].includes(which)) return;
+    if (!pdb) throw new Error('Storage has not been initialized.');
+    let res;
+    if (which === 'connection') res = (await pdb.query('pgdiff/by_type', { key: which, include_docs: true })).rows.map(r => r.doc);
+    else if (which === 'scratch') res = (await pdb.query('pgdiff/scratch_list')).rows.map(r => ({ name: r.key, syntax: r.value, id: r.id, type: 'scratch' }));
+    else if (which === 'report') res = (await pdb.query('pgdiff/report_list')).rows.map(r => ({ name: r.key, id: r.id, host: r.value?.host, query: r.value?.query, queryAll: r.value?.queryAll, type: 'report', kind: r.value?.kind }));
+    else res = (await pdb.query('pgdiff/by_type', { key: which })).rows.map(r => ({ name: r.value, id: r.id, type: 'query' }));
+    return evaluate({ list: res }, 'sort(list =>(name || label || id)#lower)');
+  }
+
+  let desync;
+  store.sync = function sync(servers) {
+    if ((servers || []).map(s => JSON.stringify(s)).sort().join('') === (desync || []).map(d => d._pgdiff).sort().join('')) return;
+    // TODO: install a backoff function that doesn't go back to 10 minues maybe?
+    if (desync) for (const s of desync) s.cancel();
+    desync = [];
+    if (Array.isArray(servers)) {
+      for (const s of servers) {
+        if (!s.valid) continue;
+        const url = `${s.protocol}://${s.user ? `${s.user}:${s.password}@` : ''}${s.host}:${s.port}/${s.db}`;
+        const types = s.types;
+        const sync = pdb.sync(url, {
+          filter: 'pgdiff/by_type',
+          query_params: { types },
+          live: true, retry: true,
+          since: 0, style: 'main_only',
+        });
+        sync.on('error', e => app.host.toast(e, { type: 'error', timeout: 6000 }));
+        sync.on('active', () => app.set('syncing', true));
+        sync.on('paused', e => {
+          app.set('syncing', false);
+          if (e) console.warn('sync paused with error', e);
+        });
+        desync.push(sync);
+        sync._pgdiff = JSON.stringify(s);
+      }
+    }
+  }
+
+  store.dump = async function dump() {
+    return (await pdb.allDocs({ include_docs: true })).rows.map(r => r.doc);
+  }
+
+  // mode - 0 = append only, 1 = update if higher rev, 2 = overwrite
+  store.restore = async function restore(docs, mode) {
+    for (const d of docs) {
+      const cur = await store.get(d._id);
+      if (cur && mode) {
+        if (mode === 1) {
+          const [curRev] = cur._rev.split('-');
+          const [dRev] = d._rev.split('-');
+          if (+dRev > +curRev) await store.save(d);
+        } else if (mode === 2) {
+          d._rev = cur._rev;
+          await store.save(d);
+        }
+      } else if (!cur) {
+        await store.save(d);
+      }
+    }
+  }
+
+  store.validate = async function validate(config) {
+    const url = `${config.protocol}://${config.user ? `${config.user}:${config.password}@` : ''}${config.host}:${config.port}/${config.db}`;
+    const p = new PouchDB(url);
+    try {
+      await p.info();
+      p.close();
+      return true;
+    } catch (e) {
+      console.warn(`Could not validate sync server connection`, e);
+      return false;
+    }
+  }
 }
 
 Ractive.helpers.moveUp = (ctx, max) => {
@@ -219,7 +520,6 @@ function expandSchema(schema) {
 }
 
 let reportId = 0;
-let scratchId = 0;
 let localDiffId = 0;
 
 class App extends Ractive {
@@ -240,9 +540,11 @@ class App extends Ractive {
   }
 }
 Ractive.extendWith(App, {
+  noCssTransform: true,
+  cssId: 'app',
   css(data) {
     return `
-      .html { color: ${data('raui.primary.fg') || '#222'}; background-color: ${data('raui.primary.bg') || '#fff'}; }
+      html { color: ${data('raui.primary.fg') || '#222'}; background-color: ${data('raui.primary.bg') || '#fff'}; font-size: ${data('scale') || 100}%; }
       .query-text textarea {
         color: ${data('raui.primary.fg') || data('raui.fg') || '#222'};
         background-color: ${data('raui.primary.bg') || data('raui.bg') || '#fff'};
@@ -252,6 +554,19 @@ Ractive.extendWith(App, {
       .stiped:nth-child(even), .striped-even { background-color: ${data('theme') === 'dark' ? '#3b3b3b' : '#fdfdfd'}; }
     `;
   },
+  observe: {
+    sync: {
+      handler: debounce(() => {
+        writeSync();
+        store.sync(app.get('sync.servers'));
+      }, 5000, {
+        check() {
+          return !syncLock;
+        }
+      }),
+      init: false,
+    }
+  }
 });
 
 const app = globalThis.app = new App({
@@ -296,40 +611,21 @@ const app = globalThis.app = new App({
       },
       strict: true, init: false,
     },
-    'connections savedQueries savedReports scratchPads': {
-      handler: debounce((v, _o, k) => {
-        if (settingsLock) return;
-        localStorage.setItem(k, JSON.stringify(v || []));
-        if (k === 'savedReports') {
-          const min = Math.max.apply(Math, v.map(r => +r.id).concat([reportId]));
-          reportId = min;
-        } else if (k === 'scratchPads') {
-          const min = Math.max.apply(Math, v.map(r => +r.id).concat([scratchId]));
-          scratchId = min;
+    'store.settings': {
+      handler: debounce(v => {
+        if (v) {
+          if (v.type !== 'settings') v.type = 'settings';
+          store.save(v);
+        }
+      }, 15000, {
+        check(v) {
+          return v && !store.writing;
         }
       }),
       init: false,
     },
-    'settings': {
-      handler: debounce((v) => {
-        if (settingsLock) return;
-        localStorage.setItem('settings', JSON.stringify(v || {}));
-      }),
-      init: false,
-    },
-    'settings.color'(v) {
-      const [dark, light] = {
-        green: ['#325932', '#447A43'],
-        purple: ['#3e3259', '#57437A'],
-        red: ['#593232', '#7A4343'],
-        orange: ['#a45500', '#bf6200'],
-        blue: ['#323859', '#43567A'],
-        gray: ['#383838', '#595959'],
-        yellow: ['#a48200', '#bf9900'],
-        pink: ['#593244', '#7A435A'],
-        teal: ['#325957', '#437A75'],
-        black: ['#000', '#151515'],
-      }[v || 'green'];
+    'store.settings.color'(v) {
+      const [dark, light] = colors[v || 'green'];
       Ractive.styleSet({
         'colors.darker': dark,
         'colors.lighter': light,
@@ -337,9 +633,12 @@ const app = globalThis.app = new App({
         'raui.window.title.bg': dark,
       });
     },
-    'settings.title'(v) {
+    'store.settings.title'(v) {
       if (v) document.title = `${v} - pg-difficult`;
       else document.title = 'pg-difficult';
+    },
+    'store.settings.scale'(v) {
+      Ractive.styleSet('scale', v);
     },
     '@.host': {
       handler(v) {
@@ -348,6 +647,7 @@ const app = globalThis.app = new App({
             const wins = v.get('windows');
             const list = [];
             for (const k in wins) {
+              if (!wins[k]) continue;
               if (!/query-|leaks-|entries-|control-|host-/.test(k)) list.push({ title: wins[k].title, marquee: true, action() { v.raise(k, true); } });
             }
             this.set('others', list);
@@ -365,7 +665,7 @@ const app = globalThis.app = new App({
       },
       strict: true,
     },
-    'settings.theme'(v) {
+    'store.settings.theme'(v) {
       if (v !== 'light' && v !== 'dark') {
         const ml = window.matchMedia('(prefers-color-scheme: dark)');
         v = ml.matches ? 'dark' : 'light';
@@ -488,20 +788,24 @@ const app = globalThis.app = new App({
     }
   },
   openReport(report) {
-    const id = report?.id ?? ++reportId;
-    const wid = `report-${id}`;
-    let win = this.host.getWindow(wid);
-    if (win) return win.raise(true);
-    win = new Report({ data: { reportId } }, report);
-    this.host.addWindow(win, { id: wid, title: `Loading report...` });
+    if (report?.id) {
+      const wid = `report-${report.id}`;
+      const win = this.host.getWindow(wid);
+      if (win) return win.raise(true);
+    }
+    const win = new Report();
+    if (report?.id) win.load(report.id);
+    this.host.addWindow(win, { title: report?.id ? `Loading report...` : 'New Report' });
   },
   openScratch(pad) {
-    const id = pad?.id ?? ++scratchId;
-    const wid = `scratch-${id}`;
-    let win = this.host.getWindow(wid);
-    if (win) return win.raise(true);
-    win = new ScratchPad({ data: { scratchId } }, pad);
-    this.host.addWindow(win, { id: wid, title: `Loading scratch pad...` });
+    if (pad?.id) {
+      const wid = `scratch-${pad.id}`;
+      const win = this.host.getWindow(wid);
+      if (win) return win.raise(true);
+    }
+    win = new ScratchPad();
+    if (pad?.id) win.load(pad.id);
+    this.host.addWindow(win, { title: pad?.id ? `Loading scratch pad...` : 'New Scratch Pad' });
   },
   openLocalDiff() {
     const id = ++localDiffId;
@@ -545,26 +849,32 @@ const app = globalThis.app = new App({
   },
   exploreHosts() {
     const wnd = new HostExplore();
-    wnd.link('savedReports', 'reports', { instance: this });
+    wnd.link('store.report', 'reports', { instance: this });
     app.host.addWindow(wnd);
   },
 });
 
 Ractive.helpers.appSet = (p, v) => app.set(p, v);
 
-readSettings();
+store.init();
+readSync();
+store.sync(app.get('sync.servers'));
 
 class ControlPanel extends Window {
   constructor(opts) { super(opts); }
   diffStateMap = new Map();
   async editConnection(which) {
-    const config = (this.get('connections') || [])[which];
-    const wnd = new Connect({ data: { config: Object.assign({}, config) } });
+    const config = which;
+    const wnd = new Connect({ data: { config: Object.assign({ type: 'connection' }, config) } });
     this.host.addWindow(wnd, { block: this });
     const res = await wnd.result;
-    if (res !== false) {
-      if (which != null) this.splice('connections', which, 1, res);
-      else this.push('connections', res);
+    if (res !== false) await store.save(res);
+  }
+  async remove(doc) {
+    if (await app.confirm(`Are you sure you want to remove this ${doc.type}?`)) {
+      store.remove(doc._id || doc.id || doc);
+      const w = this.host.getWindow(`${doc.type}-${doc._id || doc.id}`);
+      if (w) w.close(true);
     }
   }
   next(segment) {
@@ -666,17 +976,13 @@ class ControlPanel extends Window {
   poll() {
     app.notify({ action: 'interval', time: this.get('status.pollingInterval') });
   }
-  report(rep) {
-    app.openReport(rep);
-  }
-  scratch(pad) {
-    app.openScratch(pad);
+  open(v) {
+    if (v.type === 'report') app.openReport(v);
+    else if (v.type === 'scratch') app.openScratch(v);
+    else if (v.type === 'query') app.set('loadedQuery', v.id);
   }
   localDiff() {
     app.openLocalDiff();
-  }
-  reportHasQuerySql(rep) {
-    return rep.sources.find(s => s.type === 'query-all-sql' || s.type === 'query' && !s.config);
   }
   halt() {
     app.set('halted', true);
@@ -685,23 +991,32 @@ class ControlPanel extends Window {
   exploreHosts() {
     app.exploreHosts();
   }
-  exportSettings() {
+  evalPad() {
+    const scratch = new ScratchPad();
+    this.host.addWindow(scratch, { title: 'Eval Pad' });
+    scratch.set('pad.syntax', 'raport');
+    scratch.findComponent('split')?.resize(0, 50);
+  }
+  async exportSettings() {
     const json = {};
-    json.settings = app.get('settings');
-    json.connections = app.get('connections');
-    json.savedQueries = app.get('savedQueries');
-    json.savedReports = app.get('savedReports');
-    json.scratchPads = app.get('scratchPads');
-    download(`${window.location.host} ${evaluate('@date#timestamp')} settings.pgdconf`.replace(/:/g, '-'), JSON.stringify(json), 'application/pg-difficult-config');
+    const settings = app.get('store.settings') || {};
+    json.store = await store.dump();
+    json.sync = app.get('sync');
+    download(`${settings.title ? `${settings.title} - ` : ''}${window.location.host} ${evaluate('@date#timestamp')} settings.pgdconf`.replace(/:/g, '-'), JSON.stringify(json), 'application/pg-difficult-config');
   }
   async importSettings() {
-    const file = (await load('.pgdconf', false)).text;
-    app.set(JSON.parse(file));
+    const file = JSON.parse(await load('.pgdconf', false)).text);
+    if (file.store) store.restore(file.store);
+    // TODO: ask what to restore and how (store mode)
+  }
+  async validateSync(path) {
+    const config = this.get(path);
+    this.set(`${path}.valid`, await store.validate(config));
   }
 }
 Window.extendWith(ControlPanel, {
   template: '#control-panel',
-  css: `
+  css(data) { return `
 .record { display: flex; align-items: center; justify-content: space-between; }
 .connection { display: flex; flex-direction: column; }
 .connection .constr { display: flex; flex-grow: 1; min-width: 20em; align-items: center; }
@@ -711,20 +1026,18 @@ Window.extendWith(ControlPanel, {
 .query .sql { width: 60%; }
 .query .actions { width: 25%; }
 .report, .scratch { display: flex; align-items: center; justify-content: space-between; }
-`,
+.tree-children:after { background-color: ${data('raui.primary.bg') || '#fff'}; }
+`; },
   options: { title: 'Control Panel', flex: true, close: false, resizable: true, width: '60em', height: '45em', id: 'control-panel' },
   on: {
     init() {
       // map in the data from the root instance
-      this.link('connections', 'connections', { instance: app });
+      this.link('sync', 'sync', { instance: app });
       this.link('status', 'status', { instance: app });
       this.link('entries', 'entries', { instance: app });
-      this.link('settings', 'settings', { instance: app });
-      this.link('savedQueries', 'savedQueries', { instance: app });
-      this.link('savedReports', 'savedReports', { instance: app });
-      this.link('scratchPads', 'scratchPads', { instance: app });
-      this.link('loadedQuery', 'loadedQuery', { instance: app });
       this.link('newSegment', 'newSegment', { instance: app });
+      this.link('loadedQuery', 'loadedQuery', { instance: app });
+      this.link('store', 'store', { instance: app });
     },
   },
   observe: {
@@ -735,7 +1048,35 @@ Window.extendWith(ControlPanel, {
       if (v && v !== this.get('status.segment')) this.next(v);
     },
   },
+  computed: {
+    connections() {
+      const all = this.get('store.connections') || [];
+      return all.filter(c => !c.use || c.use === 'diff');
+    },
+    scratchPadTree() {
+      const old = this.get('_scratchPadTree');
+      const tree = dirify(this.get('store.scratch.list'), old);
+      this.set('_scratchPadTree', tree);
+      return tree;
+    },
+    queryTree() {
+      const old = this.get('_queryTree');
+      const tree = dirify(this.get('store.query.list'), old);
+      this.set('_queryTree', tree);
+      return tree;
+    },
+    reportTree() {
+      const old = this.get('_reportTree');
+      const tree = dirify(this.get('store.report.list'), old);
+      this.set('_reportTree', tree);
+      return tree;
+    }
+  },
 });
+
+function byName(l, r) {
+  return l.name.toLowerCase() > r.name.toLowerCase() ? 1 : l.name.toLowerCase() < r.name.toLowerCase() ? -1 : l.name > r.name ? 1 : l.name < r.name ? -1 : 0;
+}
 
 app.host.addWindow(new ControlPanel());
 
@@ -914,30 +1255,30 @@ class Query extends Window {
     this.blocked = false;
   }
   async saveQuery() {
-    const query = this.get('query');
-    let name = this.get('name');
-    if (!name) {
-      name = await app.ask('What should this query be named?');
-      if (name) {
-        const qs = app.get('savedQueries') || [];
-        if (qs.find(q => q.name === name)) return this.host.toast(`A query named ${name} already exists.`, { type: 'error' });
-        else {
-          this.set('name', name);
-          app.push('savedQueries', { name, sql: query });
-        }
+    const loaded = this.get('loaded');
+    const name = await app.ask(`Enter a query name:`, 'Query Name', loaded?.name || '');
+    if (name) {
+      if (loaded) {
+        loaded.name = name;
+        await store.save(loaded);
+      } else {
+        const res = await store.save({ name, type: 'query', sql: this.get('query') });
+        await store.acquire('query', res._id);
+        this.link(`store.query.${res._id}`, 'loaded', { instance: app });
       }
-    } else {
-      const idx = (app.get('savedQueries') || []).findIndex(q => q.name === name)
-      if (~idx) app.set(`savedQueries.${idx}`, { name, sql: query });
     }
   }
-  loadQuery() {
-    const q = this.get('loadedQuery');
-    this.set({
-      loadedQuery: undefined,
-      query: q.sql,
-      name: q.name,
-    });
+  async loadQuery(q) {
+    const cur = this.get('loaded');
+    if (q) {
+      await store.acquire('query', q);
+      this.link(`store.query.${q}`, 'loaded', { instance: app });
+    } else if (cur) {
+      this.set('query', cur.sql);
+      this.unlink('loaded');
+    }
+    if (cur && cur._id) store.release('query', cur._id);
+    this.set('loadedQuery', undefined);
   }
   clicked(ev, col, rec) {
     if (col === undefined) return;
@@ -960,13 +1301,16 @@ Window.extendWith(Query, {
 `,
   on: {
     init() {
-      this.set('settings', Object.assign({}, app.get('settings')));
-      this.link('settings.editor', 'editor', { instance: app });
+      this.set('settings', Object.assign({}, app.get('store.settings')));
+      this.link('store.settings.editor', 'editor', { instance: app });
       this.link('loadedQuery', 'loadedQuery', { instance: app });
     },
     raise() {
-      const txt = this.find('textarea');
-      if (txt) txt.focus();
+      const txt = this.getContext('.query-text');
+      if (txt && txt.decorators?.ace) txt.decorators.ace.focus();
+    },
+    destruct() {
+      this.loadQuery();
     },
   },
   observe: {
@@ -1471,24 +1815,37 @@ Window.extendWith(SchemaCompare, {
 });
 
 class ScratchPad extends Window {
-  constructor(opts, pad) {
+  constructor(opts) {
     super(opts);
-    const id = pad?.id || this.get('scratchId') || ++scratchId;
-    pad = pad || { id, syntax: 'markdown', text: '' };
-    this.upstream = pad;
-    if (!('text' in pad)) pad.text = '';
-    setTimeout(() => this.set('pad', JSON.parse(JSON.stringify(pad))));
   }
-  save() {
-    const saved = app.get('scratchPads') || [];
-    const pad = this.get('pad');
-    if (!pad || !pad.id) return;
-    const idx = saved.findIndex(r => r.id === pad.id);
-    if (~idx) app.splice('scratchPads', idx, 1, pad);
-    else app.push('scratchPads', pad);
-    this.upstream = Object.assign({}, pad);
+  async load(id) {
+    this.lock = true;
+    const old = this.get('pad');
+    await store.acquire('scratch', id);
+    this.link(`store.scratch.${id}`, 'pad', { instance: app });
+    if (old?._id) store.release('scratch', old._id);
+    if (id) this.host.changeWindowId(this.id, `scratch-${id}`);
+    this.lock = false;
   }
-  saveDebounced = debounce(() => this.save(), 2000);
+  async save() {
+    const pad = Object.assign({}, this.get('pad'));
+    if (pad._id) store.save(pad);
+    else {
+      pad.type = 'scratch';
+      const res = await store.save(pad);
+      await this.load(res._id);
+    }
+    this.saveDebounced.cancel();
+    this.set('unsaved', false);
+  }
+  saveDebounced = debounce(() => this.save(), 15000, {
+    check() {
+      const res = !store.writing && !this.lock && this.get('pad._id');
+      if (res) this.set('unsaved', true);
+      return res;
+    },
+    target: this,
+  });
   evaluate(txt) {
     if (this.ace) {
       const sel = this.getContext(this.ace).decorators.ace.editor.getSelectedText();
@@ -1546,37 +1903,31 @@ dd { margin: 0.5em 0 1em 2em; white-space: pre-wrap; }
   options: { flex: true, resizable: true, minimize: false, width: '50em', height: '35em' },
   on: {
     init() {
-      this.link('settings.editor', 'editor', { instance: app });
+      this.link('store.settings.editor', 'editor', { instance: app });
       const ps = Diff.prototype.template.p;
       this.partials.root = ps.root;
       this.partials.array = ps.array;
       this.partials.leaf = ps.leaf;
       this.partials.node = ps.node;
-      this.watch = app.observe('scratchPads', v => {
-        const id = this.get('pad.id');
-        const txt = this.get('pad.text');
-        if (v) {
-          const up = v.find(p => p.id == id);
-          if (up) {
-            this.set('pad.syntax', up.syntax);
-            this.set('pad.name', up.name);
-            if (up.text !== txt) {
-              if (this.upstream?.text === txt) {
-                this.set('pad.text', up.text);
-                this.set('diff', false);
-              } else this.set('diff', true);
-            } else this.set('diff', false);
-            this.upstream = up;
-          }
+    },
+    raise() {
+      setTimeout(() => {
+        const el = this.find('.editor-el');
+        if (el) {
+          const ctx = this.getContext(el);
+          ctx.decorators?.ace?.focus();
         }
-      }, { strict: true });
+      });
     },
     destruct() {
-      if (this.watch) this.watch.cancel();
-    }
+      if (this.get('pad._id')) store.release('scratch', this.get('pad._id'));
+    },
+    render() {
+      this.saveDebounced.timeout = this.get('editor.autosave') ?? 15000;
+    },
   },
   data() {
-    return { docs, ops: evaluate(docs.operators), expand: {} };
+    return { docs, ops: evaluate(docs.operators), expand: {}, pad: { name: '', syntax: 'markdown', text: '' } };
   },
   computed: {
     operators() {
@@ -1593,14 +1944,17 @@ dd { margin: 0.5em 0 1em 2em; white-space: pre-wrap; }
   observe: {
     'pad.name'(n) {
       this.title = `Scratch Pad${n ? ` - ${n}` : ''}`;
-      this.save();
+      this.saveDebounced && this.saveDebounced();
     },
     'pad.syntax'() {
-      if (typeof this.get('pad.text') === 'string') this.save();
+      if (typeof this.get('pad.text') === 'string') this.saveDebounced && this.saveDebounced();
     },
     'pad.text'(v) {
-      if (typeof v === 'string') this.saveDebounced();
+      if (typeof v === 'string') this.saveDebounced && this.saveDebounced();
     },
+    'editor.autosave'(v) {
+      if (this.saveDebounced) this.saveDebounced.timeout = v ?? 15000;
+    }
   },
 });
 
@@ -1633,6 +1987,14 @@ class HostExplore extends Window {
     }
   }
 
+  async editHost(con) {
+    const config = con?.config || { type: 'connection', use: 'host' };
+    const wnd = new Connect({ data: { config: Object.assign({ type: 'connection' }, config) } });
+    this.host.addWindow(wnd, { block: this });
+    const res = await wnd.result;
+    if (res !== false) await store.save(res);
+  }
+
   async refreshSchema(selected) {
     this.blocked = true;
 
@@ -1644,14 +2006,6 @@ class HostExplore extends Window {
     }
 
     this.blocked = false;
-  }
-
-  isQueryAllReport(report) {
-    return (report?.sources || []).find(s => s.type === 'query-all-sql');
-  }
-
-  isJustQueryReport(report) {
-    return (report?.sources || []).find(s => s.type === 'query');
   }
 
   visibleDBs(sample) {
@@ -1810,7 +2164,8 @@ class HostExplore extends Window {
     const wid = `report-${id}`;
     let win = this.host.getWindow(wid);
     if (win) return win.raise(true);
-    win = new Report({ data: { reportId } }, report, this);
+    win = new Report({}, this);
+    if (report) win.load(report._id || report.id);
     this.host.addWindow(win, { id: wid, title: `Loading report...` });
   }
 
@@ -1890,30 +2245,30 @@ class HostExplore extends Window {
     this.blocked = false;
   }
   async saveQuery() {
-    const query = this.get('query');
-    let name = this.get('name');
-    if (!name) {
-      name = await app.ask('What should this query be named?');
-      if (name) {
-        const qs = app.get('savedQueries') || [];
-        if (qs.find(q => q.name === name)) return this.host.toast(`A query named ${name} already exists.`, { type: 'error' });
-        else {
-          this.set('name', name);
-          app.push('savedQueries', { name, sql: query });
-        }
+    const loaded = this.get('loaded');
+    const name = await app.ask(`Enter a query name:`, 'Query Name', loaded?.name || '');
+    if (name) {
+      if (loaded) {
+        loaded.name = name;
+        await store.save(loaded);
+      } else {
+        const res = await store.save({ name, type: 'query', sql: this.get('query') });
+        await store.acquire('query', res._id);
+        this.link(`store.query.${res._id}`, 'loaded', { instance: app });
       }
-    } else {
-      const idx = (app.get('savedQueries') || []).findIndex(q => q.name === name)
-      if (~idx) app.set(`savedQueries.${idx}`, { name, sql: query });
     }
   }
-  loadQuery() {
-    const q = this.get('loadedQuery');
-    this.set({
-      loadedQuery: undefined,
-      query: q.sql,
-      name: q.name,
-    });
+  async loadQuery(q) {
+    const cur = this.get('loaded');
+    if (q) {
+      await store.acquire('query', q);
+      this.link(`store.query.${q}`, 'loaded', { instance: app });
+    } else if (cur) {
+      this.set('query', cur.sql);
+      this.unlink('loaded');
+    }
+    if (cur && cur._id) store.release('query', cur._id);
+    this.set('loadedQuery', undefined);
   }
 
   schemaEntries(schema, which) {
@@ -1957,6 +2312,17 @@ class HostExplore extends Window {
   }
 
   downloadQuery = downloadQuery;
+
+  async swapReport(path, report) {
+    const cur = this.get(path);
+    if (report) {
+      await store.acquire('report', report.id);
+      this.link(`store.report.${report.id}`, path, { instance: app });
+    } else {
+      this.unlink(path);
+    }
+    if (cur) store.release('report', cur._id);
+  }
 }
 Window.extendWith(HostExplore, {
   template: '#host-explore',
@@ -1975,18 +2341,22 @@ dd { white-space: pre-wrap; }
   helpers: { escapeKey: Ractive.escapeKey },
   on: {
     init() {
-      this.link('connections', '_connections', { instance: app });
-      this.set('settings', Object.assign({}, app.get('settings')));
+      this.link('store.connections', '_connections', { instance: app });
+      this.set('settings', Object.assign({}, app.get('store.settings')));
       this.link('loadedQuery', 'loadedQuery', { instance: app });
       this.link('@', 'app', { instance: app });
       this.link('compareSchema', 'compareSchema', { instance: app });
-      this.link('settings.editor', 'editor', { instance: app });
+      this.link('store.settings.editor', 'editor', { instance: app });
+      this.link('store.report', 'report', { instance: app });
+    },
+    destruct() {
+      this.loadQuery();
     },
   },
   computed: {
     connections() {
       const cons = this.get('_connections');
-      return cons.map(c => {
+      return cons.filter(c => !c.use || c.use === 'host').map(c => {
         return {
           constr: `${c.username || 'postgres'}@${c.host || 'localhost'}:${c.port || 5432}/${c.database}`,
           label: c.label,
@@ -1996,7 +2366,7 @@ dd { white-space: pre-wrap; }
     },
   },
   data() {
-    return { hosts: {}, meta: {}, expanded: {}, schemaexpanded: { table: {} } };
+    return { hosts: {}, schemas: {}, meta: {}, expanded: {}, schemaexpanded: { table: {} } };
   },
   observe: {
     'hosts filter'() {
@@ -2062,14 +2432,28 @@ Window.extendWith(ViewReport, {
 
 let reportFrameId = 0;
 class Report extends Window {
-  constructor(opts, report, parent) {
+  constructor(opts, parent) {
     super(opts);
     this.ownerId = 0;
     this.callbacks = {};
     this._parent = parent;
-    const id = this.get('reportId') || ++reportId;
-    report = report || { id, sources: [], definition: { type: 'page', size: { width: 51, height: 66, margin: [1.5, 1.5] }, name: 'New Report', classifyStyles: true } };
-    this.set('report', JSON.parse(JSON.stringify(report)));
+  }
+
+  async load(id) {
+    await this.unload();
+    await store.acquire('report', id);
+    this.link(`store.report.${id}`, 'report', { instance: app });
+    const rep = this.get('report');
+    if (rep) this.respond({ action: 'set', set: { report: rep.definition, sources: rep.sources } });
+    if (id) setTimeout(() => this.host.changeWindowId(this.id, `report-${id}`));
+  }
+
+  async unload() {
+    const old = this.get('report');
+    if (old?._id) {
+      this.unlink('report');
+      await store.release('report', old._id);
+    }
   }
 
   handleMessage(ev) {
@@ -2089,8 +2473,20 @@ class Report extends Window {
     }
 
     switch (ev.data.action) {
-      case 'ready':
-        wnd.postMessage({ action: 'set', set: { 'settings.theme': app.get('settings.theme'), showProjects: false, report: this.get('report.definition') || {}, sources: this.get('report.sources') || [] } });
+      case 'ready': {
+        const report = this.get('report');
+        const set = { 'settings.theme': app.get('store.settings.theme'), showProjects: false };
+        if (report) {
+          set.report = report.definition;
+          set.sources = report.sources;
+        }
+        wnd.postMessage({ action: 'set', set });
+        break;
+      }
+
+      case 'loaded':
+        if (this.queue) for (const m of this.queue) wnd.postMessage(m);
+        this.queue = [];
         break;
 
       case 'new-source': case 'edit-source':
@@ -2116,16 +2512,8 @@ class Report extends Window {
     const wnd = new SourceEdit({ data: { source: src } });
     this.host.addWindow(wnd, { block: this, title: msg.source ? 'Edit Source' : 'Add Source' });
     const res = await wnd.result;
-    if (res) {
-      if (msg.source) {
-        const idx = (this.get('report.sources') || []).find(s => s.name === msg.source.name);
-        if (~idx) this.splice('report.sources', idx, 1, res);
-        else this.push('report.sources', res);
-      } else {
-        this.push('report.sources', res);
-      }
-      this.respond({ source: res }, msg);
-    } else this.respond({ error: 'cancelled' }, msg);
+    if (res) this.respond({ source: res }, msg);
+    else this.respond({ error: 'cancelled' }, msg);
   }
 
   async fetchSource(msg) {
@@ -2172,31 +2560,36 @@ class Report extends Window {
   }
 
   respond(message, source) {
-    const wnd = this.find('iframe').contentWindow;
+    const wnd = this.rendered && this.find('iframe')?.contentWindow;
     const base = {};
     if (source && source.designId != null) base.designId = source.designId;
-    wnd.postMessage(Object.assign(base, message));
+    const msg = Object.assign(base, message);
+    if (wnd) wnd.postMessage(msg);
+    else (this.queue || (this.queue = [])).push(msg);
   }
 
   request(message) {
     const id = this.ownerId++;
     let ok, fail;
-    const wnd = this.find('iframe').contentWindow;
+    const wnd = this.rendered && this.find('iframe')?.contentWindow;
     const res = new Promise((o, f) => (ok = o, fail = f));
     this.callbacks[id] = [ok, fail];
     message.ownerId = id;
-    wnd.postMessage(message);
+    if (wnd) wnd.postMessage(message);
+    else (this.queue || (this.queue = [])).push(message);
     return res;
   }
 
   async save() {
-    const saved = app.get('savedReports') || [];
-    const report = this.get('report');
+    this.lock = true;
+    const report = this.get('report') || {};
+    const id = report._id;
+    report.type = 'report';
     report.definition = (await this.request({ action: 'get', get: 'report' })).get;
     report.sources = (await this.request({ action: 'get', get: 'sources' })).get;
-    const idx = saved.findIndex(r => r.id === report.id);
-    if (~idx) app.splice('savedReports', idx, 1, report);
-    else app.push('savedReports', report);
+    await store.save(report);
+    if (!id) await this.load(report._id);
+    this.lock = false;
   }
 }
 Window.extendWith(Report, {
@@ -2204,11 +2597,35 @@ Window.extendWith(Report, {
   options: { flex: true, resizable: true, minimize: true, width: '105em', height: '75em' },
   css: `iframe { flex-grow: 1; border: 0; }`,
   on: {
+    init() {
+      this.link('store.settings', 'settings', { instance: app });
+    },
     render() {
       window.addEventListener('message', (this._messageHandler = this.handleMessage.bind(this)));
     },
     unrender() {
       window.removeEventListener('message', this._messageHandler);
+    },
+    destruct() {
+      this.unload();
+    },
+  },
+  observe: {
+    '@style.theme'(v) {
+      this.respond({ action: 'set', set: { 'settings.theme': v } });
+    },
+    'settings.scale'(v) {
+      this.respond({ action: 'set', set: { 'settings.scale': v } });
+    },
+    'settings.color': {
+      handler(v) {
+        const [dark, light] = colors[v || 'green'];
+        this.respond({ action: 'style-set', set: { 'hover': light, 'active': dark } });
+      },
+      defer: true,
+    },
+    report(v) {
+      if (!this.lock && v) this.respond({ action: 'set', set: { report: v.definition, sources: v.sources } });
     },
   },
 });
@@ -2483,12 +2900,41 @@ function unloading() {
   clearTimeout(unloadTm);
 }
 
-function debounce(fn, timeout = 1000, target) {
+function debounce(fn, timeout = 1000, opts) {
   let tm;
-  return (function(...args) {
-    if (tm) clearTimeout(tm);
-    tm = setTimeout(() => fn.apply(target, args), timeout);
+  opts = opts || {};
+  let lastArgs;
+  const cancel = () => {
+    if (tm) {
+      clearTimeout(tm);
+      tm = null;
+    }
+  };
+  const callback = () => {
+    fn.apply(opts.target, lastArgs);
+    tm = null;
+  };
+  let res;
+  res = (function(...args) {
+    cancel();
+    if (typeof opts.check === 'function' && !opts.check.apply(opts.target, args)) return;
+    if (res.timeout < 0) return;
+    if (res.timeout < 200 || isNaN(res.timeout)) res.timeout = 1000;
+    lastArgs = args;
+    tm = setTimeout(callback, res.timeout);
   });
+  res.timeout = timeout;
+  res.cancel = cancel;
+  return res;
+}
+
+function tryJSON(what) {
+  if (typeof what === 'object') return what;
+  try {
+    return JSON.parse(what);
+  } catch {
+    return;
+  }
 }
 
 function treeify(val, depth = 0) {
@@ -2501,6 +2947,33 @@ function treeify(val, depth = 0) {
   } else return { type: 'leaf', value: val === 'undefined' ? 'undefined' : JSON.stringify(val) };
 }
 
+function dirify(v, oldtree) {
+  const tree = { type: 'node', name: '', nodes: [], expand: true };
+  if (Array.isArray(v)) {
+    for (const r of v) {
+      const parts = (r.name || '').split('/');
+      const path = parts.slice(0, -1).filter(v => v);
+      const name = parts.slice(-1)[0] || '<unnamed>';
+      let dir = tree;
+      let old = oldtree;
+      for (const p of path) {
+        let n = dir.nodes.find(n => n.name === p);
+        old = old && old.nodes.find(n => n.name === p);
+        if (!n) {
+          n = { type: 'node', name: p, nodes: [] };
+          if (old) n.expand = old.expand;
+          dir.nodes.push(n);
+          dir.nodes.sort(byName);
+        }
+        dir = n;
+      }
+      dir.nodes.push({ type: 'leaf', name, value: r });
+      dir.nodes.sort(byName);
+    }
+  }
+  return tree;
+}
+
 function csvToHtml(text) {
   const dark = Ractive.styleGet('theme') === 'dark';
   return `<html>
@@ -2511,11 +2984,15 @@ function csvToHtml(text) {
 
 window.addEventListener('beforeunload', unload);
 window.addEventListener('unload', unloading);
-window.addEventListener('storage', debounce(readSettings, 5000));
+window.addEventListener('storage', debounce(readSync, 5000));
 
 // Set up debug helper
 let el;
-document.addEventListener('click', ev => el = ev.target);
+document.addEventListener('click', ev => {
+  el = ev.target;
+  let tip;
+  if (el.classList.contains('field-tip') && (tip = el.getAttribute('title'))) app.host.toast(tip, { type: 'info', timeout: 6000 });
+}, { capture: true });
 document.addEventListener('focus', ev => el = ev.target);
 
 Object.defineProperty(globalThis, 'R', {

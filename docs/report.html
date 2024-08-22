@@ -45,7 +45,7 @@
   </head>
   <body>
     <script type=text/ractive id="template">
-      <report bind-sources on-render="@.set('@.report', $1), @.customize($1)" on-applySettings="@.theme($1)" />
+      <report bind-sources on-render="@.set('@.report', $1), @.customize($1)" on-applySettings="@.loaded()" />
     </script>
     <script>
 // inter-frame communication
@@ -100,10 +100,10 @@ class App extends Ractive {
     }));
   }
 
-  theme(designer) {
-    Ractive.styleSet({
-      active: '#747474',
-      hover: '#447A43',
+  loaded() {
+    setTimeout(() => {
+      respond({ action: 'loaded' });
+      Ractive.styleSet(styles);
     });
   }
 }
@@ -132,6 +132,7 @@ const app = globalThis.app = new App({
   target: 'body',
 });
 
+let styles = {};
 window.addEventListener('message', ev => {
   if (ev.data.designId != null) {
     if (callbacks[ev.data.designId]) callbacks[ev.data.designId][ev.data.error ? 1 : 0](ev.data);
@@ -148,9 +149,18 @@ window.addEventListener('message', ev => {
       app.report.set(ev.data.set);
       break;
 
+    case 'style-set':
+      styles = Object.assign(styles, ev.data.set);
+      Ractive.styleSet(styles);
+      break;
+
     case 'get':
       if (ev.data.get === 'sources') respond({ get: app.get('sources') }, ev.data);
       else respond({ get: app.report.get(ev.data.get) }, ev.data);
+      break;
+
+    case 'style-get':
+      respond({ get: Ractive.styleGet(ev.data.get) }, ev.data);
       break;
 
     default:
