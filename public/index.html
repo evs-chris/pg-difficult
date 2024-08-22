@@ -298,7 +298,10 @@
               {{#if waiting}}<div style="height: 1.5em;">{{>loader}}</div>{{/if}}
             </left>
             <center><div style="font-size: 1.5em;">{{~/settings.title}}</div></center>
-            <right><div class=hamburger title="Toggle menu" on-click="@.toggle('menu.hidden')" /></right>
+            <right>
+              {{#if ~/syncing}}<div style="height: 1.5em; margin-right: 1em;" title="Syncing changes">{{>loader}}</div>{{/if}}
+              <div class=hamburger title="Toggle menu" on-click="@.toggle('menu.hidden')" />
+            </right>
           </app-bar>
         {{/if}}
         <div style="flex-grow: 1;">
@@ -307,7 +310,11 @@
               <app-bar>
                 <left>{{#if waiting}}<div style="height: 1.5em;">{{>loader}}</div>{{/if}}</left>
                 <center>{{window.title}}</center>
-                <right>{{>windowControls}}<div class=hamburger title="Toggle menu" on-click="@.toggle('menu.hidden')" style="margin-left: 2em;" /></right>
+                <right>
+                  {{>windowControls}}
+                  {{#if ~/syncing}}<div style="height: 1.5em; margin-right: 1em;" title="Syncing changes">{{>loader}}</div>{{/if}}
+                  <div class=hamburger title="Toggle menu" on-click="@.toggle('menu.hidden')" style="margin-left: 2em;" />
+                </right>
               </app-bar>
             </max-top>
           </host>

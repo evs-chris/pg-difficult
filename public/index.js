@@ -311,7 +311,6 @@ const store = globalThis.store = {};
     // TODO: install a backoff function that doesn't go back to 10 minues maybe?
     if (desync) for (const s of desync) s.cancel();
     desync = [];
-    // TODO: use active and paused events to show status in ui
     if (Array.isArray(servers)) {
       for (const s of servers) {
         if (!s.valid) continue;
@@ -324,9 +323,11 @@ const store = globalThis.store = {};
           since: 0, style: 'main_only',
         });
         sync.on('error', e => app.host.toast(e, { type: 'error', timeout: 6000 }));
-        sync.on('active', () => console.log('syncing'));
-        sync.on('paused', e => console.log('sync paused', e || 'no error'));
-        sync.on('change', c => console.log('sync change', c));
+        sync.on('active', () => app.set('syncing', true));
+        sync.on('paused', e => {
+          app.set('syncing', false);
+          if (e) console.warn('sync paused with error', e);
+        });
         desync.push(sync);
         sync._pgdiff = JSON.stringify(s);
       }
