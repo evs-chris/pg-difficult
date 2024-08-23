@@ -42,7 +42,6 @@ Ractive.decorators.autofocus = function autofocus(node) {
   }
   return { teardown() {} };
 }
-
 Ractive.decorators.tracked = function tracked(node, name) {
   const init = this[name];
   if (node && name) {
@@ -54,6 +53,7 @@ Ractive.decorators.tracked = function tracked(node, name) {
     }
   };
 }
+Ractive.decorators.serverblock = serverblock;
 
 const colors = {
   green: ['#325932', '#447A43'],
@@ -1038,6 +1038,7 @@ Window.extendWith(ControlPanel, {
       this.link('newSegment', 'newSegment', { instance: app });
       this.link('loadedQuery', 'loadedQuery', { instance: app });
       this.link('store', 'store', { instance: app });
+      this.link('connected', 'connected', { instance: app });
     },
   },
   observe: {
@@ -3028,6 +3029,28 @@ function csvToHtml(text) {
 <head><style>body { margin: 0; padding: 1em; } pre { white-space: pre-wrap; margin: 0.5em; padding: 0.5em; background-color: ${dark ? '#333' : '#fff'}; color: ${dark ? '#ddd' : '#222'}; box-shadow: 0 0 10px rgba(${dark ? '255, 255, 255' : '0, 0, 0'}, 0.5); border: 1px solid; }</style></head>
 <body><pre><code>${text}</code></pre></body>
 </html>`;
+}
+
+function serverblock(node) {
+  Object.assign(node.style, { position: 'absolute', top: 0, left: 0, bottom: 0, right: 0, zIndex: -1, backgroundColor: 'rgba(0, 0, 0, 0.2)', opacity: 0, transition: 'opacity 0.2s ease', display: 'flex', alignItems: 'center', justifyContent: 'space-around', cursor: 'wait' });
+  const watch = app.observe('connected', v => {
+    if (v) {
+      Object.assign(node.style, { opacity: 0, zIndex: -1 });
+      node.innerHTML = '';
+    } else {
+      Object.assign(node.style, { opacity: 1, zIndex: 100 });
+      node.innerHTML = `<div class=not-connected><div class=wrapper><svg class="loader" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg">
+        <circle class="internal-circle" cx="60" cy="60" r="30"></circle>
+        <circle class="external-circle" cx="60" cy="60" r="50"></circle>
+      </svg><div class=reconnecting>Reconnecting...</div></div></div>`;
+    }
+  });
+  return {
+    update() {},
+    teardown() {
+      watch.cancel();
+    },
+  };
 }
 
 window.addEventListener('beforeunload', unload);

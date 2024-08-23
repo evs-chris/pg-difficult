@@ -67,7 +67,7 @@
     font-size: 1.5em;
     content: '\002261';
   }
-  #not-connected {
+  .not-connected {
     position: absolute;
     background-color: rgba(0, 0, 0, 0.2);
     width: 100%;
@@ -80,10 +80,14 @@
     justify-content: space-around;
     z-index: 100;
     cursor: wait;
+    backdrop-filter: blur(2px);
   }
-  #not-connected .wrapper {
+  .not-connected .wrapper {
     display: flex;
     flex-direction: column;
+    max-height: 100%;
+    max-width: 100%;
+    width: 15em;
   }
   .loader {
     width: 100%;
@@ -98,7 +102,7 @@
   .rappbar .loader {
     stroke-width: 10;
   }
-  #not-connected .reconnecting {
+  .not-connected .reconnecting {
     margin-top: 1em;
     text-align: center;
     font-weight: bold;
@@ -321,12 +325,6 @@
         </div>
       </center>
     </shell>
-    {{#unless ~/connected}}<div id="not-connected">
-      <div class=wrapper>
-        {{>loader}}
-        <div class=reconnecting>Reconnecting...</div>
-      </div>
-    </div>{{/unless}}
     <input type=file id=file />
   {{else}}
     <div class=html style="width: 100vw; height: 100vh; display: flex; align-items: center; justify-content: center;">
@@ -385,6 +383,7 @@
           No connections have been saved.
         {{/each}}
       </div>
+      <div as-serverblock />
     </tab>
     <tab title="Active Diffs" hidden="@global.clientOnly">
       <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -412,6 +411,7 @@
           There are no active diffs.
         {{/each}}
       </div>
+      <div as-serverblock />
     </tab>
     <tab title="Connection Monitor" hidden="@global.clientOnly">
       <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -441,6 +441,7 @@
           There are no active connection monitors.
         {{/each}}
       </div>
+      <div as-serverblock />
     </tab>
     <tab title="Saved Queries" hidden="@global.clientOnly">
       <div style="padding: 0.3em; display: flex; justify-content: space-between; align-items: center; min-height: 2.75em;">
@@ -590,7 +591,7 @@
   <buttons>
     {{#unless @global.clientOnly}}
       <button left title="Open a new Host Explorer window to browse databases on all connections, view schema, query across multiple databases, and run reports." on-click="@.exploreHosts()">Host Explorer</button>
-      <button class=reject on-click="@.halt()">Stop pg-difficult</button>
+      <button class=reject on-click="@.halt()" disabled="{{!~/connected}}">Stop pg-difficult</button>
     {{/unless}}
     <button left title="Open a new two-way diff window for local data." on-click="@.localDiff()">Local Diff</button>
     <button left title="Open a new evaluation pad for calculations or inspecting data." on-click="@.evalPad()">Eval Pad</button>
@@ -688,6 +689,7 @@
       </div>
     </split>
   </div>
+  <div as-serverblock />
 </script>
 
 <script type=text/ractive id=entries>
@@ -781,6 +783,9 @@
       {{/if}}
     </div>
   </pop>
+  {{#if @.source && !~/loaded}}
+    <div as-serverblock />
+  {{/if}}
 </script>
 
 <script type=text/ractive id=entries-text>
@@ -851,6 +856,7 @@
       <div class=content-wrapper>{{>leak initial as leaks}}</div>
     </tab>
   </tabs>
+  <div as-serverblock />
 </script>
 
 <script type=text/ractive id=schema>
@@ -1368,6 +1374,7 @@
       </tab>
     </tabs>
   </div>
+  <div as-serverblock />
 </script>
 
 <script type=text/ractive id=report>
