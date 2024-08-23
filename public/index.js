@@ -1438,10 +1438,11 @@ res
 `);
     return res;
   }
-  download() {
+  async download() {
     if (this.event?.event?.ctrlKey || this.event?.event?.shiftKey) return this.openHtml();
     const db = this.source ? this.source.replace(/.*@([^:]+).*\/(.*)/, '$1-$2') : this.get('loaded') ? 'Local file' : 'multiple';
-    const name = `diff ${db} ${evaluate(`#now##date,'yyyy-MM-dd HH mm'`)}`;
+    const name = await app.ask('What should the file be named?', 'File Name', `diff ${db} ${evaluate(`#now##date,'yyyy-MM-dd HH mm'`)}`);
+    if (!name) return;
     const ext = this.event?.event?.shiftKey ? 'html' : 'pgdd';
     let html, css;
     let text;
