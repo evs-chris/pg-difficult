@@ -144,10 +144,13 @@ export async function start(client: Client, opts?: StartOptions) {
     if (!tables.length) throw new Error(`No tables to watch`);
     await client`create schema if not exists pgdifficult`;
     await client`grant all on schema pgdifficult to public`;
-    await client`create table pgdifficult.entries (id bigserial primary key, "schema" varchar not null, "table" varchar not null, segment varchar not null, old json, new json, stamp timestamptz not null);`;
+    await client`create table if not exists pgdifficult.entries (id bigserial primary key, "schema" varchar not null, "table" varchar not null, segment varchar not null, old json, new json, hide boolean, stamp timestamptz not null);`;
+    if (!('hide' in (await client`select e.* from (select 1) as dummy left join pgdifficult.entries e on 1 = 2`)[0])) {
+      await client`alter table pgdifficult.entries add column hide boolean;`;
+    }
     await client`grant all on table pgdifficult.entries to public`;
     await client`grant all on sequence pgdifficult.entries_id_seq to public`;
-    await client`create table pgdifficult.state (key varchar primary key, value varchar);`;
+    await client`create table if not exists pgdifficult.state (key varchar primary key, value varchar);`;
     await client`grant all on table pgdifficult.state to public`;
     await client`insert into pgdifficult.state (key, value) values ('segment', 'initial');`;
     await client.unsafe(`create or replace function pgdifficult.record() returns trigger as $trigger$

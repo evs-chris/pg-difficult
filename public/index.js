@@ -1567,6 +1567,33 @@ res
     (this.source ? app : this).update('entries');
   }
 
+  async toggleHidden(entry) {
+    if (!await app.confirm(`${entry.hide ? 'Restore' : 'Remove'} segment ${entry.segment}?`)) return;
+    const hide = !entry.hide;
+    const all = (this.source || this.combined) ? app.get('entries') : this.get('entries') || [];
+    const targets = adjacentEntries(entry, all, 'segment');
+
+    if (this.source || this.combined) {
+      const srcs = [];
+      for (const t of targets) if (!srcs.includes(t.source)) srcs.push(t.source);
+      const configs = app.get('status.clients');
+      const srcConfig = {};
+      for (const s of srcs) {
+        for (const id in configs) if (configs[id].source === s) srcConfig[s] = id;
+        if (!srcConfig[s]) return;
+      }
+
+      for (const s of srcs) {
+        const ts = targets.filter(t => t.source === s);
+        await request({ action: 'query', query: ['update pgdifficult.entries set hide = $1 where id = any($2)'], params: [[hide, ts.map(t => t.id)]], client: srcConfig[s] });
+      }
+    }
+
+    for (const t of targets) t.hide = hide;
+
+    (this.source ? app : this).update('entries');
+  }
+
   clearEntries() {
     if (this.event?.event?.ctrlKey || this.event?.event?.shiftKey || !this.source) notify({ action: 'clear' });
     else notify({ action: 'clear', source: this.source });
@@ -1596,7 +1623,9 @@ Window.extendWith(Entries, {
     entries() {
       let res = this.get('allEntries');
       const expr = this.get('expr');
+      const showHidden = this.get('showHidden');
       if (expr) res = evaluate({ list: res }, `filter(list =>(${expr}))`);
+      if (!showHidden) res = res.filter(e => !e.hide);
       return res;
     },
     exprError() {

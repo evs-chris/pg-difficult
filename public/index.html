@@ -702,7 +702,7 @@
     <virtual-list bind-items="~/entries" size=75>
       <header>
         {{#if .segment}}
-          <div class=header><h2 title="Double click to rename segment" on-dblclick="@.renameSegment(.), false">{{.segment}}</h2> <div class=buttons style="padding-top: 0.9em;">{{#if ~/allowUndoSegment}}<button class=undo on-click="@.undoSegment(.), false" title="Undo all changes in this segment by replaying the changes in reverse. This will also create a new segment named 'Undo {{.segment}}', unless you hold the ctrl key when clicking this button.">Undo</button>{{/if}}</div></div>
+          <div class=header><h2 title="Double click to rename segment" on-dblclick="@.renameSegment(.), false">{{.segment}}</h2> <div class=buttons style="padding-top: 0.9em;"><button class=undo on-click="@.toggleHidden(.)">{{#if .hide}}Show{{else}}Hide{{/if}}</button>{{#if ~/allowUndoSegment}}<button class=undo on-click="@.undoSegment(.), false" title="Undo all changes in this segment by replaying the changes in reverse. This will also create a new segment named 'Undo {{.segment}}', unless you hold the ctrl key when clicking this button.">Undo</button>{{/if}}</div></div>
         {{/if}}
       </header>
       {{#with . as record, @.details(.) as entry}}
@@ -746,7 +746,7 @@
         {{/if}}
       {{/with}}
       {{#if ~/entries[index + 1] && ~/entries[index + 1].segment !== .segment}}{{#with ~/entries[index + 1]}}
-        <div class=header><h2 title="Double click to rename segment" on-dblclick="@.renameSegment(.), false">{{.segment}}</h2> <div class=buttons style="padding-top: 0.9em;">{{#if ~/allowUndoSegment}}<button class=undo on-click="@.undoSegment(.), false" title="Undo all changes in this segment by replaying the changes in reverse. This will also create a new segment named 'Undo {{.segment}}', unless you hold the ctrl key when clicking this button.">Undo</button>{{/if}}</div></div>
+        <div class=header><h2 title="Double click to rename segment" on-dblclick="@.renameSegment(.), false">{{.segment}}</h2> <div class=buttons style="padding-top: 0.9em;"><button on-click="@.toggleHidden(.)">{{#if .hide}}Show{{else}}Hide{{/if}}</button>{{#if ~/allowUndoSegment}}<button class=undo on-click="@.undoSegment(.), false" title="Undo all changes in this segment by replaying the changes in reverse. This will also create a new segment named 'Undo {{.segment}}', unless you hold the ctrl key when clicking this button.">Undo</button>{{/if}}</div></div>
       {{/with}}{{/if}}
       <else>
         {{#if ~/exprError}}<code class=expr>{{~/expr}}</code> is an invalid filter.<br /><br /><pre>Error: {{~/exprError.message + '\n\n'}}{{~/exprError.marked}}</pre>{{else}}No change entries have been recorded.{{/if}}
@@ -763,6 +763,7 @@
         <label class=inline as-field title="Check to hide empty string fields in entries"><input type=checkbox bind-checked="~/hideBlankFields" /> Hide blank?</label>
         <label class=inline as-field title="Check to hide fields with default values in entries"><input type=checkbox bind-checked="~/hideDefaultFields" /> Hide default?</label>
       {{/if}}
+      <label class=inline as-field title="Check to show hidden segments in entries"><input type=checkbox bind-checked="~/showHidden" /> Show hidden?</label>
       {{#unless (@.source && !~/loaded) && schemas}}
         <div />
       {{/unless}}
