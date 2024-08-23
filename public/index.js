@@ -1404,9 +1404,18 @@ class Entries extends Window {
   constructor(source, opts) {
     super(opts);
     this.set('@.source', source);
+    this._cache = {};
+    this._detailsctx = new Root();
   }
   details(entry) {
-    const res = evaluate({ entry, schema: (this.get('schemas') || {})[entry.source], hideBlank: this.get('hideBlankFields'), hideDefault: this.get('hideDefaultFields') }, `
+    const key = `${entry.source}-${entry.id}`;
+    if (this._cache[key]) return this._cache[key];
+    const ctx = this._detailsctx;
+    ctx.value.entry = entry;
+    ctx.value.schema = (this.get('schemas') || {})[entry.source];
+    ctx.value.hideBlank = this.get('hideBlankFields');
+    ctx.value.hideDefault = this.get('hideDefaultFields');
+    const res = evaluate(ctx, `
 set res = { table:entry.table segment:entry.segment }
 if entry.old and entry.new {
  let d = sort(diff(filter(entry.old =>@key in ~entry.new) entry.new))
@@ -1436,6 +1445,7 @@ if res.record then set res.record = map(res.record =>[@key _] array:1)
 if res.changed then set res.changed = map(res.changed =>[@key _] array:1)
 res
 `);
+    this._cache[key] = res;
     return res;
   }
   async download() {
@@ -1490,7 +1500,7 @@ res
     `;
     const tmp = new Ractive({ template: '#entries-text', data: { entries: [], schemas: this.get('schemas'), hideBlankFields: this.get('hideBlankFields'), hideDefaultFields: this.get('hideDefaultFields') } });
     tmp.source = this.source;
-    tmp.details = this.details;
+    tmp.details = this.details.bind(this);
     tmp.set('entries', this.get('entries'));
     return [tmp.toHtml(), css];
   }
@@ -1665,6 +1675,10 @@ Window.extendWith(Entries, {
     'loaded.expr'(v) {
       if (v) this.set('expr', v);
     },
+    'hideBlankFields hideDefaultFields'() {
+      this._cache = {};
+      this.update('@.details', { force: true });
+    }
   },
 });
 
