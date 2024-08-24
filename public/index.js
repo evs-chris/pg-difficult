@@ -1863,6 +1863,25 @@ Window.extendWith(SchemaCompare, {
 `,
 });
 
+let md;
+const checkLanguage = (function() {
+  const map = { bash: false, c: false, cpp: false, csharp: false, go: false, handlebars: false, javascript: false, lua: false, pgsql: false, php: false, rust: false, sql: false, typescript: false, vbnet: false, xml: false };
+  const alias = { js: 'javascript', ts: 'typescript', ractive: 'handlebars', sh: 'bash', vb: 'vbnet', 'c#': 'csharp', golang: 'go', rs: 'rust', hbs: 'handlebars' };
+  const deps = { handlebars: ['xml'] };
+  return function checkLanguage(l) {
+    if (!(l in map) && alias[l]) l = alias[l];
+    if (map[l] === false) {
+      map[l] = true;
+      if (deps[l]) for (const d of deps[l]) checkLanguage(d);
+      const el = document.createElement('script');
+      el.setAttribute('src', `./hljs@11.10.0/languages/${l}.js`);
+      el.async = false;
+      document.head.appendChild(el);
+    }
+    return l;
+  }
+})();
+
 class ScratchPad extends Window {
   constructor(opts) {
     super(opts);
@@ -1939,6 +1958,23 @@ class ScratchPad extends Window {
   string(v) {
     return v === undefined ? 'undefined' : JSON.stringify(v);
   }
+  markdownCheck(ev) {
+    const inputs = this.find('.markdown-container').querySelectorAll('input');
+    const idx = Array.prototype.findIndex.call(inputs, v => v === ev.target);
+    if (~idx) {
+      let txt = this.get('pad.text');
+      let i = 0;
+      txt = txt.replace(/\* \[.\]/g, v => {
+        if (i++ === idx) {
+          if (v[3] === 'x') return '* [ ]';
+          else return '* [x]';
+        } else {
+          return v;
+        }
+      });
+      this.set('pad.text', txt);
+    }
+  }
 }
 Window.extendWith(ScratchPad, {
   template: '#scratch-pad',
@@ -1958,6 +1994,24 @@ dd { margin: 0.5em 0 1em 2em; white-space: pre-wrap; }
       this.partials.array = ps.array;
       this.partials.leaf = ps.leaf;
       this.partials.node = ps.node;
+
+      this._markd = this.observe('pad.text', debounce(v => {
+        if (v && this.get('pad.syntax') === 'markdown') {
+          if (!md) {
+            md = marked.parse;
+            const renderer = new marked.Renderer();
+            renderer.code = ({ lang, text: code }) => {
+              const l = checkLanguage(lang);
+              const highlighted = l && hljs.getLanguage(l) ? hljs.highlight(code, { language: l, ignoreIllegals: true }).value : code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+              return `<pre><code class="hljs ${l}">${highlighted}</code></pre>`;
+            };
+            marked.setOptions({ renderer });
+          }
+          let html = marked.parse(v);
+          html = html.replace(/\<input (checked="" )?disabled="" type="checkbox"/g, '<input $1type="checkbox"');
+          this.set('_markdown', html);
+        }
+      }, 1500));
     },
     raise() {
       setTimeout(() => {
@@ -1970,6 +2024,7 @@ dd { margin: 0.5em 0 1em 2em; white-space: pre-wrap; }
     },
     destruct() {
       if (this.get('pad._id')) store.release('scratch', this.get('pad._id'));
+      if (this._markd) this._markd.cancel();
     },
     render() {
       this.saveDebounced.timeout = this.get('editor.autosave') ?? 15000;
