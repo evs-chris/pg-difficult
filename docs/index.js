@@ -1,4 +1,4 @@
-const { evaluate, template, registerOperator, parse, run, Root } = Raport;
+const { evaluate, template, registerOperator, parse, run, Root, stringify } = Raport;
 const { docs } = Raport.Design;
 const { Window } = RauiWindow;
 
@@ -42,7 +42,6 @@ Ractive.decorators.autofocus = function autofocus(node) {
   }
   return { teardown() {} };
 }
-
 Ractive.decorators.tracked = function tracked(node, name) {
   const init = this[name];
   if (node && name) {
@@ -54,6 +53,7 @@ Ractive.decorators.tracked = function tracked(node, name) {
     }
   };
 }
+Ractive.decorators.serverblock = serverblock;
 
 const colors = {
   green: ['#325932', '#447A43'],
@@ -507,8 +507,8 @@ function expandSchema(schema) {
   for (const t of schema.views || []) {
     if (!res[t.schema]) res[t.schema] = {};
     if (!res[t.schema].views) res[t.schema].views = {};
-    const cols = res[t.schema].views[t.name] = {};
-    for (const c of t.columns) cols[c.name] = Object.assign({}, c, { name: undefined });
+    const view = res[t.schema].views[t.name] = { defintion: t.definition, columns: {} };
+    for (const c of t.columns) view.columns[c.name] = Object.assign({}, c, { name: undefined });
   }
   for (const f of schema.functions) {
     if (!res[f.schema]) res[f.schema] = {};
@@ -1038,6 +1038,7 @@ Window.extendWith(ControlPanel, {
       this.link('newSegment', 'newSegment', { instance: app });
       this.link('loadedQuery', 'loadedQuery', { instance: app });
       this.link('store', 'store', { instance: app });
+      this.link('connected', 'connected', { instance: app });
     },
   },
   observe: {
@@ -1208,21 +1209,25 @@ ${data('theme') === 'dark' ? `
   on: {
     init() {
       this.link('copied', 'copied', { instance: app });
-      const s = app.get('settings.diff') || {};
+      const s = app.get('store.settings.diff') || {};
       this.set('leftView', s.leftview === 'text' ? undefined : 'tree');
       this.set('rightView', s.rightview === 'text' ? undefined : 'tree');
-      this.set('format', s.format);
+      this.set('strings', s.format);
     },
   },
   observe: {
-    'left right leftView rightView': {
+    'left right leftView rightView strings': {
       handler(_v, _o, k) {
-        if (k.startsWith('left')) {
+        let left = k.startsWith('left'), right = k.startsWith('right');
+        const strings = this.get('strings');
+        if (k === 'strings') left = right = true;
+        if (left) {
           if (this.get('leftView') !== 'tree') return;
-          this.set('lefttree', treeify(this.parse(this.get('left'))));
-        } else {
+          this.set('lefttree', treeify(this.parse(this.get('left')), 0, strings));
+        }
+        if (right) {
           if (this.get('rightView') !== 'tree') return;
-          this.set('righttree', treeify(this.parse(this.get('right'))));
+          this.set('righttree', treeify(this.parse(this.get('right')), 0, strings));
         }
       },
       strict: true,
@@ -1400,9 +1405,18 @@ class Entries extends Window {
   constructor(source, opts) {
     super(opts);
     this.set('@.source', source);
+    this._cache = {};
+    this._detailsctx = new Root();
   }
   details(entry) {
-    const res = evaluate({ entry, schema: (this.get('schemas') || {})[entry.source], hideBlank: this.get('hideBlankFields'), hideDefault: this.get('hideDefaultFields') }, `
+    const key = `${entry.source}-${entry.id}`;
+    if (this._cache[key]) return this._cache[key];
+    const ctx = this._detailsctx;
+    ctx.value.entry = entry;
+    ctx.value.schema = (this.get('schemas') || {})[entry.source];
+    ctx.value.hideBlank = this.get('hideBlankFields');
+    ctx.value.hideDefault = this.get('hideDefaultFields');
+    const res = evaluate(ctx, `
 set res = { table:entry.table segment:entry.segment }
 if entry.old and entry.new {
  let d = sort(diff(filter(entry.old =>@key in ~entry.new) entry.new))
@@ -1432,12 +1446,14 @@ if res.record then set res.record = map(res.record =>[@key _] array:1)
 if res.changed then set res.changed = map(res.changed =>[@key _] array:1)
 res
 `);
+    this._cache[key] = res;
     return res;
   }
-  download() {
+  async download() {
     if (this.event?.event?.ctrlKey || this.event?.event?.shiftKey) return this.openHtml();
     const db = this.source ? this.source.replace(/.*@([^:]+).*\/(.*)/, '$1-$2') : this.get('loaded') ? 'Local file' : 'multiple';
-    const name = `diff ${db} ${evaluate(`#now##date,'yyyy-MM-dd HH mm'`)}`;
+    const name = await app.ask('What should the file be named?', 'File Name', `diff ${db} ${evaluate(`#now##date,'yyyy-MM-dd HH mm'`)}`);
+    if (!name) return;
     const ext = this.event?.event?.shiftKey ? 'html' : 'pgdd';
     let html, css;
     let text;
@@ -1485,7 +1501,7 @@ res
     `;
     const tmp = new Ractive({ template: '#entries-text', data: { entries: [], schemas: this.get('schemas'), hideBlankFields: this.get('hideBlankFields'), hideDefaultFields: this.get('hideDefaultFields') } });
     tmp.source = this.source;
-    tmp.details = this.details;
+    tmp.details = this.details.bind(this);
     tmp.set('entries', this.get('entries'));
     return [tmp.toHtml(), css];
   }
@@ -1563,6 +1579,33 @@ res
     (this.source ? app : this).update('entries');
   }
 
+  async toggleHidden(entry) {
+    if (!await app.confirm(`${entry.hide ? 'Restore' : 'Remove'} segment ${entry.segment}?`)) return;
+    const hide = !entry.hide;
+    const all = (this.source || this.combined) ? app.get('entries') : this.get('entries') || [];
+    const targets = adjacentEntries(entry, all, 'segment');
+
+    if (this.source || this.combined) {
+      const srcs = [];
+      for (const t of targets) if (!srcs.includes(t.source)) srcs.push(t.source);
+      const configs = app.get('status.clients');
+      const srcConfig = {};
+      for (const s of srcs) {
+        for (const id in configs) if (configs[id].source === s) srcConfig[s] = id;
+        if (!srcConfig[s]) return;
+      }
+
+      for (const s of srcs) {
+        const ts = targets.filter(t => t.source === s);
+        await request({ action: 'query', query: ['update pgdifficult.entries set hide = $1 where id = any($2)'], params: [[hide, ts.map(t => t.id)]], client: srcConfig[s] });
+      }
+    }
+
+    for (const t of targets) t.hide = hide;
+
+    (this.source ? app : this).update('entries');
+  }
+
   clearEntries() {
     if (this.event?.event?.ctrlKey || this.event?.event?.shiftKey || !this.source) notify({ action: 'clear' });
     else notify({ action: 'clear', source: this.source });
@@ -1592,7 +1635,9 @@ Window.extendWith(Entries, {
     entries() {
       let res = this.get('allEntries');
       const expr = this.get('expr');
+      const showHidden = this.get('showHidden');
       if (expr) res = evaluate({ list: res }, `filter(list =>(${expr}))`);
+      if (!showHidden) res = res.filter(e => !e.hide);
       return res;
     },
     exprError() {
@@ -1606,16 +1651,16 @@ Window.extendWith(Entries, {
   on: {
     complete() {
       this.set({
-        hideBlankFields: app.get('settings.hideBlankFields'),
-        hideDefaultFields: app.get('settings.hideDefaultFields'),
+        hideBlankFields: app.get('store.settings.hideBlankFields'),
+        hideDefaultFields: app.get('store.settings.hideDefaultFields'),
       });
       if (this.get('loaded')) {
         this.link('loaded.schemas', 'schemas');
       } else {
         this.link(`schemas`, 'schemas', { instance: app });
         this.set({
-          allowUndoSegment: app.get('settings.allowUndoSegment'),
-          allowUndoSingle: app.get('settings.allowUndoSingle'),
+          allowUndoSegment: app.get('store.settings.allowUndoSegment'),
+          allowUndoSingle: app.get('store.settings.allowUndoSingle'),
         });
       }
       this.scroller = this.find('.rvlist');
@@ -1631,6 +1676,10 @@ Window.extendWith(Entries, {
     'loaded.expr'(v) {
       if (v) this.set('expr', v);
     },
+    'hideBlankFields hideDefaultFields'() {
+      this._cache = {};
+      this.update('@.details', { force: true });
+    }
   },
 });
 
@@ -1809,10 +1858,29 @@ Window.extendWith(SchemaCompare, {
 .schema-diff .name, .schema-diff .left, .schema-diff .right { width: 33%; }
 .schema-diff .name { font-weight: bold; }
 .schema-diff.whole .name { width: 100%; }
-.entry { padding: 0.2em; }
+.entry { padding: 0.2em 0.2em 0.2em 1em; }
 .entry .key { font-weight: bold; }
 `,
 });
+
+let md;
+const checkLanguage = (function() {
+  const map = { bash: false, c: false, cpp: false, csharp: false, go: false, handlebars: false, javascript: false, lua: false, pgsql: false, php: false, rust: false, sql: false, typescript: false, vbnet: false, xml: false };
+  const alias = { js: 'javascript', ts: 'typescript', ractive: 'handlebars', sh: 'bash', vb: 'vbnet', 'c#': 'csharp', golang: 'go', rs: 'rust', hbs: 'handlebars' };
+  const deps = { handlebars: ['xml'] };
+  return function checkLanguage(l) {
+    if (!(l in map) && alias[l]) l = alias[l];
+    if (map[l] === false) {
+      map[l] = true;
+      if (deps[l]) for (const d of deps[l]) checkLanguage(d);
+      const el = document.createElement('script');
+      el.setAttribute('src', `./hljs@11.10.0/languages/${l}.js`);
+      el.async = false;
+      document.head.appendChild(el);
+    }
+    return l;
+  }
+})();
 
 class ScratchPad extends Window {
   constructor(opts) {
@@ -1890,6 +1958,23 @@ class ScratchPad extends Window {
   string(v) {
     return v === undefined ? 'undefined' : JSON.stringify(v);
   }
+  markdownCheck(ev) {
+    const inputs = this.find('.markdown-container').querySelectorAll('input');
+    const idx = Array.prototype.findIndex.call(inputs, v => v === ev.target);
+    if (~idx) {
+      let txt = this.get('pad.text');
+      let i = 0;
+      txt = txt.replace(/\* \[.\]/g, v => {
+        if (i++ === idx) {
+          if (v[3] === 'x') return '* [ ]';
+          else return '* [x]';
+        } else {
+          return v;
+        }
+      });
+      this.set('pad.text', txt);
+    }
+  }
 }
 Window.extendWith(ScratchPad, {
   template: '#scratch-pad',
@@ -1909,6 +1994,24 @@ dd { margin: 0.5em 0 1em 2em; white-space: pre-wrap; }
       this.partials.array = ps.array;
       this.partials.leaf = ps.leaf;
       this.partials.node = ps.node;
+
+      this._markd = this.observe('pad.text', debounce(v => {
+        if (v && this.get('pad.syntax') === 'markdown') {
+          if (!md) {
+            md = marked.parse;
+            const renderer = new marked.Renderer();
+            renderer.code = ({ lang, text: code }) => {
+              const l = checkLanguage(lang);
+              const highlighted = l && hljs.getLanguage(l) ? hljs.highlight(code, { language: l, ignoreIllegals: true }).value : code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+              return `<pre><code class="hljs ${l}">${highlighted}</code></pre>`;
+            };
+            marked.setOptions({ renderer });
+          }
+          let html = marked.parse(v);
+          html = html.replace(/\<input (checked="" )?disabled="" type="checkbox"/g, '<input $1type="checkbox"');
+          this.set('_markdown', html);
+        }
+      }, 1500));
     },
     raise() {
       setTimeout(() => {
@@ -1921,6 +2024,7 @@ dd { margin: 0.5em 0 1em 2em; white-space: pre-wrap; }
     },
     destruct() {
       if (this.get('pad._id')) store.release('scratch', this.get('pad._id'));
+      if (this._markd) this._markd.cancel();
     },
     render() {
       this.saveDebounced.timeout = this.get('editor.autosave') ?? 15000;
@@ -2653,7 +2757,7 @@ Window.extendWith(SourceEdit, {
   options: { close: false, flex: true, resizable: true, maximize: false, minimize: false, width: '40em', height: '30em' },
   on: {
     init() {
-      this.link('settings.editor', 'editor', { instance: app });
+      this.link('store.settings.editor', 'editor', { instance: app });
     }
   },
   observe: {
@@ -2787,7 +2891,7 @@ function load(ext, multi) {
 }
 
 async function downloadQuery(result) {
-  const settings = app.get('settings');
+  const settings = app.get('store.settings');
   const field = settings.csv.field || ',';
   const record = settings.csv.record || '\n';
   const quote = settings.csv.quote || undefined;
@@ -2841,7 +2945,7 @@ Ractive.helpers.copyToClipboard = (function() {
     app.set('copied.recent', true);
     setTimeout(() => {
       if (cur === id) app.set('copied.recent', false);
-    }, app.get('settings.pasteTimeout') || 10000);
+    }, app.get('store.settings.pasteTimeout') || 10000);
 
     if (text.length > 500000) return Promise.resolve(false);
     if (!clipEl) {
@@ -2937,14 +3041,14 @@ function tryJSON(what) {
   }
 }
 
-function treeify(val, depth = 0) {
+function treeify(val, depth = 0, mode = 'json') {
   if (typeof val === 'object' && val) {
     if (Array.isArray(val)) {
-      return { type: 'array', children: val.reduce((a, c, index) => (a.push({ index, value: treeify(c, depth + 1) }), a), []), expand: !depth };
+      return { type: 'array', children: val.reduce((a, c, index) => (a.push({ index, value: treeify(c, depth + 1, mode) }), a), []), expand: !depth };
     } else {
-      return { type: 'node', children: Object.entries(val).reduce((a, [key, value]) => (a.push({ key, value: treeify(value, depth + 1) }), a), []), expand: !depth };
+      return { type: 'node', children: Object.entries(val).reduce((a, [key, value]) => (a.push({ key, value: treeify(value, depth + 1, mode) }), a), []), expand: !depth };
     }
-  } else return { type: 'leaf', value: val === 'undefined' ? 'undefined' : JSON.stringify(val) };
+  } else return { type: 'leaf', value: mode === 'raport' ? stringify({ v: val }) : (val === 'undefined' ? 'undefined' : JSON.stringify(val)) };
 }
 
 function dirify(v, oldtree) {
@@ -2980,6 +3084,28 @@ function csvToHtml(text) {
 <head><style>body { margin: 0; padding: 1em; } pre { white-space: pre-wrap; margin: 0.5em; padding: 0.5em; background-color: ${dark ? '#333' : '#fff'}; color: ${dark ? '#ddd' : '#222'}; box-shadow: 0 0 10px rgba(${dark ? '255, 255, 255' : '0, 0, 0'}, 0.5); border: 1px solid; }</style></head>
 <body><pre><code>${text}</code></pre></body>
 </html>`;
+}
+
+function serverblock(node) {
+  Object.assign(node.style, { position: 'absolute', top: 0, left: 0, bottom: 0, right: 0, zIndex: -1, backgroundColor: 'rgba(0, 0, 0, 0.2)', opacity: 0, transition: 'opacity 0.2s ease', display: 'flex', alignItems: 'center', justifyContent: 'space-around', cursor: 'wait' });
+  const watch = app.observe('connected', v => {
+    if (v) {
+      Object.assign(node.style, { opacity: 0, zIndex: -1 });
+      node.innerHTML = '';
+    } else {
+      Object.assign(node.style, { opacity: 1, zIndex: 100 });
+      node.innerHTML = `<div class=not-connected><div class=wrapper><svg class="loader" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg">
+        <circle class="internal-circle" cx="60" cy="60" r="30"></circle>
+        <circle class="external-circle" cx="60" cy="60" r="50"></circle>
+      </svg><div class=reconnecting>Reconnecting...</div></div></div>`;
+    }
+  });
+  return {
+    update() {},
+    teardown() {
+      watch.cancel();
+    },
+  };
 }
 
 window.addEventListener('beforeunload', unload);

@@ -67,7 +67,7 @@
     font-size: 1.5em;
     content: '\002261';
   }
-  #not-connected {
+  .not-connected {
     position: absolute;
     background-color: rgba(0, 0, 0, 0.2);
     width: 100%;
@@ -80,10 +80,14 @@
     justify-content: space-around;
     z-index: 100;
     cursor: wait;
+    backdrop-filter: blur(2px);
   }
-  #not-connected .wrapper {
+  .not-connected .wrapper {
     display: flex;
     flex-direction: column;
+    max-height: 100%;
+    max-width: 100%;
+    width: 15em;
   }
   .loader {
     width: 100%;
@@ -98,7 +102,7 @@
   .rappbar .loader {
     stroke-width: 10;
   }
-  #not-connected .reconnecting {
+  .not-connected .reconnecting {
     margin-top: 1em;
     text-align: center;
     font-weight: bold;
@@ -270,6 +274,7 @@
 </style>
 <script>clientOnly = true</script>
 <script type=text/ractive id=template>
+  <link rel=stylesheet href="./hljs@11.10.0/stackoverflow-{{@style.theme}}.css" />
   {{#if !~/halted || ~/connected}}
     <shell on-init="@.set('@.shell', $1)">
       <right hidden="{{menu.hidden}}" forced="{{menu.forced}}">
@@ -321,12 +326,6 @@
         </div>
       </center>
     </shell>
-    {{#unless ~/connected}}<div id="not-connected">
-      <div class=wrapper>
-        {{>loader}}
-        <div class=reconnecting>Reconnecting...</div>
-      </div>
-    </div>{{/unless}}
     <input type=file id=file />
   {{else}}
     <div class=html style="width: 100vw; height: 100vh; display: flex; align-items: center; justify-content: center;">
@@ -385,6 +384,7 @@
           No connections have been saved.
         {{/each}}
       </div>
+      <div as-serverblock />
     </tab>
     <tab title="Active Diffs" hidden="@global.clientOnly">
       <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -412,6 +412,7 @@
           There are no active diffs.
         {{/each}}
       </div>
+      <div as-serverblock />
     </tab>
     <tab title="Connection Monitor" hidden="@global.clientOnly">
       <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -441,6 +442,7 @@
           There are no active connection monitors.
         {{/each}}
       </div>
+      <div as-serverblock />
     </tab>
     <tab title="Saved Queries" hidden="@global.clientOnly">
       <div style="padding: 0.3em; display: flex; justify-content: space-between; align-items: center; min-height: 2.75em;">
@@ -547,7 +549,7 @@
           <legend>Local Diff Options</legend>
           <label as-field>Default Left Mode<select value="{{~/store.settings.diff.leftview}}"><option value="{{undefined}}">tree</option><option>text</option></select></label>
           <label as-field>Default Right Mode<select value="{{~/store.settings.diff.rightview}}"><option value="{{undefined}}">tree</option><option>text</option></select></label>
-          <!--<label as-field>Default Value Format<select value="{{~/store.settings.diff.format}}"><option value="{{undefined}}">raport</option><option>json</option></select></label>-->
+          <label as-field>Default Value Format<select value="{{~/store.settings.diff.format}}"><option value="{{undefined}}">json</option><option>raport</option></select></label>
         </fieldset>
         <fieldset style="margin-top: 1em;">
           <legend>Sync Servers <tip>Local data can by configured to sync with CouchDB and PouchDB servers.</tip></legend>
@@ -590,7 +592,7 @@
   <buttons>
     {{#unless @global.clientOnly}}
       <button left title="Open a new Host Explorer window to browse databases on all connections, view schema, query across multiple databases, and run reports." on-click="@.exploreHosts()">Host Explorer</button>
-      <button class=reject on-click="@.halt()">Stop pg-difficult</button>
+      <button class=reject on-click="@.halt()" disabled="{{!~/connected}}">Stop pg-difficult</button>
     {{/unless}}
     <button left title="Open a new two-way diff window for local data." on-click="@.localDiff()">Local Diff</button>
     <button left title="Open a new evaluation pad for calculations or inspecting data." on-click="@.evalPad()">Eval Pad</button>
@@ -688,6 +690,7 @@
       </div>
     </split>
   </div>
+  <div as-serverblock />
 </script>
 
 <script type=text/ractive id=entries>
@@ -702,7 +705,7 @@
     <virtual-list bind-items="~/entries" size=75>
       <header>
         {{#if .segment}}
-          <div class=header><h2 title="Double click to rename segment" on-dblclick="@.renameSegment(.), false">{{.segment}}</h2> <div class=buttons style="padding-top: 0.9em;">{{#if ~/allowUndoSegment}}<button class=undo on-click="@.undoSegment(.), false" title="Undo all changes in this segment by replaying the changes in reverse. This will also create a new segment named 'Undo {{.segment}}', unless you hold the ctrl key when clicking this button.">Undo</button>{{/if}}</div></div>
+          <div class=header><h2 title="Double click to rename segment" on-dblclick="@.renameSegment(.), false">{{.segment}}</h2> <div class=buttons style="padding-top: 0.9em;"><button class=undo on-click="@.toggleHidden(.)">{{#if .hide}}Show{{else}}Hide{{/if}}</button>{{#if ~/allowUndoSegment}}<button class=undo on-click="@.undoSegment(.), false" title="Undo all changes in this segment by replaying the changes in reverse. This will also create a new segment named 'Undo {{.segment}}', unless you hold the ctrl key when clicking this button.">Undo</button>{{/if}}</div></div>
         {{/if}}
       </header>
       {{#with . as record, @.details(.) as entry}}
@@ -746,7 +749,7 @@
         {{/if}}
       {{/with}}
       {{#if ~/entries[index + 1] && ~/entries[index + 1].segment !== .segment}}{{#with ~/entries[index + 1]}}
-        <div class=header><h2 title="Double click to rename segment" on-dblclick="@.renameSegment(.), false">{{.segment}}</h2> <div class=buttons style="padding-top: 0.9em;">{{#if ~/allowUndoSegment}}<button class=undo on-click="@.undoSegment(.), false" title="Undo all changes in this segment by replaying the changes in reverse. This will also create a new segment named 'Undo {{.segment}}', unless you hold the ctrl key when clicking this button.">Undo</button>{{/if}}</div></div>
+        <div class=header><h2 title="Double click to rename segment" on-dblclick="@.renameSegment(.), false">{{.segment}}</h2> <div class=buttons style="padding-top: 0.9em;"><button on-click="@.toggleHidden(.)">{{#if .hide}}Show{{else}}Hide{{/if}}</button>{{#if ~/allowUndoSegment}}<button class=undo on-click="@.undoSegment(.), false" title="Undo all changes in this segment by replaying the changes in reverse. This will also create a new segment named 'Undo {{.segment}}', unless you hold the ctrl key when clicking this button.">Undo</button>{{/if}}</div></div>
       {{/with}}{{/if}}
       <else>
         {{#if ~/exprError}}<code class=expr>{{~/expr}}</code> is an invalid filter.<br /><br /><pre>Error: {{~/exprError.message + '\n\n'}}{{~/exprError.marked}}</pre>{{else}}No change entries have been recorded.{{/if}}
@@ -763,6 +766,7 @@
         <label class=inline as-field title="Check to hide empty string fields in entries"><input type=checkbox bind-checked="~/hideBlankFields" /> Hide blank?</label>
         <label class=inline as-field title="Check to hide fields with default values in entries"><input type=checkbox bind-checked="~/hideDefaultFields" /> Hide default?</label>
       {{/if}}
+      <label class=inline as-field title="Check to show hidden segments in entries"><input type=checkbox bind-checked="~/showHidden" /> Show hidden?</label>
       {{#unless (@.source && !~/loaded) && schemas}}
         <div />
       {{/unless}}
@@ -780,6 +784,9 @@
       {{/if}}
     </div>
   </pop>
+  {{#if @.source && !~/loaded}}
+    <div as-serverblock />
+  {{/if}}
 </script>
 
 <script type=text/ractive id=entries-text>
@@ -850,6 +857,7 @@
       <div class=content-wrapper>{{>leak initial as leaks}}</div>
     </tab>
   </tabs>
+  <div as-serverblock />
 </script>
 
 <script type=text/ractive id=schema>
@@ -1019,16 +1027,16 @@
   <div class=content-wrapper>
     {{#each diff as pair}}
       {{#if pair[0] != null && pair[1] != null}}
-        <div class="schema-diff striped">
+        <div class="schema-diff striped striped-{{@index % 2 === 0 ? 'even' : 'odd'}}">
           <div class="name" title="{{@key}}">{{@key}}</div>
-          <div class="left" title="{{pair[0]}}">{{typeof pair[0] === 'object' ? JSON.stringify(pair[0]) : pair[0]}}</div>
-          <div class="right" title="{{pair[1]}}">{{typeof pair[1] === 'object' ? JSON.stringify(pair[1]) : pair[1]}}</div>
+          <div class="left" title="{{pair[0]}}" on-click="copyToClipboard(pair[0], 'Copied value to clipboard.'), false">{{typeof pair[0] === 'object' ? JSON.stringify(pair[0]) : pair[0]}}</div>
+          <div class="right" title="{{pair[1]}}" on-click="copyToClipboard(pair[1], 'Copied value to clipboard.'), false">{{typeof pair[1] === 'object' ? JSON.stringify(pair[1]) : pair[1]}}</div>
         </div>
       {{else}}
-        <div class="schema-diff whole striped">
+        <div class="schema-diff whole striped striped-{{@index % 2 === 0 ? 'even' : 'odd'}}" on-click="@event.shiftKey ? copyToClipboard(pair[0] || {}, 'Copied old value to clipboard.') : copyToClipboard(pair[1] || {}, 'Copied new value to clipboard.'), false">
           <div class="name">{{#if pair[0] == null}}Added{{else}}Removed{{/if}} {{@key}}</div>
           {{#each pair[0] || pair[1]}}
-            <div class="entry"><div class="key">{{@key}}</div><div class="value">{{typeof . === 'object' ? JSON.stringify(.) : .}}</div></div>
+            <div class="entry" on-click="copyToClipboard(., 'Copied value to clipboard.'), false"><div class="key">{{@key}}</div><div class="value">{{typeof . === 'object' ? JSON.stringify(.) : .}}</div></div>
           {{/each}}
         </div>
       {{/if}}
@@ -1045,7 +1053,7 @@
       <label as-field class=inline title="Separating segments of a file name with / will result in the pad appearing in a sub-node of the scratch pad tree view."><input value="{{pad.name}}" placeholder="Name..." lazy=1000 /></label>
       <div style="flex-grow: 1; display: flex; justify-content: space-around;">
         {{#if ~/pad._id}}
-          {{#if ~/unsaved}}<div style="padding: 0.5em; opacity: 0.7; background-color: rgba(128, 128, 128, 0.5); border-radius: 0 0 0.5em 0.5em; height: 1em;">unsaved</div>{{/if}}
+          {{#if ~/unsaved && !nosave}}<div style="padding: 0.5em; opacity: 0.7; background-color: rgba(128, 128, 128, 0.5); border-radius: 0 0 0.5em 0.5em; height: 1em;">unsaved</div>{{/if}}
         {{else}}
           <button style="align-self: center;" on-click="@.save()">Save</button>
         {{/if}}
@@ -1106,7 +1114,7 @@
       </select></label>
     </div>
   {{/partial}}
-  <div style="flex-grow: 1; position: relative; display: flex;">
+  <div style="flex-grow: 1; position: relative; display: flex; height: 100%;">
     {{#if pad.syntax === 'raport'}}
       <split>
         <div style="height: 100%; display: flex; flex-direction: column;">
@@ -1165,11 +1173,26 @@
           </tab>
         </tabs>
       </split>
+    {{elseif pad.syntax === 'markdown'}}
+      {{#if ~/unsaved}}<div style="position: absolute; left: 50%; top: 0; padding: 0.5em; opacity: 0.7; background-color: rgba(128, 128, 128, 0.5); border-radius: 0 0 0.5em 0.5em; height: 1em; z-index: 100;">unsaved</div>{{/if}}
+      <tabs pad flex style="height: 100%;">
+        <tab no-pad title="Edit">
+          <div style="flex-grow: 1; display: flex; flex-direction: column;">
+            {{>header, true as nosave}}
+            <div style="flex-grow: 1;" class="editor-el" as-ace="{ bind: 'pad.text', syntax: pad.syntax || 'plain_text', theme: @style.theme == 'dark' ? (~/editor.darkTheme || 'tomorrow_night_eighties') : (~/editor.lightTheme || 'tomorrow'), wrap: ~/editor.wrap, highlightActive: ~/editor.highlightActive, fontSize: '1em', font: 'monospace', printMargin: ~/editor.printMargin, keymode: ~/editor.keymode, lineNumbers: ~/editor.lineNumbers, relativeLineNumbers: ~/editor.relativeLineNumbers, highlightSelected: ~/editor.highlightSelected, softTabs: ~/editor.softTabs, tabSize: ~/editor.tabSize }" on-save="@.save()" />
+          </div>
+        </tab>
+        <tab title="View">
+          <div class="markdown-container" on-change="@.markdownCheck(@event)">
+            {{{_markdown}}}
+          </div>
+        </tab>
+      </tabs>
     {{elseif pad && 'text' in pad}}
       <div style="flex-grow: 1; display: flex; flex-direction: column;">
         {{>header}}
         <div style="flex-grow: 1;" class="editor-el" as-ace="{ bind: 'pad.text', syntax: pad.syntax || 'plain_text', theme: @style.theme == 'dark' ? (~/editor.darkTheme || 'tomorrow_night_eighties') : (~/editor.lightTheme || 'tomorrow'), wrap: ~/editor.wrap, highlightActive: ~/editor.highlightActive, fontSize: '1em', font: 'monospace', printMargin: ~/editor.printMargin, keymode: ~/editor.keymode, lineNumbers: ~/editor.lineNumbers, relativeLineNumbers: ~/editor.relativeLineNumbers, highlightSelected: ~/editor.highlightSelected, softTabs: ~/editor.softTabs, tabSize: ~/editor.tabSize }" on-save="@.save()" />
-        </div>
+      </div>
     {{/if}}
   </div>
 </script>
@@ -1367,6 +1390,7 @@
       </tab>
     </tabs>
   </div>
+  <div as-serverblock />
 </script>
 
 <script type=text/ractive id=report>
@@ -1508,7 +1532,7 @@
         <div style="display: flex; justify-content: space-evenly; align-items: center;">
           {{#if ~/leftView === 'tree' || ~/rightView === 'tree'}}<label style="font-size: 0.7em;"><input type=checkbox checked="{{~/expandAll}}"> Expand all tree nodes?</label>{{/if}}
           <h3>Diff</h3>
-          <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</div>
+          <div><select value="{{strings}}"><option value="{{undefined}}">json</option><option>raport</option></select></div>
         </div>
         <pre style="overflow: auto;"><code>
         {{#each @.diff(.left, .right)}}
@@ -1622,5 +1646,7 @@
     vim.defineEx('write', 'w', cm => cm.ace.execCommand('save'));
   });
 </script>
+<script src="./marked@14.0.0.js"></script>
+<script src="./hljs@11.10.0/highlight.js"></script>
   </body>
 </html>

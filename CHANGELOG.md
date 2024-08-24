@@ -1,3 +1,32 @@
+## 1.12.0
+
+2024-08-24
+
+**NOTE:** This version moves from browser local storage to pouchdb, which greatly increases the amount of storage available and allows for syncing with external couchdb-compatible data stores. Existing settings will be imported on the first load of the client, and the local storage versions will be removed. You may want to export your settings before running this version.
+
+This version also introduces a schema change to the diff recording tables that allows for hiding entries. Attempting to hide segments in a diff resumed from an older version will fail.
+
+### Bugs
+
+* Diff details are now memoized, so lage diff views should no longer be make the windowing system laggy.
+* Report designers will now follow the selected color scheme.
+* View definitions are now directly compared during schema comparison. Prior to this release, schema comparison that supported views only considered the columns of the view and not the statement that generated them.
+
+### Features
+
+* Reports, queries, and scratch pads can be named with `/`s to place them in sub-directories, as they are now displayed in a tree view rather than an orderable list.
+* There is now a scale setting and a meta tag to try to make mobile browsers a little less painful to use. Tooltips will display in a toast if poked.
+* Settings and local data are now stored in a pouchdb instance, which can be configured to selectively sync with a couchdb-compatible server.
+* Scratch pads now have an unsaved indicator, support manual saving, and can be configured not to autosave.
+* Connections can now specify their use type, so diff connections can be excluded from host explorers and vice versa. You can now edit a host explorer connection by shift+clicking the host refresh button.
+* Local diff once again supports raport as a value display mode.
+* Diff segments may now be hidden using a new button in the segment header. This is particularly useful during testing where an action has to be undone several times before the desired outcome is achieved. Hidden segments are not removed from the tracking database or downloadable output. Hiding segments in a downloaded file will persist the hidden state when the file is downloaded again.
+* Downloading a diff will now ask for a file name with the old automatic file name set as the default.
+* The client being disconnected from the server will now only block portions of the UI that require a server connection to be useful.
+* Scratch pads in markdown mode now have a view tab that renders the markdown as html. Fenced code blocks support highlighting for a selection of languages, and check lists render checkboxes that will update the source text when changed.
+* There is now an Eval Pad button on the control panel that opens an expression pad for quick convenient calculations.
+
+
 ## 1.11.0
 
 2024-08-12
