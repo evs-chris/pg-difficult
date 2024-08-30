@@ -627,6 +627,9 @@ const app = globalThis.app = new App({
     'store.settings.scale'(v) {
       Ractive.styleSet('scale', v);
     },
+    'store.settings.menuWidth'(v) {
+      Ractive.styleSet('raui.menu.width', `${v || 18}em`);
+    },
     '@.host': {
       handler(v) {
         if (v) {
