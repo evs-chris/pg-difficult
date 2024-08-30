@@ -550,23 +550,11 @@ Ractive.extendWith(App, {
         background-color: ${data('raui.primary.bg') || data('raui.bg') || '#fff'};
       }
       .schema-row.sticky-header { background-color: ${data('raui.primary.bg') || '#fff'}; }
-      .stiped:nth-child(odd), .striped-odd { background-color: ${data('theme') === 'dark' ? '#353535' : '#f2f2f2'}; }
-      .stiped:nth-child(even), .striped-even { background-color: ${data('theme') === 'dark' ? '#3b3b3b' : '#fdfdfd'}; }
+      .striped:nth-child(odd), .striped-odd { background-color: ${data('theme') === 'dark' ? '#353535' : '#f2f2f2'}; }
+      .striped:nth-child(even), .striped-even { background-color: ${data('theme') === 'dark' ? '#3b3b3b' : '#fdfdfd'}; }
+      .mermaid { background-color: ${data('theme') === 'dark' ? '#191919' : '#f7f7f7'}; }
     `;
   },
-  observe: {
-    sync: {
-      handler: debounce(() => {
-        writeSync();
-        store.sync(app.get('sync.servers'));
-      }, 5000, {
-        check() {
-          return !syncLock;
-        }
-      }),
-      init: false,
-    }
-  }
 });
 
 const app = globalThis.app = new App({
@@ -639,6 +627,9 @@ const app = globalThis.app = new App({
     },
     'store.settings.scale'(v) {
       Ractive.styleSet('scale', v);
+    },
+    'store.settings.menuWidth'(v) {
+      Ractive.styleSet('raui.menu.width', `${v || 18}em`);
     },
     '@.host': {
       handler(v) {
@@ -718,6 +709,17 @@ const app = globalThis.app = new App({
     waiting(v) {
       if (v) document.body.style.cursor = 'wait';
       else document.body.style.cursor = 'default';
+    },
+    sync: {
+      handler: debounce(() => {
+        writeSync();
+        store.sync(app.get('sync.servers'));
+      }, 5000, {
+        check() {
+          return !syncLock;
+        }
+      }),
+      init: false,
     },
   },
   on: {
@@ -1865,18 +1867,23 @@ Window.extendWith(SchemaCompare, {
 
 let md;
 const checkLanguage = (function() {
-  const map = { bash: false, c: false, cpp: false, csharp: false, go: false, handlebars: false, javascript: false, lua: false, pgsql: false, php: false, rust: false, sql: false, typescript: false, vbnet: false, xml: false };
-  const alias = { js: 'javascript', ts: 'typescript', ractive: 'handlebars', sh: 'bash', vb: 'vbnet', 'c#': 'csharp', golang: 'go', rs: 'rust', hbs: 'handlebars' };
+  const map = { bash: false, c: false, cpp: false, csharp: false, go: false, handlebars: false, javascript: false, lua: false, mermaid: false, pgsql: false, php: false, rust: false, sql: false, typescript: false, vbnet: false, xml: false };
+  const alias = { js: 'javascript', ts: 'typescript', ractive: 'handlebars', sh: 'bash', vb: 'vbnet', 'c#': 'csharp', golang: 'go', rs: 'rust', hbs: 'handlebars', chart: 'mermaid' };
   const deps = { handlebars: ['xml'] };
-  return function checkLanguage(l) {
+  const urls = {
+    mermaid: './mermaidjs@11.0.2.js',
+  };
+  return function(l) {
     if (!(l in map) && alias[l]) l = alias[l];
     if (map[l] === false) {
       map[l] = true;
       if (deps[l]) for (const d of deps[l]) checkLanguage(d);
       const el = document.createElement('script');
-      el.setAttribute('src', `./hljs@11.10.0/languages/${l}.js`);
+      el.setAttribute('src', urls[l] || `./hljs@11.10.0/languages/${l}.js`);
       el.async = false;
       document.head.appendChild(el);
+      checkLanguage.rerun = true;
+      if (l === 'mermaid') setTimeout(() => globalThis.mermaid.initialize({ securityLevel: 'loose' }), 100);
     }
     return l;
   }
@@ -1975,6 +1982,35 @@ class ScratchPad extends Window {
       this.set('pad.text', txt);
     }
   }
+  renderMD() {
+    const v = this.get('pad.text');
+    if (v && this.get('pad.syntax') === 'markdown') {
+      if (!md) {
+        md = marked.parse;
+        const renderer = new marked.Renderer();
+        renderer.code = ({ lang, text: code }) => {
+          const l = checkLanguage(lang);
+          if (lang === 'mermaid') {
+            return `<pre class="mermaid">---\nconfig:\n  theme: ${Ractive.styleGet('theme') === 'light' ? 'forest' : 'dark'}\n---\n${code}</pre>`;
+          } else {
+            const highlighted = l && hljs.getLanguage(l) ? hljs.highlight(code, { language: l, ignoreIllegals: true }).value : code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            return `<pre><code class="hljs ${l}">${highlighted}</code></pre>`;
+          }
+        };
+        marked.setOptions({ renderer });
+      }
+      let html = marked.parse(v);
+      html = html.replace(/\<input (checked="" )?disabled="" type="checkbox"/g, '<input $1type="checkbox"');
+      this.set('_markdown', html);
+      if (globalThis.mermaid) setTimeout(() => mermaid.run(), 30);
+      if (checkLanguage.rerun) {
+        checkLanguage.rerun = false;
+        setTimeout(() => {
+          this.renderMD();
+        }, 200);
+      }
+    }
+  }
 }
 Window.extendWith(ScratchPad, {
   template: '#scratch-pad',
@@ -1995,28 +2031,15 @@ dd { margin: 0.5em 0 1em 2em; white-space: pre-wrap; }
       this.partials.leaf = ps.leaf;
       this.partials.node = ps.node;
 
-      this._markd = this.observe('pad.text', debounce(v => {
-        if (v && this.get('pad.syntax') === 'markdown') {
-          if (!md) {
-            md = marked.parse;
-            const renderer = new marked.Renderer();
-            renderer.code = ({ lang, text: code }) => {
-              const l = checkLanguage(lang);
-              const highlighted = l && hljs.getLanguage(l) ? hljs.highlight(code, { language: l, ignoreIllegals: true }).value : code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-              return `<pre><code class="hljs ${l}">${highlighted}</code></pre>`;
-            };
-            marked.setOptions({ renderer });
-          }
-          let html = marked.parse(v);
-          html = html.replace(/\<input (checked="" )?disabled="" type="checkbox"/g, '<input $1type="checkbox"');
-          this.set('_markdown', html);
-        }
+      this._markd = this.observe('pad.text', debounce(() => {
+        this.renderMD();
       }, 1500));
     },
     raise() {
       setTimeout(() => {
         const el = this.find('.editor-el');
-        if (el) {
+        const tabs = this.findComponent('tabs');
+        if (el && (!tabs || this.get('pad.syntax') !== 'markdown' || tabs.get('selected') === 0)) {
           const ctx = this.getContext(el);
           ctx.decorators?.ace?.focus();
         }
@@ -2058,7 +2081,10 @@ dd { margin: 0.5em 0 1em 2em; white-space: pre-wrap; }
     },
     'editor.autosave'(v) {
       if (this.saveDebounced) this.saveDebounced.timeout = v ?? 15000;
-    }
+    },
+    '@style.theme'() {
+      this.renderMD();
+    },
   },
 });
 

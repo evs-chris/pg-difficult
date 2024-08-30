@@ -1,3 +1,13 @@
+## 1.12.1
+
+2023-08-30
+
+### Features
+
+* There is now a setting to adjust the menu width.
+* Markdown scratch pads will now render [mermaid](https://mermaid.js.org) charts in fenced code sections labelled as mermaid or chart.
+
+
 ## 1.12.0
 
 2024-08-24
