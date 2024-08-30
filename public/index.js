@@ -554,19 +554,6 @@ Ractive.extendWith(App, {
       .stiped:nth-child(even), .striped-even { background-color: ${data('theme') === 'dark' ? '#3b3b3b' : '#fdfdfd'}; }
     `;
   },
-  observe: {
-    sync: {
-      handler: debounce(() => {
-        writeSync();
-        store.sync(app.get('sync.servers'));
-      }, 5000, {
-        check() {
-          return !syncLock;
-        }
-      }),
-      init: false,
-    }
-  }
 });
 
 const app = globalThis.app = new App({
@@ -718,6 +705,17 @@ const app = globalThis.app = new App({
     waiting(v) {
       if (v) document.body.style.cursor = 'wait';
       else document.body.style.cursor = 'default';
+    },
+    sync: {
+      handler: debounce(() => {
+        writeSync();
+        store.sync(app.get('sync.servers'));
+      }, 5000, {
+        check() {
+          return !syncLock;
+        }
+      }),
+      init: false,
     },
   },
   on: {
