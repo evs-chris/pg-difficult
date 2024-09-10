@@ -4,6 +4,7 @@ import * as diff from './diff.ts';
 import { decode } from 'https://deno.land/std@0.190.0/encoding/base64url.ts'
 import { open } from 'https://deno.land/x/deno_open@v0.0.6/index.ts';
 import { fs } from './client.ts';
+import { evaluate } from 'https://cdn.jsdelivr.net/npm/raport@0.24.8/lib/index.js';
 
 type JSONValue = postgres.JSONValue;
 
@@ -39,6 +40,8 @@ const config = {
   monitorInterval: 30000,
   listen: '127.0.0.1',
   noui: false,
+  user: undefined as string,
+  password: undefined as string,
   ssl: undefined as any,
 };
 
@@ -65,6 +68,22 @@ for (let i = 0; i < Deno.args.length; i++) {
       config.noui = true;
       break;
 
+    case '--user': case '-u':
+      config.user = Deno.args[++i];
+      break;
+
+    case '--password': case '-w':
+      config.password = Deno.args[++i];
+      break;
+
+    case '--config': case '-c':
+      try {
+        Object.assign(config, evaluate(Deno.readTextFileSync(Deno.args[++i])));
+      } catch (e) {
+        console.error('Failed loading config file', e);
+      }
+      break;
+
     case '--help': case '-h':
       console.log(`Usage: pg-difficult [...options]
 
@@ -79,6 +98,17 @@ Options:
 
   --noui                      don't attempt to open the pg-difficult page for the
                               started instance
+
+  --user     | -u  <string>   require basic auth with this as the user
+
+  --password | -w  <string>   require basic auth with this as the password, which
+                              defaults to an empty string if there is a user and
+                              no password
+
+  --config   | -c  <filepath> load configuration from the given file, which will be
+                              parsed with Raport
+                              the file should evaluate to an object with keys matching
+                              these options with an optional users dictionary
 
   --help     | -h             display this message and exit
 
@@ -96,7 +126,7 @@ database. These tables are world readable and writable, so if there is any sensi
 information in the database that is guarded by access controls, it will be possible for
 any user to view it as it changes through the diff tables.
 
-Stopping the diff will remove the triggers, function, and tables from the database.
+Stopping the diff will remove the triggers, function, and schema from the database.
   `);
       Deno.exit(0);
       break;
@@ -163,6 +193,36 @@ const app = new oak.Application();
 const router = new oak.Router();
 
 const clients: WebSocket[] = [];
+
+app.use((ctx, next) => {
+  let ok = true;
+  if (config.user || config.users) {
+    if ((ctx.request.headers.get('authorization') || '').slice(0, 5) !== 'Basic') {
+      ctx.response.headers.set('WWW-Authenticate', `Basic realm="pg-difficult login", charset="UTF-8"`);
+      ctx.response.status = 401;
+      ctx.response.body = 'Authentication required.';
+      ok = false;
+    } else {
+      const [u, p] = atob((ctx.request.headers.get('authorization') || 'Basic Og==').slice(6)).split(':');
+      if (config.user) {
+        if (u !== config.user || p !== (config.password || '')) {
+          ctx.response.headers.set('WWW-Authenticate', `Basic realm="pg-difficult login invalid, try again", charset="UTF-8"`);
+          ctx.response.status = 401;
+          ctx.response.body = 'Invalid authentication.';
+          ok = false;
+        }
+      } else if (typeof config.users === 'object') {
+        if (!(u in config.users) || config.users[u] !== p) {
+          ctx.response.headers.set('WWW-Authenticate', `Basic realm="pg-difficult login invalid, try again", charset="UTF-8"`);
+          ctx.response.status = 401;
+          ctx.response.body = 'Invalid authentication.';
+          ok = false;
+        }
+      }
+    }
+  }
+  if (ok) return next();
+});
 
 app.use(router.routes());
 app.use(router.allowedMethods());
