@@ -773,7 +773,7 @@ async function queryQueue(queue: Array<DatabaseConfig & { __key: string }>, quer
 }
 
 async function listConnections(client: PGClient): Promise<Connection[]> {
-  return await client<Connection[]>`select pid, usename as user, application_name as application, datname as database, backend_start as started, state, client_addr || ':' || client_port as client from pg_stat_activity order by backend_start desc`;
+  return await client<Connection[]>`select pid, usename as user, application_name as application, datname as database, backend_start as started, state, state_change as updated, client_addr || ':' || client_port as client, query, query_start as queried from pg_stat_activity order by backend_start desc`;
 }
 
 async function leak(config: DatabaseConfig) {

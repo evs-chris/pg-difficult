@@ -832,15 +832,17 @@
 
 <script type=text/ractive id=leaks>
   {{#partial leak}}
-    <div>Updated {{age(~/status.lastUpdate)}}</div>
     <div class="leak header">
       <div class=user>User</div>
       <div class=application>Application</div>
       <div class=client>Client</div>
       <div class=state>State</div>
       <div class=started>Started</div>
+      <div class=updated>Updated</div>
       <div class=constr>Connection</div>
       <div class=pid>Process ID</div>
+      <div class=queried>Queried</div>
+      <div class=query>Query</div>
     </div>
     {{#each leaks}}
       <div class="leak striped">
@@ -849,14 +851,17 @@
         <div class=client>{{.client}}</div>
         <div class=state>{{.state}}</div>
         <div class=started title="{{.started}}">{{age(.started)}}</div>
+        <div class=started title="{{.updated}}">{{age(.updated)}}</div>
         <div class=constr>{{.source}}</div>
         <div class=pid>{{.pid}}</div>
+        <div class=queried title="{{.queried}}">{{age(.queried)}}</div>
+        <div class=query title="{{.query}}">{{.query}}</div>
       </div>
     {{else}}
-      No connections.
+      <div style="padding: 0.2em;">No connections.</div>
     {{/each}}
   {{/partial}}
-  <tabs style="overflow: hidden;" no-pad>
+  <tabs style="overflow: hidden;" fill>
     <tab title="Added">
       <div class=content-wrapper>{{>leak leaks as leaks}}</div>
     </tab>
@@ -868,6 +873,9 @@
     </tab>
   </tabs>
   <div as-serverblock />
+  <div style="background-color: rgba(128, 128, 128, 0.1); padding: 0.2em; border-top: 1px solid;">
+    <div>Updated {{age(~/status.lastUpdate)}}</div>
+  </div>
 </script>
 
 <script type=text/ractive id=schema>

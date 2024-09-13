@@ -1696,15 +1696,18 @@ Window.extendWith(Leaks, {
   template: '#leaks',
   options: { flex: true, resizable: true, width: '40em', height: '30em' },
   css(data) { return `
+.content-wrapper { padding: 0; }
 .leak { display: flex; flex-wrap: wrap; }
 .leak > * { box-sizing: border-box; padding: 0.2em; }
-.leak.header { font-weight: bold; position: sticky; top: -0.5em; background-color: ${data('raui.window.host.bg') || '#fff'}; border-bottom: 1px solid; z-index: 1; padding: 0.3em; }
+.leak.header { font-weight: bold; position: sticky; top: 0; background-color: ${data('raui.window.host.bg') || '#fff'}; border-bottom: 1px solid; z-index: 1; padding: 0.3em; }
 .leak .user { width: 8em; }
 .leak .application { width: 12em; }
 .leak .client { width: 12em; }
 .leak .state { width: 5em; }
-.leak .started { width: 13em; }
+.leak .started, .leak .updated, .leak .queried { width: 13em; }
+.leak .constr, .leak .query { white-space: nowrap; text-overflow: ellipsis; }
 .leak .constr { width: 18em; }
+.leak .query { width: 99%; }
 .leak .pid { width: 6em; text-align: right; }
 `; },
   computed: {
