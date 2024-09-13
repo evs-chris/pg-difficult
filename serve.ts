@@ -321,6 +321,7 @@ async function message(this: WebSocket, msg: Message) {
         config.pollingInterval = msg.time >= 1000 ? msg.time : 10000;
         status();
         break;
+      case 'fetch': makeRequest(msg, this, msg.id); break;
       case 'halt': halt(); break;
     }
   } catch (e) {
@@ -853,6 +854,26 @@ async function poll(out: boolean) {
   notify({ action: 'leaks', map: send });
 
   state.leakTimer = setTimeout(poll, config.pollingInterval);
+}
+
+
+interface FetchRequest {
+  url: string;
+  headers?: { [name: string]: string };
+  method?: 'GET'|'POST'|'PUT'|'get'|'post'|'put';
+  body?: string;
+}
+async function makeRequest(config: FetchRequest, ws: WebSocket, id: string) {
+  try {
+    const init: RequestInit = {};
+    if (config.headers) init.headers = config.headers;
+    if (config.body) init.body = config.body;
+    if (config.method) init.method = config.method;
+    const res = await fetch(config.url, init);
+    notify({ id, result: await res.text() }, ws);
+  } catch (e) {
+    notify({ id, result: { error: e.stack } });
+  }
 }
 
 app.addEventListener('listen', ({ secure, hostname, port }) => {

@@ -1,4 +1,4 @@
-const { evaluate, template, registerOperator, parse, run, Root, stringify } = Raport;
+const { evaluate, template, registerOperator, parse, parseTemplate, run, Root, stringify } = Raport;
 const { docs } = Raport.Design;
 const { Window } = RauiWindow;
 
@@ -2255,6 +2255,10 @@ class HostExplore extends Window {
         }
       }
       return { value: set };
+    } else if (source.type === 'json') {
+      return { value: JSON.parse(source.json) };
+    } else if (source.type === 'pg-fetch') {
+      return { value: await makeRequest(source, params) };
     }
   }
   
@@ -2279,7 +2283,7 @@ class HostExplore extends Window {
 
       for (const src of report.sources) {
         data[src.name] = await this.reportData(list, src, sample, this.get('params'), report);
-      } // TODO: other sources?
+      }
 
       let html = run(report.definition, data);
       if (dl) {
@@ -2673,6 +2677,8 @@ class Report extends Window {
       }
     } else if (src.type === 'json') {
       this.respond({ data: JSON.parse(src.json) }, msg);
+    } else if (src.type === 'pg-fetch') {
+      this.respond({ data: await makeRequest(src, msg.params) }, msg);
     } else if (src.type === 'query-all') {
       this.respond({ data: app.get(`results.${Ractive.escapeKey(src.result)}`) || {} }, msg);
     } else if (src.type === 'query-all-sql') {
@@ -3135,6 +3141,50 @@ function serverblock(node) {
       watch.cancel();
     },
   };
+}
+
+const requestCache = {};
+async function makeRequest(config, params) {
+  const now = +new Date();
+  for (const k in requestCache) if (requestCache[k].expire < now) delete requestCache[k];
+  let key;
+  if (config.ttl) {
+    key = `${JSON.stringify(config)}-${JSON.stringify(params)}`;
+    const entry = requestCache[key];
+    if (entry) return entry.cache;
+  }
+  const root = new Root({}, { parser: parseTemplate, parameters: params });
+  const req = { url: evaluate(root, config.url) };
+  if (Array.isArray(config.headers)) {
+    req.headers = {};
+    for (const [k, v] of config.headers) req.headers[k] = evaluate(root, v);
+  }
+  if (config.body) req.body = evaluate(root, config.body);
+  if (config.method) req.method = config.method;
+  let res;
+  try {
+    if (config.server) res = (await request(Object.assign({ action: 'fetch' }, req))).result;
+    else res = await (await fetch(req.url, req)).text();
+    if (!config.eval || config.eval === 'json') res = JSON.parse(res);
+    else if (config.eval === 'raport') res = evaluate({}, res);
+    else if (config.eval === 'try') {
+      let val = res;
+      if (val[0] === '<') return evaluate({ val }, 'parse(val xml:1)');
+      try {
+        return JSON.parse(val);
+      } catch {}
+      val = evaluate({ val }, 'parse(val)')?.v;
+      if (val === undefined || Object.keys(val).length === 1 && val.r && val.r.k) {
+        val = evaluate({ val: res, header: config.csvHeader }, `parse(val csv:1 detect:1 header:header)`);
+      }
+      res = val;
+    }
+    if (config.ttl && key) requestCache[key] = { expire: now + (1000 * config.ttl), cache: res };
+    return res;
+  } catch (e) {
+    console.warn(`failed to load fetch data source`, e);
+    return res ?? [];
+  }
 }
 
 window.addEventListener('beforeunload', unload);

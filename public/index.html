@@ -1437,6 +1437,7 @@
           <option value="query-all-sql">Query All</option>
         {{/if}}
         <option value="json">JSON</option>
+        <option value="pg-fetch">Fetch</option>
       </select></label>
       {{#if source.type === 'query'}}<label as-field><input type=checkbox checked="{{source.config !== undefined}}" twoway=false on-change="@.set('source.config', @node.checked ? {} : undefined)" /> Custom connection?</label>{{/if}}
     </div>
@@ -1465,6 +1466,36 @@
       </div>
     {{elseif source.type === 'json'}}
       <label as-field>JSON<textarea>{{source.json}}</textarea></label>
+    {{elseif source.type === 'pg-fetch'}}
+      {{#with .source}}
+      <div>
+        <label as-field style="width: 26em;">URL <tip>URL, header values, and body are evaluated as a template with parameters in scope.</tip><input value="{{.url}}" /></label>
+        <label as-field>Method<select value="{{.method}}">
+          <option>GET</option>
+          <option>POST</option>
+        </select></label>
+        <label as-field>Type<select value="{{.eval}}">
+          <option value=json>JSON</option>
+          <option value=txt>Plain Text</option>
+          <option value=raport>Raport</option>
+          <option value=try>XML/CSV/JSONish</option>
+        </select></label>
+        <label as-field>Cache <tip>Number of seconds to cache a request, with 0 being don't cache.</tip><input type=number value="{{.ttl}}" placeholder=0 /></label>
+        {{#if .eval === 'try' || .eval === 'csv'}}<label as-field><input type=checkbox checked="{{.csvHeader}}" /> CSV Header?</label>{{/if}}
+        <label as-field><input type=checkbox checked="{{.server}}" /> Run from server? <tip>Running the request from the server can bypass CORS requirements.</tip></label>
+        <label as-field><button on-click="@context.push('.headers', [])">Add Header</button></label>
+      </div>
+      <div>
+        {{#each .headers}}
+          <div>
+            <label as-field><button class=flat on-click="@context.splice('../', @index, 1)">&times;</button></label>
+            <label as-field>Name<input value="{{this.0}}" /></label>
+            <label as-field>Value<input value="{{this.1}}" /></label>
+          </div>
+        {{/each}}
+      </div>
+      {{#if .method === 'POST'}}<label as-field style="min-height: 15em;">Body<textarea>{{.body}}</textarea></label>{{/if}}
+      {{/with}}
     {{elseif source.type === 'query-all'}}
       <label as-field>Result Name<input value="{{source.result}}" /></label>
     {{elseif source.type === 'query-all-sql'}}
