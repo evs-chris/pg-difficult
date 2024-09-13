@@ -2174,11 +2174,14 @@ class HostExplore extends Window {
 
     this.blocked = true;
     const progress = this.host.toast('Processing queries...', { type: 'info', timeout: 0 });
+    const start = Date.now() / 1000;
     const req = request({ action: 'query-all', clients: list, query: [query], batch });
     let total = 0;
     const listen = request.listen(`query-all-progress-${req.id}`, msg => {
       total = msg.total;
-      progress.message = `Queries ${msg.done} of ${msg.total} complete...`;
+      const elapsed = (Date.now() / 1000) - start;
+      const estimate = (elapsed / (msg.done / msg.total));
+      progress.message = `Queries ${msg.done} of ${msg.total} complete... (${(estimate - elapsed).toFixed(0)} of ~${estimate.toFixed(0)}s remaining)`;
     });
     const res = await req;
     listen.stop();
@@ -2235,11 +2238,14 @@ class HostExplore extends Window {
       else if (batch > 500) batch = 500;
       else batch = undefined;
       const progress = this.host.toast('Processing queries...', { type: 'info', timeout: 0 });
+      const start = Date.now() / 1000;
       const req = request({ action: 'query-all', clients: connections, query: [source.query], params: [queryParams(report.definition, source, params)], batch });
       let total = 0;
       const listen = request.listen(`query-all-progress-${req.id}`, msg => {
         total = msg.total;
-        progress.message = `Queries ${msg.done} of ${msg.total} complete...`;
+        const elapsed = (Date.now() / 1000) - start;
+        const estimate = (elapsed / (msg.done / msg.total));
+        progress.message = `Queries ${msg.done} of ${msg.total} complete... (${(estimate - elapsed).toFixed(0)} of ~${estimate.toFixed(0)}s remaining)`;
       });
       const res = await req;
       listen.stop();
