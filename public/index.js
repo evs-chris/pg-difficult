@@ -21,12 +21,12 @@ Ractive.helpers.age = function(ts) {
   let tmp;
   if ((tmp = +now - +d) < 120000) return `${Math.ceil(tmp / 1000)} second${tmp > 1000 ? 's' : ''} ago`;
   if ((tmp = +now - +d) < 5400000) return `${Math.ceil(tmp / 60000)} minute${tmp > 6000 ? 's' : ''} ago`;
-  const today = evaluate({ d: new Date(ts) }, 'date(d :midnight)');
+  const today = evaluate({ d: now }, 'date(d :midnight)');
   if (+d > +today) return `${evaluate({ d }, `d#date,'HH:mm'`)} today`;
-  const yesterday = evaluate({ d: new Date(ts) }, 'date(d :midnight) - #1d#');
+  const yesterday = evaluate({ d: now }, 'date(d :midnight) - #1d#');
   if (+d > +yesterday) return `${evaluate({ d }, `d#date,'HH:mm'`)} yesterday`;
-  if (+now - +d < (300 * 86400000)) return evaluate({ d }, `d#date,'MMM d'`);
-  if (+now - +d > (7 * 86400000)) return evaluate({ d }, `d#date,'yyyy-MM-dd'`);
+  if (+now - +d < (300 * 86400000)) return evaluate({ d }, `d#date,'MMM d - HH:mm'`);
+  if (+now - +d > (7 * 86400000)) return evaluate({ d }, `d#date,'yyyy-MM-dd - HH:mm'`);
   return evaluate({ d }, `d#date,'HH:mm EEE'`);
 }
 Ractive.helpers.escapeKey = Ractive.escapeKey;
