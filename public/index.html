@@ -262,11 +262,11 @@
   }
 
   .tree-line { height: 1.5em; line-height: 1.5em; }
-  .tree-children .back-dots { position: absolute; left: -1px; height: 0.6em; width: 0.75em; border-bottom: 1px dotted; }
+  .tree-children .back-dots { position: absolute; left: 0; height: 0.6em; width: 0.75em; border-bottom: 1px dotted; }
+  .tree-children .back-line { position: absolute; left: -2px; height: calc(100% - 0.8em); top: 0; border-left: 1px dotted; }
   .tree-children .expander { display: inline-block; border: 1px solid; opacity: 0.5; width: 1em; height: 1em; text-align: center; margin-left: 0.25em; margin-right: 0.5em; cursor: pointer; line-height: 1em; }
   .tree-children .name { cursor: pointer; line-height: 1.5em; }
-  .tree-children { position: relative; border-left: 1px dotted; margin-left: 0.75em; padding-left: 0.75em; }
-  .tree-children:after { content: ' '; position: absolute; display: block; width: 0.75em; height: 0.85em; bottom: 0; left: -0.32em; }
+  .tree-children { position: relative; margin-left: 0.75em; padding-left: 0.75em; }
   .tree-children .tree-leaf { height: 1.5em; display: flex; justify-content: space-between; margin-left: 0.5em; border-bottom: 1px solid rgba(128, 128, 128, 0.05); transition: background-color 0.2s ease; }
   .tree-children .tree-leaf:hover { background-color: rgba(128, 128, 128, 0.05); }
   .tree-children .remove-button { cursor: pointer; margin-left: 1em; opacity: 0.5; transition: opacity 0.2s ease; }
@@ -608,9 +608,10 @@
     <button left title="Open a new evaluation pad for calculations or inspecting data." on-click="@.evalPad()">Eval Pad</button>
   </buttons>
   {{#partial node}}
-    <div class=tree-line>{{#if .name}}<div class=back-dots /><span class=expander on-click="@context.toggle('.expand')">{{.expand ? '-' : '+'}}</span> <span class=name on-click="@context.toggle('.expand')"> {{.name}}/</span>{{else}}<span style="display: inline-block; width: 0.5em;" /> <span>{{.name}}/{{/if}}</div>
+    <div class=tree-line>{{#if .name}}<div class=back-dots /><span class=expander on-click="@context.toggle('.expand')">{{.expand ? '-' : '+'}}</span> <span class=name on-click="@context.toggle('.expand')"> {{.name}}/</span>{{else}}<span style="margin-left: 0.5em;" class=name>{{.name}}/</span>{{/if}}</div>
     {{#if .expand}}
       <div class=tree-children>
+        <div class=back-line />
         {{#each .nodes}}{{>.type}}{{/each}}
       </div>
     {{/if}}
