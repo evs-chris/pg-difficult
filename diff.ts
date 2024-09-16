@@ -156,12 +156,14 @@ export async function start(client: Client, opts?: StartOptions) {
     await client.unsafe(`create or replace function pgdifficult.record() returns trigger as $trigger$
   declare
     segment varchar;
+    hide boolean;
     rec record;
     obj_old json;
     obj_new json;
     pkeys varchar[];
   begin
     set timezone = 'UTC';
+    select value into hide from pgdifficult.state where key = 'hide';
     select value into segment from pgdifficult.state where key = 'segment';${maxlen <= 0 ? `
     select row_to_json(OLD) into obj_old;
     select row_to_json(NEW) into obj_new;` : `
@@ -174,7 +176,7 @@ export async function start(client: Client, opts?: StartOptions) {
         select array_agg(a.attname::varchar) into pkeys from pg_index i join pg_attribute a on i.indrelid = a.attrelid and a.attnum = any(i.indkey) where i.indrelid = TG_RELID and i.indisprimary;
 
         case when pkeys is null then
-          insert into pgdifficult.entries ("table", "schema", "segment", "old", "new", stamp) values (TG_TABLE_NAME, TG_TABLE_SCHEMA, segment, obj_old, obj_new, CURRENT_TIMESTAMP(3));
+          insert into pgdifficult.entries ("table", "schema", "segment", "hide", "old", "new", stamp) values (TG_TABLE_NAME, TG_TABLE_SCHEMA, segment, hide = 'true', obj_old, obj_new, CURRENT_TIMESTAMP(3));
         else
           -- specified change recording method for old${changes === 'diff' ? `
           with obj1 as (select * from json_each(obj_old)), obj2 as (select * from json_each(obj_new)), diff as (select a.key, a.value from obj1 a join obj2 b on a.key = b.key where a.value is null and b.value is not null or b.value is null and a.value is not null or a.value::varchar <> b.value::varchar or a.key = any(pkeys))
@@ -182,14 +184,14 @@ export async function start(client: Client, opts?: StartOptions) {
           -- specified change recording method for new${changes === 'diff' || changes === 'whole-old' ? `
           with obj1 as (select * from json_each(obj_new)), obj2 as (select * from json_each(obj_old)), diff as (select a.key, a.value from obj1 a join obj2 b on a.key = b.key where a.value is null and b.value is not null or b.value is null and a.value is not null or a.value::varchar <> b.value::varchar or a.key = any(pkeys))
           select json_object_agg(key, value) into obj_new from diff;` : ' - whole'}
-          insert into pgdifficult.entries ("table", "schema", "segment", "old", "new", stamp) values (TG_TABLE_NAME, TG_TABLE_SCHEMA, segment, obj_old, obj_new, CURRENT_TIMESTAMP(3));
+          insert into pgdifficult.entries ("table", "schema", "segment", "hide", "old", "new", stamp) values (TG_TABLE_NAME, TG_TABLE_SCHEMA, segment, hide = 'true', obj_old, obj_new, CURRENT_TIMESTAMP(3));
         end case;
         rec := NEW;
       when 'INSERT' then
-        insert into pgdifficult.entries ("table", "schema", "segment", "old", "new", stamp) values (TG_TABLE_NAME, TG_TABLE_SCHEMA, segment, null, obj_new, CURRENT_TIMESTAMP(3));
+        insert into pgdifficult.entries ("table", "schema", "segment", "hide", "old", "new", stamp) values (TG_TABLE_NAME, TG_TABLE_SCHEMA, segment, hide = 'true', null, obj_new, CURRENT_TIMESTAMP(3));
         rec := NEW;
       when 'DELETE' then
-        insert into pgdifficult.entries ("table", "schema", "segment", "old", "new", stamp) values (TG_TABLE_NAME, TG_TABLE_SCHEMA, segment, obj_old, null, CURRENT_TIMESTAMP(3));
+        insert into pgdifficult.entries ("table", "schema", "segment", "hide", "old", "new", stamp) values (TG_TABLE_NAME, TG_TABLE_SCHEMA, segment, hide = 'true', obj_old, null, CURRENT_TIMESTAMP(3));
         rec := OLD;
       else
         raise exception 'Unknown trigger op: "%"', TG_OP;
@@ -209,6 +211,16 @@ export async function start(client: Client, opts?: StartOptions) {
 export async function next(client: Client, segment: string) {
   await client`update pgdifficult.state set value = ${segment} where key = 'segment';`;
   await client.unsafe(`notify __pg_difficult, '${JSON.stringify({ action: 'segment', segment }).replace(/\'/g, '\\\'')}'`);
+}
+
+export async function setState(client: Client, key: string, value: string) {
+  const res = await client`update pgdifficult.state set value = ${value} where key = ${key};`;
+  if (res.count < 1) await client `insert into pgdifficult.state (key, value) values (${key}, ${value});`;
+  await client.unsafe(`notify __pg_difficult, '${JSON.stringify({ action: 'state', key, value }).replace(/\'/g, '\\\'')}'`);
+}
+
+export async function getState(client: Client, key: string): Promise<string|null> {
+  return ((await client`select value from pgdifficult.state where key = ${key}`)[0] || {}).value ?? null;
 }
 
 export async function schema(client: Client): Promise<Schema> {

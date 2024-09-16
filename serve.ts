@@ -146,6 +146,7 @@ interface Client {
 
 interface State {
   segment: string;
+  hide: boolean;
   saved: diff.Entry[];
   diffId: number;
   diffs: { [id: number]: Client }
@@ -156,6 +157,7 @@ interface State {
 
 const state: State = {
   segment: 'Initial',
+  hide: false,
   saved: [],
   diffId: 0,
   diffs: {},
@@ -292,6 +294,7 @@ interface Stop { action: 'stop', id: number; diff: number; save?: true }
 interface Status { action: 'status'; id: string }
 interface Clear { action: 'clear'; source?: string|number }
 interface Segment { action: 'segment'; segment: string; id?: string }
+interface Hide { action: 'hide'; hide: boolean; id?: string }
 interface Check { action: 'check'; client: string|number; since?: string; id: string; }
 interface Schema { action: 'schema'; client?: string|number|DatabaseConfig; id?: string }
 interface Query { action: 'query'; client: string|number|DatabaseConfig; query: string[]; params?: unknown[][]; id: string }
@@ -312,6 +315,7 @@ async function message(this: WebSocket, msg: Message) {
       case 'status': status(msg.id, this); break;
       case 'clear': await clear(msg.source ? clientForSource(msg.source) : undefined); break;
       case 'segment': await next(msg.segment, this, msg.id); break;
+      case 'hide': await hide(msg.hide, this, msg.id); break;
       case 'ping': this.send(JSON.stringify({ action: 'pong' })); break;
       case 'check': check(this, msg.client, msg.id, msg.since); break;
       case 'schema': schema(this, msg.client, msg.id); break;
@@ -394,6 +398,10 @@ async function start(config: DatabaseConfig, id: number, ws: WebSocket, start?: 
 
     if (restart && start === 'resume') {
       await client`notify __pg_difficult, 'joined'`;
+      if (state.segment === 'Initial') {
+        state.segment = await diff.getState(client, 'segment');
+        state.hide = await diff.getState(client, 'hide') === 'true';
+      }
       notify({ id, action: 'resumed' }, ws);
       try {
         await client.end();
@@ -500,6 +508,10 @@ async function connectedDiff(rec: Client) {
     } else if (v === 'segment') {
       if (req && req.segment) state.segment = req.segment;
       status();
+    } else if (v === 'state') {
+      if (req && req.key && req.key === 'hide') {
+        state.hide = req.value === 'true';
+      }
     } else if (v === 'ping') {
       if (rec.pong && req.id === rec.pong.id) rec.pong.callback();
     } else if (!v || v === 'record') {
@@ -577,6 +589,18 @@ async function next(segment: string, ws: WebSocket, id?: string) {
   status();
 
   if (id) notify({ action: 'segment-change', id }, ws);
+}
+
+async function hide(hide: boolean, ws: WebSocket, id?: string) {
+  for (const k in state.diffs) {
+    const d = state.diffs[k];
+    if (!d.client) continue;
+    d.lock = true;
+    await diff.setState(d.client, 'hide', `${hide}`);
+    d.lock = false;
+  }
+
+  if (id) notify({ action: 'hide-change', id }, ws);
 }
 
 async function clear(client?: number) {

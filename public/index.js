@@ -1545,7 +1545,33 @@ res
 
     if (!this.event?.event?.ctrlKey || this.event?.event?.shiftKey) await request({ action: 'segment', segment: `Undo ${entry.segment}` });
 
-    request({ action: 'query', query: reverse.map(p => p[0]), params: reverse.map(p => p[1]), client: Object.values(app.get('status.clients') || {}).find(c => c.source === this.source).config });
+    const blocked = this.blocked;
+    this.blocked = true;
+    try {
+      await request({ action: 'query', query: reverse.map(p => p[0]), params: reverse.map(p => p[1]), client: Object.values(app.get('status.clients') || {}).find(c => c.source === this.source).config });
+    } finally {
+      if (!blocked) this.blocked = false;
+    }
+    return true;
+  }
+
+  undoAndHide(entry) {
+    setTimeout(async () => {
+      app.add('waiting', 1);
+      this.blocked = true;
+      try {
+        const segment = app.get('newSegment');
+        await request({ action: 'hide', hide: true });
+        if (await this.undoSegment(entry)) {
+          if (!entry.hide) await this.toggleHidden(entry, true);
+          await request({ action: 'segment', segment });
+        }
+        await request({ action: 'hide', hide: false });
+      } finally {
+        app.subtract('waiting', 1);
+        this.blocked = false;
+      }
+    });
   }
 
   async renameSegment(entry, by) {
@@ -1581,8 +1607,8 @@ res
     (this.source ? app : this).update('entries');
   }
 
-  async toggleHidden(entry) {
-    if (!await app.confirm(`${entry.hide ? 'Restore' : 'Remove'} segment ${entry.segment}?`)) return;
+  async toggleHidden(entry, noconfirm) {
+    if (!noconfirm && !await app.confirm(`${entry.hide ? 'Show' : 'Hide'} segment ${entry.segment}?`)) return;
     const hide = !entry.hide;
     const all = (this.source || this.combined) ? app.get('entries') : this.get('entries') || [];
     const targets = adjacentEntries(entry, all, 'segment');
