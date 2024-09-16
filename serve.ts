@@ -139,6 +139,7 @@ interface Client {
   id: number;
   config: DatabaseConfig;
   client?: PGClient;
+  listening: boolean;
   lock?: boolean;
   pong?: { id: number; callback: () => void };
 }
@@ -181,6 +182,7 @@ function prepareConfig(cfg: DatabaseConfig, extra?: Partial<DatabaseConfig> & { 
     } },
     connection: { application_name: `pg-difficult:${config.port}${extra?.app ? `(${extra.app})` : ''}` },
     ssl: 'prefer',
+    connect_timeout: 10,
   }
   if (config.ssl === 'require') base.ssl = 'require';
   if (config.ssl === false) delete base.ssl;
@@ -393,6 +395,9 @@ async function start(config: DatabaseConfig, id: number, ws: WebSocket, start?: 
     if (restart && start === 'resume') {
       await client`notify __pg_difficult, 'joined'`;
       notify({ id, action: 'resumed' }, ws);
+      try {
+        await client.end();
+      } catch {}
     } else {
       if (restart && start === 'restart') await diff.stop(client);
       try {
@@ -459,7 +464,7 @@ async function reconnectDiff(client: Client) {
   if (current) {
     status();
     try {
-      if (client.client) await current.end();
+      await current.end();
     } catch {}
   }
 
@@ -470,7 +475,8 @@ async function reconnectDiff(client: Client) {
 }
 
 async function connectedDiff(rec: Client) {
-  if (!rec.client) return;
+  if (!rec.client || rec.listening) return;
+  rec.listening = true;
   await rec.client.listen('__pg_difficult', async v => {
     if (rec.lock) return;
     let req: any;
@@ -510,6 +516,7 @@ async function listenerPing(client: Client) {
   const tm = setTimeout(() => {
     client.pong = undefined;
     console.log(`ping timeout on ${id}, client ${client.id} (${source(client.config)})`);
+    client.listening = false;
     fail(new Error('timeout'));
   }, 5000);
   client.pong = { id, callback: () => { clearTimeout(tm); ok(); } };
@@ -583,6 +590,7 @@ async function clear(client?: number) {
       if (!d.client) continue;
       d.lock = true;
       await diff.clear(d.client);
+      d.lock = false;
     }
   }
 
@@ -835,6 +843,15 @@ async function unleak(client: DatabaseConfig) {
 }
 
 async function poll(out: boolean) {
+  try {
+    await Promise.race([sleep(2 * config.pollingInterval).then(() => { throw new Error('poll timed out'); }), _poll(out)]);
+  } catch (e) {
+    console.error('error processing leaks', e);
+  }
+  state.leakTimer = setTimeout(poll, config.pollingInterval);
+}
+
+async function _poll(out: boolean) {
   const leaks = Object.values(state.leaks);
   if (leaks.length < 1) {
     if (state.leakTimer != null && out) clearTimeout(state.leakTimer);
@@ -842,7 +859,44 @@ async function poll(out: boolean) {
     return;
   }
 
-  for (const l of leaks) if (l.client.client) l.current = await listConnections(l.client.client);
+  for (const l of leaks) {
+    if (l.client.client) {
+      try {
+        try {
+          await l.client.client`select 1 as x`;
+          l.current = await listConnections(l.client.client);
+        } catch (e) {
+          console.error('failed to list connections', e);
+          const c = l.client.client;
+          l.client.client = undefined;
+          try {
+            await c.end();
+          } catch {}
+          try {
+            const c = postgres(prepareConfig(l.client.config, { app: 'monitor' }));
+
+            await c`select 1 as x`;
+            l.client.client = c;
+            l.current = await listConnections(c);
+          } catch (e) {
+            console.error('failed to list connections with new connection', e);
+          }
+        }
+      } catch (e) {
+        console.error('failed to process leaks', e);
+      }
+    } else {
+      try {
+        const c = postgres(prepareConfig(l.client.config, { app: 'monitor' }));
+
+        await c`select 1 as x`;
+        l.client.client = c;
+        l.current = await listConnections(c);
+      } catch (e) {
+        console.error('failed to list connections with new connection', e);
+      }
+    }
+  }
 
   if (out && state.leakTimer != null) {
     clearTimeout(state.leakTimer);
@@ -852,10 +906,7 @@ async function poll(out: boolean) {
   const send: { [id: number]: Connection[] } = {};
   for (const l of leaks) send[l.client.id] = l.current;
   notify({ action: 'leaks', map: send });
-
-  state.leakTimer = setTimeout(poll, config.pollingInterval);
 }
-
 
 interface FetchRequest {
   url: string;
