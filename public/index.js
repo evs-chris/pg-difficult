@@ -31,6 +31,8 @@ Ractive.helpers.age = function(ts) {
 }
 Ractive.helpers.escapeKey = Ractive.escapeKey;
 Ractive.helpers.evaluate = Raport.evaluate;
+Ractive.helpers.download = download;
+Ractive.helpers.basename = basename;
 
 Ractive.decorators.autofocus = function autofocus(node) {
   if (node) {
@@ -982,6 +984,14 @@ class ControlPanel extends Window {
     if (v.type === 'report') app.openReport(v);
     else if (v.type === 'scratch') app.openScratch(v);
     else if (v.type === 'query') app.set('loadedQuery', v.id);
+  }
+  async scratchText(id) {
+    const v = await store.get(id);
+    return v.text;
+  }
+  async queryText(id) {
+    const v = await store.get(id);
+    return v.sql;
   }
   localDiff() {
     app.openLocalDiff();
@@ -2926,7 +2936,12 @@ function reconnect(wait = 10000) {
   if (!app.get('connected')) setTimeout(() => connect(), wait);
 }
 
-function download(name, value, type) {
+function basename(name) {
+  return name.slice(name.lastIndexOf('/') + 1);
+}
+
+async function download(name, value, type) {
+  if (typeof value === 'object' && typeof value.then === 'function') value = await value;
   const blob = typeof value === 'string' ? new Blob([value], { type: type || 'application/octet-stream' }) : value;
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');

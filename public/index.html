@@ -459,6 +459,7 @@
         {{#if ~/loadedQuery}}<button on-click="@.set('loadedQuery', undefined)">Cancel</button>{{/if}}
       </div>
       <div style="overflow: auto;">
+        {{#partial leaf}}<div class=back-dots /><div class=tree-leaf><span class=name title="Load this query. ctrl or shift click to download." on-click="@event.ctrlKey || @event.shiftKey ? download(.name + '.sql', @.queryText(.value.id)) : @.open(.value)">{{.name}}</span> <span style="line-height: 1.5em;"><span class=remove-button title="Remove this query." on-click="@.remove(.value)">&times;</span></span></div>{{/partial}}
         {{>node ~/queryTree}}
       </div>
     </tab>
@@ -469,7 +470,7 @@
       </div>
       <div style="overflow: auto;">
         {{#partial leaf}}
-          <div class=back-dots /><div class=tree-leaf><span class=name {{#if .value.host}}style="cursor: not-allowed;" title="This report utilizes SQL query sources, making it only accessible from a Host Explorer."{{else}}on-click="@.open(.value)"{{/if}}>{{.name}}</span> <span style="line-height: 1.5em;">{{.value.kind}} <span class=remove-button title="Remove this {{.value.type}}." on-click="@.remove(.value)">&times;</span></span></div>
+          <div class=back-dots /><div class=tree-leaf><span class=name {{#if .value.host}}style="cursor: not-allowed;" title="This report utilizes SQL query sources, making it only accessible from a Host Explorer. ctrl or shift click to download." on-click="@event.shiftKey || @event.ctrlKey ? download(.name + '.raport-proj', JSON.stringify(.value)) : false"{{else}}title="Open report designer. ctrl or shift click to download." on-click="@event.shiftKey || @event.ctrlKey ? download(.name + '.raport-proj', JSON.stringify(.value)) : @.open(.value)"{{/if}}>{{.name}}</span> <span style="line-height: 1.5em;">{{.value.kind}} <span class=remove-button title="Remove this {{.value.type}}." on-click="@.remove(.value)">&times;</span></span></div>
         {{/partial}}
         {{>node ~/reportTree}}
       </div>
@@ -480,6 +481,9 @@
         <div style="flex-shrink: 0;"><button title="Open a new scratch pad." on-click="@.open({ type: 'scratch' })">New Scratch Pad</button></div>
       </div>
       <div style="overflow: auto;">
+        {{#partial leaf}}
+          <div class=back-dots /><div class=tree-leaf><span class=name title="Open scratch pad. ctrl or shift click to download." on-click="@event.ctrlKey || @event.shiftKey ? download(.name, @.scratchText(.value.id)) : @.open(.value)">{{.name}}</span> <span style="line-height: 1.5em;">{{.value.syntax}} <span class=remove-button title="Remove this scrath pad." on-click="@.remove(.value)">&times;</span></span></div>
+        {{/partial}}
         {{>node ~/scratchPadTree}}
       </div>
     </tab>
@@ -615,9 +619,6 @@
         {{#each .nodes}}{{>.type}}{{/each}}
       </div>
     {{/if}}
-  {{/partial}}
-  {{#partial leaf}}
-    <div class=back-dots /><div class=tree-leaf><span class=name on-click="@.open(.value)">{{.name}}</span> <span style="line-height: 1.5em;">{{.value.syntax}} <span class=remove-button title="Remove this scrath pad." on-click="@.remove(.value)">&times;</span></span></div>
   {{/partial}}
   {{#partial ace-themes}}
     <option value="{{undefined}}">The Default&trade;</option>
@@ -1620,7 +1621,6 @@
       </div>
     </div>
   {{/partial}}
-  {{#partial leaf}}<div class=value>{{.value}}</div>{{/partial}}
   {{#partial array}}
       <div class=type style="margin-left: 0.5em;">[</div>
       <div class=expand {{#if .children.length}}class-show on-click="@context.toggle('.expand')"{{/if}}>{{#if .expand}}-{{else}}+{{/if}}</div>
