@@ -309,7 +309,7 @@ const store = globalThis.store = {};
 
   let desync;
   store.sync = function sync(servers) {
-    if ((servers || []).map(s => JSON.stringify(s)).sort().join('') === (desync || []).map(d => d._pgdiff).sort().join('')) return;
+    if ((servers || []).filter(s => !s.inactive).map(s => JSON.stringify(s)).sort().join('') === (desync || []).map(d => d._pgdiff).sort().join('')) return;
     // TODO: install a backoff function that doesn't go back to 10 minues maybe?
     if (desync) for (const s of desync) s.cancel();
     desync = [];

@@ -579,6 +579,7 @@
               <label as-field>Database<input value="{{.db}}" on-change="@context.set('valid', false)" /></label>
               <label as-field>Username<input value="{{.user}}" on-change="@context.set('valid', false)" /></label>
               <label as-field>Password<input type="password" value="{{.password}}" on-change="@context.set('valid', false)" /></label>
+              <label as-field title="Should this server be actively used for syncing?"><input type=checkbox twoway=false checked="{{!.inactive}}" on-change="@context.set('.inactive', !@node.checked)" /> Active?</label>
               <fieldset>
                 <legend>Sync Categories</legend>
                 <label as-field><input type=checkbox name="{{.types}}" value="settings" /> Settings</label>
