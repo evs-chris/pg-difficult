@@ -141,19 +141,17 @@ export async function start(client: Client, opts?: StartOptions) {
   ignore.push('__pgdifficult_%', 'pgdifficult.%');
   await client.begin(async client => {
     const tables: Table[] = evaluate({ tables: await client.unsafe(tableQuery), ignore }, `filter(tables =>name not-ilike ~ignore and '{schema}.{name}' not-ilike ~ignore)`);
+    let sql = '';
     if (!tables.length) throw new Error(`No tables to watch`);
-    await client`create schema if not exists pgdifficult`;
-    await client`grant all on schema pgdifficult to public`;
-    await client`create table if not exists pgdifficult.entries (id bigserial primary key, "schema" varchar not null, "table" varchar not null, segment varchar not null, old json, new json, hide boolean, stamp timestamptz not null);`;
-    if (!('hide' in (await client`select e.* from (select 1) as dummy left join pgdifficult.entries e on 1 = 2`)[0])) {
-      await client`alter table pgdifficult.entries add column hide boolean;`;
-    }
-    await client`grant all on table pgdifficult.entries to public`;
-    await client`grant all on sequence pgdifficult.entries_id_seq to public`;
-    await client`create table if not exists pgdifficult.state (key varchar primary key, value varchar);`;
-    await client`grant all on table pgdifficult.state to public`;
-    await client`insert into pgdifficult.state (key, value) values ('segment', 'initial');`;
-    await client.unsafe(`create or replace function pgdifficult.record() returns trigger as $trigger$
+    sql += `create schema if not exists pgdifficult;\n`;
+    sql += `grant all on schema pgdifficult to public;\n`;
+    sql += `create table if not exists pgdifficult.entries (id bigserial primary key, "schema" varchar not null, "table" varchar not null, segment varchar not null, old json, new json, hide boolean, stamp timestamptz not null);\n`;
+    sql += `grant all on table pgdifficult.entries to public;\n`;
+    sql += `grant all on sequence pgdifficult.entries_id_seq to public;\n`;
+    sql += `create table if not exists pgdifficult.state (key varchar primary key, value varchar);\n`;
+    sql += `grant all on table pgdifficult.state to public;\n`;
+    sql += `insert into pgdifficult.state (key, value) values ('segment', 'initial');`;
+    sql += `create or replace function pgdifficult.record() returns trigger as $trigger$
   declare
     segment varchar;
     hide boolean;
@@ -199,11 +197,17 @@ export async function start(client: Client, opts?: StartOptions) {
     notify __pg_difficult, 'record';
     return rec;
   end;
-  $trigger$ language plpgsql;`);
-    await client`grant all on function pgdifficult.record() to public`;
+  $trigger$ language plpgsql;\n`;
+    sql += `grant all on function pgdifficult.record() to public;\n`;
     for (const table of tables) {
-      await client`drop trigger if exists __pgdifficult_notify on ${client(table.schema)}.${client(table.name)};`;
-      await client`create constraint trigger __pgdifficult_notify after insert or update or delete on ${client(table.schema)}.${client(table.name)} deferrable initially deferred for each row execute procedure pgdifficult.record();`;
+      sql += `drop trigger if exists __pgdifficult_notify on ${client(table.schema).value}.${client(table.name).value};\n`;
+      sql += `create constraint trigger __pgdifficult_notify after insert or update or delete on ${client(table.schema).value}.${client(table.name).value} deferrable initially deferred for each row execute procedure pgdifficult.record();\n`;
+    }
+
+    await client.unsafe(sql);
+
+    if (!('hide' in (await client`select e.* from (select 1) as dummy left join pgdifficult.entries e on 1 = 2`)[0])) {
+      await client`alter table pgdifficult.entries add column hide boolean;`;
     }
   });
 }
@@ -317,16 +321,18 @@ export async function clear(client: Client) {
 export async function stop(client: Client): Promise<Segment> {
   const res = await dump(client);
   await client.begin(async t => {
-    await t`drop table if exists __pgdifficult_entries;`;
-    await t`drop table if exists __pgdifficult_state;`;
-    await t`drop table if exists pgdifficult.entries;`;
-    await t`drop table if exists pgdifficult.state;`;
     const tables: Table[] = await t.unsafe(tableQuery);
-    for (const table of tables) await t`drop trigger if exists __pgdifficult_notify on ${t(table.schema)}.${t(table.name)}`;
-    await t`drop function if exists __pgdifficult_record();`;
-    await t`drop function if exists pgdifficult.record();`;
-    await t`drop schema if exists pgdifficult;`;
-    await t`notify __pg_difficult, 'stopped'`;
+    let sql = '';
+    for (const table of tables) sql += `drop trigger if exists __pgdifficult_notify on ${t(table.schema).value}.${t(table.name).value};\n`;
+    sql += `drop table if exists __pgdifficult_entries;\n`;
+    sql += `drop table if exists __pgdifficult_state;\n`;
+    sql += `drop table if exists pgdifficult.entries;\n`;
+    sql += `drop table if exists pgdifficult.state;\n`;
+    sql += `drop function if exists __pgdifficult_record();\n`;
+    sql += `drop function if exists pgdifficult.record();\n`;
+    sql += `drop schema if exists pgdifficult;\n`;
+    sql += `notify __pg_difficult, 'stopped';`;
+    await t.unsafe(sql);
   });
   return res;
 }
