@@ -165,12 +165,12 @@ export async function start(client: Client, opts?: StartOptions) {
     set timezone = 'UTC';
     select value into hide from pgdifficult.state where key = 'hide';
     select value into segment from pgdifficult.state where key = 'segment';${maxlen <= 0 ? `
-    select row_to_json(OLD) into obj_old;
-    select row_to_json(NEW) into obj_new;` : `
-    with obj as (select a.key, case when length(a.value::varchar) > ${maxlen} then ('"<a really big value md5:' || md5(a.value::varchar) || '>"')::json else a.value end as value from json_each(row_to_json(OLD)) a)
-    select json_object_agg(key, value) into obj_old from obj;
-    with obj as (select a.key, case when length(a.value::varchar) > ${maxlen} then ('"<a really big value md5:' || md5(a.value::varchar) || '>"')::json else a.value end as value from json_each(row_to_json(NEW)) a)
-    select json_object_agg(key, value) into obj_new from obj;`}
+    if TG_OP = 'INSERT' then select null::json into obj_old; else select row_to_json(OLD) into obj_old; end if;
+    if TG_OP = 'DELETE' then select null::json into obj_new; else select row_to_json(NEW) into obj_new; end if;` : `
+    if TG_OP = 'INSERT' then select null::json into obj_old; else with obj as (select a.key, case when length(a.value::varchar) > ${maxlen} then ('"<a really big value md5:' || md5(a.value::varchar) || '>"')::json else a.value end as value from json_each(obj_old) a)
+    select json_object_agg(key, value) into obj_old from obj; end if;
+    if TG_OP = 'DELETE' then select null::json into obj_new; else with obj as (select a.key, case when length(a.value::varchar) > ${maxlen} then ('"<a really big value md5:' || md5(a.value::varchar) || '>"')::json else a.value end as value from json_each(obj_new) a)
+    select json_object_agg(key, value) into obj_new from obj; end if;`}
     case TG_OP
       when 'UPDATE' then
         select array_agg(a.attname::varchar) into pkeys from pg_index i join pg_attribute a on i.indrelid = a.attrelid and a.attnum = any(i.indkey) where i.indrelid = TG_RELID and i.indisprimary;
