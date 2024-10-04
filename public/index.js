@@ -708,10 +708,6 @@ const app = globalThis.app = new App({
         });
       }
     },
-    waiting(v) {
-      if (v) document.body.style.cursor = 'wait';
-      else document.body.style.cursor = 'default';
-    },
     sync: {
       handler: debounce(() => {
         writeSync();
