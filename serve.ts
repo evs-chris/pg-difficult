@@ -701,8 +701,25 @@ async function query(client: DatabaseConfig|number|string, query: string[], para
         notify({ action: 'query', id, result: results.length === 1 ? results[0] : results, time: Date.now() - start, affected: results.length === 1 ? (results[0] as { count: number }).count : results.map(r => (r as { count: number }).count) }, ws);
       });
     } catch (e) {
-      console.error(e, query);
-      error(`Error running query: ${e.message}`, ws, { id });
+      if (/cannot run inside a transaction block/.test(e.message)) {
+        if (query.length === 1) {
+          try {
+            const results: unknown[] = [];
+            results.push(await c.unsafe(query[0], params[0] as JSONValue[]));
+            notify({ action: 'query', id, result: results.length === 1 ? results[0] : results, time: Date.now() - start, affected: results.length === 1 ? (results[0] as { count: number }).count : results.map(r => (r as { count: number }).count) }, ws);
+          } catch (e) {
+            console.error(e, query);
+            error(`Error running query: ${e.message}`, ws, { id });
+          }
+        } else {
+          const err = `Cannot run multiple queries outside of a transaction block, and the supplied sql must be run outside of a transaction block.`;
+          console.error(err, query);
+          error(`Error running query: ${err}`, ws, { id });
+        }
+      } else {
+        console.error(e, query);
+        error(`Error running query: ${e.message}`, ws, { id });
+      }
     } finally {
       try {
         await c.end();
@@ -725,8 +742,25 @@ async function query(client: DatabaseConfig|number|string, query: string[], para
         notify({ action: 'query', id, result: results.length === 1 ? results[0] : results, time: Date.now() - start, affected: results.length === 1 ? (results[0] as { count: number }).count : results.map(r => (r as { count: number }).count) }, ws);
       });
     } catch (e) {
-      console.error(e, query);
-      error(`Error running query: ${e.message}`, ws, { id });
+      if (/cannot run inside a transaction block/.test(e.message)) {
+        if (query.length === 1) {
+          try {
+            const results: unknown[] = [];
+            results.push(await c.unsafe(query[0], params[0] as JSONValue[]));
+            notify({ action: 'query', id, result: results.length === 1 ? results[0] : results, time: Date.now() - start, affected: results.length === 1 ? (results[0] as { count: number }).count : results.map(r => (r as { count: number }).count) }, ws);
+          } catch (e) {
+            console.error(e, query);
+            error(`Error running query: ${e.message}`, ws, { id });
+          }
+        } else {
+          const err = `Cannot run multiple queries outside of a transaction block, and the supplied sql must be run outside of a transaction block.`;
+          console.error(err, query);
+          error(`Error running query: ${err}`, ws, { id });
+        }
+      } else {
+        console.error(e, query);
+        error(`Error running query: ${e.message}`, ws, { id });
+      }
     } finally {
       try { // hmmmm
         await c.end();
