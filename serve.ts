@@ -18,6 +18,7 @@ interface DatabaseConfig {
   database: string;
   ssl?: 'prefer'|'require';
   diffopts?: diff.StartOptions;
+  connect_timeout: number;
 }
 
 interface DatabasesConfig extends DatabaseConfig {
@@ -43,6 +44,7 @@ const config = {
   user: undefined as string,
   password: undefined as string,
   ssl: undefined as any,
+  connect_timeout: 30,
 };
 
 // process args
@@ -388,7 +390,7 @@ async function start(config: DatabaseConfig, id: number, ws: WebSocket, start?: 
         restart = true;
         if (!start) {
           try {
-            await client.end();
+            await client.end({ timeout: 10 });
           } catch {};
           delete state.diffs[did];
           return notify({ id, action: 'resume' }, ws);
@@ -404,7 +406,7 @@ async function start(config: DatabaseConfig, id: number, ws: WebSocket, start?: 
       }
       notify({ id, action: 'resumed' }, ws);
       try {
-        await client.end();
+        await client.end({ timeout: 10 });
       } catch {}
     } else {
       if (restart && start === 'restart') await diff.stop(client);
@@ -413,7 +415,7 @@ async function start(config: DatabaseConfig, id: number, ws: WebSocket, start?: 
       } catch (e) {
         console.error(e)
         try {
-          await client.end();
+          await client.end({ timeout: 10 });
         } catch {}
         throw e;
       }
@@ -426,7 +428,7 @@ async function start(config: DatabaseConfig, id: number, ws: WebSocket, start?: 
   } catch (e) {
     delete state.diffs[did];
     try {
-      await client.end();
+      await client.end({ timeout: 10 });
     } catch { /* sure */ }
     throw e;
   }
@@ -457,6 +459,7 @@ async function connectClient(client: Client, attempts: number = NaN): Promise<PG
       console.error(`failed connecting client ${client.id} (${source(client.config)}) - retrying in 5s`);
       if (attempts <= i) {
         const err = new Error(`too many failed attempts to connect to ${source(client.config)}`);
+        connecting[client.id] = undefined;
         fail(err);
         throw err;
       }
@@ -472,7 +475,7 @@ async function reconnectDiff(client: Client) {
   if (current) {
     status();
     try {
-      await current.end();
+      await current.end({ timeout: 10 });
     } catch {}
   }
 
@@ -496,7 +499,7 @@ async function connectedDiff(rec: Client) {
       console.log('stopping remotely stopped diff');
       delete state.diffs[rec.id];
       try {
-        if (rec.client) await rec.client.end();
+        if (rec.client) await rec.client.end({ timeout: 10 });
       } catch {
         console.log(`Failed to disconnect listener for stopped diff ${source(rec.config)}.`);
       }
@@ -550,7 +553,7 @@ async function stop(did: number, msgid: number, ws: WebSocket, save?: true) {
   }
   await diff.stop(client.client);
   try {
-    await client.client.end();
+    await client.client.end({ timeout: 10 });
   } catch {}
   delete state.diffs[did];
   notify({ action: 'stopped', id: msgid }, ws);
@@ -669,7 +672,7 @@ async function schema(ws: WebSocket, client?: string|number|DatabaseConfig, id?:
       return error(`Error getting schema: ${e.message}`, ws, { id });
     } finally {
       try {
-        await c.end();
+        await c.end({ timeout: 10 });
       } catch {}
     }
   } else {
@@ -722,7 +725,7 @@ async function query(client: DatabaseConfig|number|string, query: string[], para
       }
     } finally {
       try {
-        await c.end();
+        await c.end({ timeout: 10 });
       } catch {}
     }
   } else {
@@ -763,7 +766,7 @@ async function query(client: DatabaseConfig|number|string, query: string[], para
       }
     } finally {
       try { // hmmmm
-        await c.end();
+        await c.end({ timeout: 10 });
       } catch {}
     }
   }
@@ -823,7 +826,7 @@ async function queryOne(client: DatabaseConfig, query: string[], params: unknown
     return { error: e.message };
   } finally {
     try {
-      await c.end();
+      await c.end({ timeout: 10 });
     } catch {}
   }
 }
@@ -868,7 +871,7 @@ async function leak(config: DatabaseConfig) {
     state.leaks[id] = { client: { id, client: c, config }, initial: { [config.database || 'postgres']: connections }, current: connections, databases: [config.database || 'postgres'] };
   } catch (e) {
     try {
-      await c.end();
+      await c.end({ timeout: 10 });
     } catch {}
     throw (e);
   }
@@ -889,7 +892,7 @@ async function unleak(client: DatabaseConfig) {
   if (c.databases.length < 1) {
     if (c.client.client) {
       try {
-        await c.client.client.end();
+        await c.client.client.end({ timeout: 10 });
       } catch {}
     }
     delete state.leaks[c.client.id];
@@ -928,7 +931,7 @@ async function _poll(out: boolean) {
           const c = l.client.client;
           l.client.client = undefined;
           try {
-            await c.end();
+            await c.end({ timeout: 10 });
           } catch {}
           try {
             const c = postgres(prepareConfig(l.client.config, { app: 'monitor' }));
@@ -1022,7 +1025,7 @@ stop requested, shutting down...
       if (client.client) {
         await diff.stop(client.client);
         try {
-          await client.client.end();
+          await client.client.end({ timeout: 10 });
         } catch {}
       }
     } catch { /* sure */ }
@@ -1032,7 +1035,7 @@ stop requested, shutting down...
       try {
         if (leak.client.client) {
           try {
-            await leak.client.client.end();
+            await leak.client.client.end({ timeout: 10 });
           } catch {}
         }
       } catch { /* sure */ }
