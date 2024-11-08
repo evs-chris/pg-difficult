@@ -2027,6 +2027,12 @@ class ScratchPad extends Window {
           const l = checkLanguage(lang);
           if (lang === 'mermaid') {
             return `<pre class="mermaid">---\nconfig:\n  theme: ${Ractive.styleGet('theme') === 'light' ? 'forest' : 'dark'}\n---\n${code}</pre>`;
+          } else if (lang === 'svg+inline') {
+            return code;
+          } else if (lang === 'png+base64') {
+            return `<img src="data:image/png;base64,${code}" />`;
+          } else if (lang === 'jpeg+base64') {
+            return `<img src="data:image/jpeg;base64,${code}" />`;
           } else {
             const highlighted = l && hljs.getLanguage(l) ? hljs.highlight(code, { language: l, ignoreIllegals: true }).value : code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
             return `<pre><code class="hljs ${l}">${highlighted}</code></pre>`;
