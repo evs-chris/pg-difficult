@@ -1150,11 +1150,18 @@
             <title>{{~/evalerror ? 'Error' : 'Result'}}</title>
             <pre><code on-click="copyToClipboard(~/evalresult)" title="click to copy result to the clipboard">{{~/evalerror || ~/evaltext}}</code></pre>
           </tab>
-          <tab hidden="{{~/evalerror}}" title="Tree" no-pad>
-            <div style="position: absolute; top: 0; right: 0; background-color: rgba(128, 128, 128, 0.2); border-radius: 0 0 0 1em;">
-              <label as-field class=inline style="min-height: 2.7em;"><input type="checkbox" checked="{{~/expandAll}}" /> Expand all?</label>
-            </div>
-            {{>root ~/treeresult}}
+          <tab hidden="{{~/evalerror}}" no-pad>
+            <title>{{#if ~/treeresult}}Tree{{else}}Text{{/if}}</title>
+            {{#if typeof ~/treeresult === 'object' && ~/treeresult}}
+              <div style="position: absolute; top: 0; right: 0; background-color: rgba(128, 128, 128, 0.2); border-radius: 0 0 0 1em;">
+                <label as-field class=inline style="min-height: 2.7em;"><input type="checkbox" checked="{{~/expandAll}}" /> Expand all?</label>
+              </div>
+            {{/if}}
+            {{#if ~/treeresult}}
+              {{>root ~/treeresult}}
+            {{else}}
+              <pre style="margin: 1em;"><code>{{{~/evalerror || ~/evalresult}}}</code></pre>
+            {{/if}}
           </tab>
           <tab title="Language Reference" right no-pad>
             <iframe style="border: none; flex-grow: 1; flex-shrink: 1; max-height: 100%;" srcdoc="{{~/docs.languageReference(100, @style.theme)}}" />

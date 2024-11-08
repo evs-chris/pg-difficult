@@ -1981,7 +1981,7 @@ class ScratchPad extends Window {
       this.set({
         evalresult: res,
         evaltext,
-        treeresult: treeify(res),
+        treeresult: typeof res !== 'object' ? undefined : treeify(res),
         evalerror: '',
       });
     }
