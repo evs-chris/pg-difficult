@@ -543,6 +543,48 @@ class App extends Ractive {
       this.host.toast('Click Compare on another schema to compare', { type: 'info', timeout: 4000 });
     }
   }
+
+  pickFile(accept, multi) {
+    if (this.file) return this.file;
+    this.set('filepicker', { accept: accept || '*', multi });
+    let ok, fail;
+    const res = new Promise((y, n) => (ok = y, fail = n));
+    res.resolve = ok;
+    res.reject = fail;
+    this.file = res;
+    const picker = this.find('.file-picker');
+    if (!picker) fail();
+    let nope;
+    nope = () => {
+      window.removeEventListener('focus', nope);
+      setTimeout(() => {
+        if (this.file) {
+          this.file.reject(new Error('Cancelled'));
+          this.file = undefined;
+        }
+      }, 100);
+    };
+    window.addEventListener('focus', nope);
+    this.find('.file-picker').click();
+    return res;
+  }
+
+  async filesPicked(list) {
+    const multi = this.get('filepicker.multi');
+    const pr = this.file;
+    if (!pr) return;
+    this.file = undefined;
+    if (!list || !list.length) return pr.reject(new Error('No file selected'));
+    const prs = Array.from(list).map(f => new Promise((ok, fail) => {
+      const read = new FileReader();
+      read.onerror = fail;
+      read.onload = () => ok({ name: f.name, text: read.result });
+      read.readAsText(f);
+    }));
+    const txts = await Promise.all(prs);
+    if (multi) pr.resolve(txts);
+    else pr.resolve(txts[0]);
+  }
 }
 Ractive.extendWith(App, {
   noCssTransform: true,
@@ -790,25 +832,43 @@ const app = globalThis.app = new App({
       this.host.addWindow(win, { id: wid, title: 'All Monitored Connections' });
     }
   },
-  openReport(report) {
+  async openReport(report, file) {
     if (report?.id) {
       const wid = `report-${report.id}`;
       const win = this.host.getWindow(wid);
       if (win) return win.raise(true);
     }
+    try {
+      if (file) file = await app.pickFile('.raport-proj, .json, .raport');
+    } catch {
+      return;
+    }
     const win = new Report();
     if (report?.id) win.load(report.id);
     this.host.addWindow(win, { title: report?.id ? `Loading report...` : 'New Report' });
+    if (file) {
+      try {
+        const proj = JSON.parse(file.text);
+        if (proj.definition && proj.sources) win.respond({ action: 'set', set: { report: proj.definition, sources: proj.sources } });
+        else if (proj.widgets) win.respond({ action: 'set', set: { report: proj } });
+      } catch {}
+    }
   },
-  openScratch(pad) {
+  async openScratch(pad, file) {
     if (pad?.id) {
       const wid = `scratch-${pad.id}`;
       const win = this.host.getWindow(wid);
       if (win) return win.raise(true);
     }
+    try {
+      if (file) file = await app.pickFile();
+    } catch {
+      return;
+    }
     win = new ScratchPad();
     if (pad?.id) win.load(pad.id);
     this.host.addWindow(win, { title: pad?.id ? `Loading scratch pad...` : 'New Scratch Pad' });
+    if (file) win.set('pad', file, { deep: true });
   },
   openLocalDiff() {
     const id = ++localDiffId;
@@ -982,8 +1042,9 @@ class ControlPanel extends Window {
     app.notify({ action: 'interval', time: this.get('status.pollingInterval') });
   }
   open(v) {
-    if (v.type === 'report') app.openReport(v);
-    else if (v.type === 'scratch') app.openScratch(v);
+    const file = this.event?.event && (this.event.event.shiftKey || this.event.event.ctrlKey);
+    if (v.type === 'report') app.openReport(v, file);
+    else if (v.type === 'scratch') app.openScratch(v, file);
     else if (v.type === 'query') app.set('loadedQuery', v.id);
   }
   async scratchText(id) {
@@ -993,6 +1054,10 @@ class ControlPanel extends Window {
   async queryText(id) {
     const v = await store.get(id);
     return v.sql;
+  }
+  async reportText(id) {
+    const v = await store.get(id);
+    return JSON.stringify(v);
   }
   localDiff() {
     app.openLocalDiff();
@@ -2348,14 +2413,28 @@ class HostExplore extends Window {
     }
   }
 
-  reportDesigner(report) {
+  async reportDesigner(report) {
+    let file = this.event?.event && (this.event.event.shiftKey || this.event.event.ctrlKey);
     const id = report?.id ?? ++reportId;
     const wid = `report-${id}`;
     let win = this.host.getWindow(wid);
     if (win) return win.raise(true);
+
+    try {
+      if (file) file = await app.pickFile('.raport-proj, .json, .raport');
+    } catch {
+      return;
+    }
     win = new Report({}, this);
     if (report) win.load(report._id || report.id);
     this.host.addWindow(win, { id: wid, title: `Loading report...` });
+    if (file) {
+      try {
+        const proj = JSON.parse(file.text);
+        if (proj.definition && proj.sources) win.respond({ action: 'set', set: { report: proj.definition, sources: proj.sources } });
+        else if (proj.widgets) win.respond({ action: 'set', set: { report: proj } });
+      } catch {}
+    }
   }
 
   async singleReportQuery(report, src, params) {
@@ -2755,7 +2834,7 @@ class Report extends Window {
     const base = {};
     if (source && source.designId != null) base.designId = source.designId;
     const msg = Object.assign(base, message);
-    if (wnd) wnd.postMessage(msg);
+    if (wnd && this.frameId != null) wnd.postMessage(msg);
     else (this.queue || (this.queue = [])).push(msg);
   }
 
@@ -2766,7 +2845,7 @@ class Report extends Window {
     const res = new Promise((o, f) => (ok = o, fail = f));
     this.callbacks[id] = [ok, fail];
     message.ownerId = id;
-    if (wnd) wnd.postMessage(message);
+    if (wnd && this.frameId != null) wnd.postMessage(message);
     else (this.queue || (this.queue = [])).push(message);
     return res;
   }
