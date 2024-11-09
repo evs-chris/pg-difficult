@@ -1709,7 +1709,10 @@ Window.extendWith(Entries, {
     'entries.length'() {
       if (this.scroller) {
         const s = this.scroller;
-        if (s.scrollTop + s.clientHeight >= s.scrollHeight - 10) setTimeout(() => s.scrollTo({ top: s.scrollHeight, behavior: 'smooth', block: 'end' }), 100);
+        if (s.scrollTop + s.clientHeight >= s.scrollHeight - 10) setTimeout(() => {
+          s.scrollTo({ top: s.scrollHeight, behavior: 'smooth', block: 'end' });
+          setTimeout(() => s.scrollTop = s.scrollHeight - s.clientHeight, 600);
+        }, 100);
       }
     },
     'loaded.expr'(v) {
