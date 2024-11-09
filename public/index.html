@@ -789,12 +789,12 @@
     </div>
     <div style="display: flex; justify-content: space-between;">
       {{#if ~/entries.length}}
-        <button class=reject on-click="@.clearEntries()" title="Remove recorded entries {{#if !~/loaded && !@.source}}for all diffs{{else}}for only this diff. Hold the ctrl key and click to clear all diff entries.{{/if}}.">Clear Entries</button>
+        <button class=reject on-click="@.clearEntries()" title="Remove recorded entries {{#if !~/loaded && !@.source}}for all diffs{{else}}for only this diff. Hold the ctrl or shift key and click to clear all diff entries.{{/if}}.">Clear Entries</button>
       {{else}}
         <div />
       {{/if}}
       {{#if ~/entries.length}}
-        <button class=download on-click="@.download()" title="Download a file containing these entries. Hold the ctrl key while clicking to open a popup window of the HTML. Hold the shift key while clicking to download the HTML directly.">Download</button>
+        <button class=download on-click="@.download()" title="Download a file containing these entries. Hold the ctrl or shift key while clicking to open a popup window of the HTML. Hold the alt key while clicking to download the HTML directly.">Download</button>
       {{else}}
         <div />
       {{/if}}

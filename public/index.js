@@ -1465,7 +1465,7 @@ res
     const ext = this.event?.event?.shiftKey ? 'html' : 'pgdd';
     let html, css;
     let text;
-    if (this.event?.event?.shiftKey) {
+    if (this.event?.event?.altKey) {
       [html, css] = this.getHtml();
       text = `<html><head><title>${name}</title><style>${css}</style></head><body>${html}</body></html>`
     } else {
