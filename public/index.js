@@ -434,6 +434,7 @@ let request;
     pr.message = msg;
     pr.id = msg.id;
     listeners[msg.id] = [ok, fail];
+    app.pendingMessages[msg.id] = msg;
     notify(msg);
     app.add('waiting', 1);
     return pr;
@@ -443,6 +444,7 @@ let request;
     if (Array.isArray(listener) && typeof listener[0] === 'function') {
       app.subtract('waiting', 1);
       delete listeners[id];
+      delete app.pendingMessages[id];
       listener[0](msg);
     }
   };
@@ -451,6 +453,7 @@ let request;
     if (Array.isArray(listener) && typeof listener[1] === 'function') {
       app.subtract('waiting', 1);
       delete listeners[id];
+      delete app.pendingMessages[id];
       listener[1](msg);
     }
   };
@@ -853,6 +856,8 @@ const app = globalThis.app = new App({
     app.host.addWindow(wnd);
   },
 });
+
+app.pendingMessages = {};
 
 Ractive.helpers.appSet = (p, v) => app.set(p, v);
 
