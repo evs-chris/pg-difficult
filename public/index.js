@@ -599,6 +599,8 @@ Ractive.extendWith(App, {
       .schema-row.sticky-header { background-color: ${data('raui.primary.bg') || '#fff'}; }
       .striped:nth-child(odd), .striped-odd { background-color: ${data('theme') === 'dark' ? '#353535' : '#f2f2f2'}; }
       .striped:nth-child(even), .striped-even { background-color: ${data('theme') === 'dark' ? '#3b3b3b' : '#fdfdfd'}; }
+      button svg { width: 1.5em; height: 1.5em; display: inline-block; vertical-align: middle; fill: ${data('raui.primary.bg') || '#fff'}; }
+      button.flat svg { fill: ${data('raui.primary.fg') || '#222'}; }
       .mermaid { background-color: ${data('theme') === 'dark' ? '#191919' : '#f7f7f7'}; }
     `;
   },
@@ -1107,6 +1109,10 @@ Window.extendWith(ControlPanel, {
 .tree-children:after { background-color: ${data('raui.primary.bg') || '#fff'}; }
 `; },
   options: { title: 'Control Panel', flex: true, close: false, resizable: true, width: '60em', height: '45em', id: 'control-panel' },
+  partials: {
+    'ace-themes': document.getElementById('ace-themes').innerText,
+    cog: document.getElementById('cog').innerText,
+  },
   on: {
     init() {
       // map in the data from the root instance
@@ -2029,6 +2035,16 @@ class ScratchPad extends Window {
     },
     target: this,
   });
+  updateSetting(path, value) {
+    const base = this.get(`editor.${path}`);
+    if (base === value) {
+      const sets = this.get('_settings');
+      delete sets[path];
+      this.set('_settings', sets);
+    } else {
+      this.set(`_settings.${path}`, value);
+    }
+  }
   evaluate(txt) {
     if (this.ace) {
       const sel = this.getContext(this.ace).decorators.ace.editor.getSelectedText();
@@ -2135,10 +2151,15 @@ dd { margin: 0.5em 0 1em 2em; white-space: pre-wrap; }
 .ops-search { opacity: 0.2; }
 .ops-search:hover { opacity: 1; }
 `,
+  use: [RauiPopover.default({ name: 'pop' })],
   options: { flex: true, resizable: true, minimize: false, width: '50em', height: '35em' },
+  partials: {
+    'ace-themes': document.getElementById('ace-themes').innerText,
+    cog: document.getElementById('cog').innerText,
+  },
   on: {
     init() {
-      this.link('store.settings.editor', 'editor', { instance: app });
+      this.link('store.settings.editor', '_editor', { instance: app });
       const ps = Diff.prototype.template.p;
       this.partials.root = ps.root;
       this.partials.array = ps.array;
@@ -2181,6 +2202,11 @@ dd { margin: 0.5em 0 1em 2em; white-space: pre-wrap; }
       }
       return ops;
     },
+    editor() {
+      const base = this.get('_editor');
+      const local = this.get('_settings');
+      return Object.assign({}, base, local);
+    }
   },
   observe: {
     'pad.name'(n) {

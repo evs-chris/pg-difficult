@@ -542,7 +542,7 @@
           <label as-field class=inline><input type=checkbox checked="{{~/store.settings.editor.highlightActive}}" /> Highlight active line?</label>
           <label as-field class=inline><input type=checkbox checked="{{~/store.settings.editor.highlightSelected}}" /> Highlight selected word?</label>
           <label as-field class=inline><input type=checkbox checked="{{~/store.settings.editor.printMargin}}" /> Show print margin?</label>
-          <label as-field class=inline><input type=checkbox twoway=false checked="{{~/store.settings.editor.softTabs}}" /> Use soft tabs?</label>
+          <label as-field class=inline><input type=checkbox checked="{{~/store.settings.editor.softTabs}}" /> Use soft tabs?</label>
           <div class=break />
           <label as-field>Input Mode<select value="{{~/store.settings.editor.keymode}}">
             <option value="{{undefined}}">default</option>
@@ -626,55 +626,62 @@
       </div>
     {{/if}}
   {{/partial}}
-  {{#partial ace-themes}}
-    <option value="{{undefined}}">The Default&trade;</option>
-    <option>ambiance</option>
-    <option>chrome</option>
-    <option>cloud9_day</option>
-    <option>cloud9_night</option>
-    <option>cloud_editor</option>
-    <option>cloud_editor_dark</option>
-    <option>clouds</option>
-    <option>clouds_midnight</option>
-    <option>cobalt</option>
-    <option>crimson_editor</option>
-    <option>dawn</option>
-    <option>dracula</option>
-    <option>dreamweaver</option>
-    <option>eclipse</option>
-    <option>github</option>
-    <option>github_dark</option>
-    <option>github_light_default</option>
-    <option>gob</option>
-    <option>gruvbox</option>
-    <option>gruvbox_dark_hard</option>
-    <option>gruvbox_light_hard</option>
-    <option>idle_fingers</option>
-    <option>iplastic</option>
-    <option>katzenmilch</option>
-    <option>kr_theme</option>
-    <option>kuroir</option>
-    <option>merbivore</option>
-    <option>merbivore_soft</option>
-    <option>mono_industrial</option>
-    <option>monokai</option>
-    <option>nord_dark</option>
-    <option>one_dark</option>
-    <option>pastel_on_dark</option>
-    <option>solarized_dark</option>
-    <option>solarized_light</option>
-    <option>sqlserver</option>
-    <option>terminal</option>
-    <option>textmate</option>
-    <option>tomorrow</option>
-    <option>tomorrow_night</option>
-    <option>tomorrow_night_blue</option>
-    <option>tomorrow_night_bright</option>
-    <option>tomorrow_night_eighties</option>
-    <option>twilight</option>
-    <option>vibrant_ink</option>
-    <option>xcode</option>
-  {{/partial}}
+</script>
+
+<script type=text/ractive id=ace-themes>
+  <option value="{{undefined}}">The Default&trade;</option>
+  <option>ambiance</option>
+  <option>chrome</option>
+  <option>cloud9_day</option>
+  <option>cloud9_night</option>
+  <option>cloud_editor</option>
+  <option>cloud_editor_dark</option>
+  <option>clouds</option>
+  <option>clouds_midnight</option>
+  <option>cobalt</option>
+  <option>crimson_editor</option>
+  <option>dawn</option>
+  <option>dracula</option>
+  <option>dreamweaver</option>
+  <option>eclipse</option>
+  <option>github</option>
+  <option>github_dark</option>
+  <option>github_light_default</option>
+  <option>gob</option>
+  <option>gruvbox</option>
+  <option>gruvbox_dark_hard</option>
+  <option>gruvbox_light_hard</option>
+  <option>idle_fingers</option>
+  <option>iplastic</option>
+  <option>katzenmilch</option>
+  <option>kr_theme</option>
+  <option>kuroir</option>
+  <option>merbivore</option>
+  <option>merbivore_soft</option>
+  <option>mono_industrial</option>
+  <option>monokai</option>
+  <option>nord_dark</option>
+  <option>one_dark</option>
+  <option>pastel_on_dark</option>
+  <option>solarized_dark</option>
+  <option>solarized_light</option>
+  <option>sqlserver</option>
+  <option>terminal</option>
+  <option>textmate</option>
+  <option>tomorrow</option>
+  <option>tomorrow_night</option>
+  <option>tomorrow_night_blue</option>
+  <option>tomorrow_night_bright</option>
+  <option>tomorrow_night_eighties</option>
+  <option>twilight</option>
+  <option>vibrant_ink</option>
+  <option>xcode</option>
+</script>
+
+<script type=text/ractive id=cog>
+  <svg viewBox="0 0 32 32">
+    <path style="stroke-width:1" d="M 16.00011,3.228628 A 12.771503,12.771503 0 0 0 14.886282,3.308861 L 13.781893,7.7216959 10.600878,4.4344882 A 12.771503,12.771503 0 0 0 8.6894353,5.5601152 L 9.9401325,9.9399127 5.5603348,8.6892168 a 12.771503,12.771503 0 0 0 -1.125627,1.9114422 l 3.2872078,3.181016 -4.4128347,1.104389 a 12.771503,12.771503 0 0 0 -0.080233,1.113828 12.771503,12.771503 0 0 0 0.080233,1.113828 l 4.4128347,1.104388 -3.2872078,3.181018 a 12.771503,12.771503 0 0 0 1.125627,1.913801 l 4.3797977,-1.253056 -1.2506972,4.379798 a 12.771503,12.771503 0 0 0 1.9138017,1.125626 l 3.178656,-3.287208 1.104389,4.412835 a 12.771503,12.771503 0 0 0 1.113828,0.08024 12.771503,12.771503 0 0 0 1.113828,-0.08024 l 1.104388,-4.412835 3.181018,3.289569 a 12.771503,12.771503 0 0 0 1.911441,-1.127987 l -1.250696,-4.379798 4.379798,1.253056 a 12.771503,12.771503 0 0 0 1.125626,-1.913801 L 24.278305,18.218108 28.69114,17.11372 a 12.771503,12.771503 0 0 0 0.08024,-1.113828 12.771503,12.771503 0 0 0 -0.04955,-1.106749 l -4.443513,-1.111468 3.294288,-3.185736 A 12.771503,12.771503 0 0 0 26.461136,8.6821366 L 22.0601,9.9399127 23.317875,5.5365171 A 12.771503,12.771503 0 0 0 21.404063,4.4297687 L 18.218326,7.7216959 17.106858,3.2805437 A 12.771503,12.771503 0 0 0 16.00011,3.228628 Z m 0,5.4794672 A 7.2902771,7.2902771 0 0 1 23.289547,15.999892 7.2902771,7.2902771 0 0 1 16.00011,23.289329 7.2902771,7.2902771 0 0 1 8.7106746,15.999892 7.2902771,7.2902771 0 0 1 16.00011,8.7080952 Z" />
+  </svg>
 </script>
 
 <script type=text/ractive id=query>
@@ -718,7 +725,7 @@
         <label as-field title="The segment name groups sets of changes together. The segment will automatically be updated when you stop typing, and any new changes will get the new segment name.">Segment<input value="{{~/newSegment}}" lazy=1500 /></label>
       {{/if}}
       <label class=filter class-error="~/exprError" as-field title="Raport expression used to filter out entries. Available fields are id, new, old, schema, segment, source, stamp, and table. new and old are objects containing the fields that changed in the record. table, schema, source, and segment are strings.{{#if ~/exprError}}{{'\n\nError: ' + ~/exprError.message + '\n' + ~/exprError.marked}}{{/if}}">Filter Expression<input value="{{expr}}" lazy=1000 /></label>
-      <button as-pop=`~/showSettings`>&#9881;</button>
+      <button class="settings flat" title="Settings" as-pop=`~/showSettings`>{{>cog}}</button>
     </div>
     <virtual-list bind-items="~/entries" size=75>
       <header>
@@ -1081,63 +1088,66 @@
         {{#if ~/pad._id}}
           {{#if ~/unsaved && !nosave}}<div style="padding: 0.5em; opacity: 0.7; background-color: rgba(128, 128, 128, 0.5); border-radius: 0 0 0.5em 0.5em; height: 1em;">unsaved</div>{{/if}}
         {{else}}
-          <button style="align-self: center;" on-click="@.save()">Save</button>
+          <label as-field class=inline><button style="align-self: center;" on-click="@.save()">Save</button></label>
         {{/if}}
       </div>
-      <label as-field class=inline><select value="{{pad.syntax}}" lazy=1000>
-        <option value="{{undefined}}">plain text</option>
-        <option>c_cpp</option>
-        <option>csharp</option>
-        <option>css</option>
-        <option>ejs</option>
-        <option>golang</option>
-        <option>handlebars</option>
-        <option>html</option>
-        <option>ini</option>
-        <option>java</option>
-        <option>javascript</option>
-        <option>json</option>
-        <option>jsx</option>
-        <option>julia</option>
-        <option>kotlin</option>
-        <option>less</option>
-        <option>liquid</option>
-        <option>lisp</option>
-        <option>lua</option>
-        <option>markdown</option>
-        <option>mediawiki</option>
-        <option>nix</option>
-        <option>nunjucks</option>
-        <option>ocaml</option>
-        <option>odin</option>
-        <option>pascal</option>
-        <option>perl</option>
-        <option>pgsql</option>
-        <option>php</option>
-        <option>plain_text</option>
-        <option>python</option>
-        <option>raport</option>
-        <option>ruby</option>
-        <option>rust</option>
-        <option>sass</option>
-        <option>scala</option>
-        <option>scheme</option>
-        <option>sh</option>
-        <option>sql</option>
-        <option>stylus</option>
-        <option>svg</option>
-        <option>swift</option>
-        <option>tcl</option>
-        <option>toml</option>
-        <option>tsx</option>
-        <option>twig</option>
-        <option>typescript</option>
-        <option>vue</option>
-        <option>xml</option>
-        <option>xquery</option>
-        <option>yaml</option>
-        <option>zig</option>
-      </select></label>
+      <div>
+        <label as-field class=inline><button class="settings flat" title="Editor settings" as-pop=`~/showSettings`>{{>cog}}</button></label>
+        <label as-field class=inline><select value="{{pad.syntax}}" lazy=1000>
+          <option value="{{undefined}}">plain text</option>
+          <option>c_cpp</option>
+          <option>csharp</option>
+          <option>css</option>
+          <option>ejs</option>
+          <option>golang</option>
+          <option>handlebars</option>
+          <option>html</option>
+          <option>ini</option>
+          <option>java</option>
+          <option>javascript</option>
+          <option>json</option>
+          <option>jsx</option>
+          <option>julia</option>
+          <option>kotlin</option>
+          <option>less</option>
+          <option>liquid</option>
+          <option>lisp</option>
+          <option>lua</option>
+          <option>markdown</option>
+          <option>mediawiki</option>
+          <option>nix</option>
+          <option>nunjucks</option>
+          <option>ocaml</option>
+          <option>odin</option>
+          <option>pascal</option>
+          <option>perl</option>
+          <option>pgsql</option>
+          <option>php</option>
+          <option>plain_text</option>
+          <option>python</option>
+          <option>raport</option>
+          <option>ruby</option>
+          <option>rust</option>
+          <option>sass</option>
+          <option>scala</option>
+          <option>scheme</option>
+          <option>sh</option>
+          <option>sql</option>
+          <option>stylus</option>
+          <option>svg</option>
+          <option>swift</option>
+          <option>tcl</option>
+          <option>toml</option>
+          <option>tsx</option>
+          <option>twig</option>
+          <option>typescript</option>
+          <option>vue</option>
+          <option>xml</option>
+          <option>xquery</option>
+          <option>yaml</option>
+          <option>zig</option>
+        </select></label>
+      </div>
     </div>
   {{/partial}}
   <div style="flex-grow: 1; position: relative; display: flex; height: 100%;">
@@ -1228,6 +1238,29 @@
       </div>
     {{/if}}
   </div>
+  <pop bind-popped="~/showSettings" where="below" align="end" tail>
+    <div style="width: 28em; height: 20em; overflow: auto;">
+      <label as-field class=inline><input type=checkbox twoway=false checked="{{~/editor.wrap}}" on-change="@.updateSetting('wrap', @node.checked)" /> Word wrap?</label>
+      <label as-field class=inline><input type=checkbox twoway=false checked="{{~/editor.lineNumbers}}" on-change="@.updateSetting('lineNumbers', @node.checked)" /> Show line numbers?</label>
+      {{#if ~/editor.lineNumbers}}<label as-field class=inline><input type=checkbox twoway=false checked="{{~/editor.relativeLineNumbers}}" on-change="@.updateSetting('relativeLineNumbers', @node.checked)" /> Relative line numbers?</label>{{/if}}
+      <label as-field class=inline><input type=checkbox twoway=false checked="{{~/editor.highlightActive}}" on-change="@.updateSetting('highlightActive', @node.checked)" /> Highlight active line?</label>
+      <label as-field class=inline><input type=checkbox twoway=false checked="{{~/editor.highlightSelected}}" on-change="@.updateSetting('highlightSelected', @node.checked)" /> Highlight selected word?</label>
+      <label as-field class=inline><input type=checkbox twoway=false checked="{{~/editor.printMargin}}" on-change="@.updateSetting('printMargin', @node.checked)" /> Show print margin?</label>
+      <label as-field class=inline><input type=checkbox twoway=false checked="{{~/editor.softTabs}}" on-change="@.updateSetting('softTabs', @node.checked)" /> Use soft tabs?</label>
+      <div class=break />
+      <label as-field>Input Mode<select twoway=false value="{{~/editor.keymode}}" on-change="@.updateSetting('keymode', @node.value)">
+        <option value="{{undefined}}">default</option>
+        <option>emacs</option>
+        <option>sublime</option>
+        <option>vim</option>
+        <option>vscode</option>
+      </select></label>
+      <label as-field>Light Theme <tip>The Ace editor theme to use when retinal pain mode is selected.</tip><select twoway=false value="{{~/editor.lightTheme}}" on-change="@.updateSetting('lightTheme', @node.value)">{{>ace-themes}}</select></label>
+      <label as-field>Dark Theme <tip>The Ace editor theme to use when the correct mode is selected.</tip><select twoway=false value="{{~/editor.darkTheme}}" on-change="@.updateSetting('darkTheme', @node.value)">{{>ace-themes}}</select></label>
+      <label as-field>Tab Size<input type=number twoway=false placeholder=2 value="{{~/editor.tabSize}}" on-change="@.updateSetting('tabSize', @node.value)" /></label>
+      <label as-field>Autosave Timeout MS<tip>The number of milliseconds after a change is made to wait before triggering a save of the content. For editors that don't have a save action, this will do nothing. -1 will disable autosave. The default is 15000 (15 seconds).</tip><input type=number twoway=false value="{{~/editor.autosave}}" on-change="@.updateSetting('autosave', @node.value)" placeholder=15000 lazy /></label>
+    </div>
+  </pop>
 </script>
 
 <script type=text/ractive id=host-explore>
