@@ -2223,8 +2223,8 @@ dd { margin: 0.5em 0 1em 2em; white-space: pre-wrap; }
       const ps = Diff.prototype.template.p;
       this.partials.root = ps.root;
       this.partials.array = ps.array;
-      this.partials.leaf = ps.leaf;
       this.partials.node = ps.node;
+      this.partials.leaf = ps.leaf;
 
       this._markd = this.observe('pad.text', debounce(() => {
         this.renderMD();
