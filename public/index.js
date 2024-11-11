@@ -56,6 +56,42 @@ Ractive.decorators.tracked = function tracked(node, name) {
   };
 }
 Ractive.decorators.serverblock = serverblock;
+function marquee(node) {
+  const check = () => {
+    const w = node.clientWidth;
+    const p = node.parentElement.clientWidth;
+    if (w > p) {
+      const diff = Math.round(w - p);
+      node.style.setProperty('--marquee', `-${diff}px`);
+      node.setAttribute('data-marquee', `${diff}px`);
+    } else {
+      node.removeAttribute('data-marquee');
+    }
+  }
+  check();
+  if (marquee.observer) marquee.observer.observe(node);
+  return {
+    teardown() {
+      node.removeAttribute('data-marquee');
+      if (marquee.observer) marquee.observer.unobserve(node);
+    },
+    update() {
+      check();
+    },
+    invalidate() {
+      check();
+    },
+  };
+}
+if (typeof ResizeObserver === 'function') {
+  marquee.observer = new ResizeObserver(entries => {
+    for (const e of entries) {
+      const c = Ractive.getContext(e.target);
+      if (c.decorators?.marquee) c.decorators.marquee.update();
+    }
+  });
+}
+Ractive.decorators.marquee = marquee;
 
 const colors = {
   green: ['#325932', '#447A43'],
@@ -126,7 +162,7 @@ const store = globalThis.store = {};
           const qo = !!(d.sources || []).find(s => s.type === 'query');
           const qoh = !!(d.sources || []).find(s => s.type === 'query' && !s.config);
           const qa = !!(d.sources || []).find(s => s.type === 'query-all-sql');
-          emit(d.definition.name, {
+          emit(d.definition.path ? d.definition.path + '/' + d.definition.name : d.definition.name, {
             host: qa || qoh,
             query: qo,
             queryAll: qa,
@@ -1112,6 +1148,7 @@ Window.extendWith(ControlPanel, {
   partials: {
     'ace-themes': document.getElementById('ace-themes').innerText,
     cog: document.getElementById('cog').innerText,
+    node: document.getElementById('tree').innerText,
   },
   on: {
     init() {
@@ -2627,9 +2664,12 @@ Window.extendWith(HostExplore, {
 .query .query-text { height: 100%; }
 .query textarea { width: 100%; border: 0; outline: none; }
 .query .result { display: flex; border-top: 1px solid; overflow: hidden; flex-grow: 1; height: 100%; box-sizing: border-box; }
-.selected { background-color: rgba(128, 128, 128, 0.1); }
+.selected { background-color: rgba(128, 128, 128, 0.3); }
 dd { white-space: pre-wrap; }
 `;
+  },
+  partials: {
+    node: document.getElementById('tree').innerText,
   },
   options: { flex: true, resizable: true, minimize: false, width: '70em', height: '45em', title: 'Host Explorer' },
   helpers: { escapeKey: Ractive.escapeKey },
@@ -2657,6 +2697,18 @@ dd { white-space: pre-wrap; }
           config: c,
         };
       });
+    },
+    singleReportTree() {
+      const old = this.get('_singleReportTree');
+      const tree = dirify(this.get('report.list').filter(r => r.query), old);
+      this.set('_singleReportTree', tree);
+      return tree;
+    },
+    multipleReportTree() {
+      const old = this.get('_multipleReportTree');
+      const tree = dirify(this.get('report.list').filter(r => r.queryAll), old);
+      this.set('_multipleReportTree', tree);
+      return tree;
     },
   },
   data() {
@@ -2895,6 +2947,7 @@ Window.extendWith(Report, {
   on: {
     init() {
       this.link('store.settings', 'settings', { instance: app });
+      this.respond({ action: 'set', set: { extraProperties: [{ name: 'path', tip: 'Combined with the name, sets the path to the report in the tree view', label: 'Path' }] } });
     },
     render() {
       window.addEventListener('message', (this._messageHandler = this.handleMessage.bind(this)));

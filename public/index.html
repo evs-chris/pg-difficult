@@ -264,13 +264,47 @@
     margin: 0 0.5em;
   }
 
+  @keyframes tree-marquee {
+    0% {
+      transform: translateX(0);
+    }
+    10% {
+      transform: translateX(0);
+    }
+    50% {
+      transform: translateX(var(--marquee));
+    }
+    60% {
+      transform: translateX(var(--marquee));
+    }
+    100% {
+      transform: translateX(0);
+    }
+  }
+
   .tree-line { height: 1.5em; line-height: 1.5em; }
   .tree-children .back-dots { position: absolute; left: 0; height: 0.6em; width: 0.75em; border-bottom: 1px dotted; }
   .tree-children .back-line { position: absolute; left: -2px; height: calc(100% - 0.8em); top: 0; border-left: 1px dotted; }
   .tree-children .expander { display: inline-block; border: 1px solid; opacity: 0.5; width: 1em; height: 1em; text-align: center; margin-left: 0.25em; margin-right: 0.5em; cursor: pointer; line-height: 1em; }
   .tree-children .name { cursor: pointer; line-height: 1.5em; }
   .tree-children { position: relative; margin-left: 0.75em; padding-left: 0.75em; }
-  .tree-children .tree-leaf { height: 1.5em; display: flex; justify-content: space-between; margin-left: 0.5em; border-bottom: 1px solid rgba(128, 128, 128, 0.05); transition: background-color 0.2s ease; }
+  .tree-children .tree-leaf { height: 1.5em; display: flex; justify-content: space-between; margin-left: 0.25em; padding-left: 0.25em; border-bottom: 1px solid rgba(128, 128, 128, 0.05); transition: background-color 0.2s ease; white-space: nowrap; overflow: hidden; }
+
+  .tree-children .tree-leaf .name {
+    transition: transform 2s linear;
+    transform: translateX(0);
+    animation-duration: 0s;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    padding-right: 0.5em;
+  }
+  .tree-children .tree-leaf .name:hover {
+    overflow: initial;
+  }
+  .tree-children .tree-leaf .name[data-marquee]:hover {
+    animation: tree-marquee 5s linear infinite;
+  }
+
   .tree-children .tree-leaf:hover { background-color: rgba(128, 128, 128, 0.05); }
   .tree-children .remove-button { cursor: pointer; margin-left: 1em; opacity: 0.5; transition: opacity 0.2s ease; }
   .tree-children .remove-button:hover { opacity: 1; }
@@ -464,7 +498,7 @@
         {{#if ~/loadedQuery}}<button on-click="@.set('loadedQuery', undefined)">Cancel</button>{{/if}}
       </div>
       <div style="overflow: auto;">
-        {{#partial leaf}}<div class=back-dots /><div class=tree-leaf><span class=name title="Load this query. ctrl or shift click to download." on-click="@event.ctrlKey || @event.shiftKey ? download(.name + '.sql', @.queryText(.value.id)) : @.open(.value)">{{.name}}</span> <span style="line-height: 1.5em;"><span class=remove-button title="Remove this query." on-click="@.remove(.value)">&times;</span></span></div>{{/partial}}
+        {{#partial leaf}}<div class=back-dots /><div class=tree-leaf><span class=name as-marquee title="Load this query. ctrl or shift click to download." on-click="@event.ctrlKey || @event.shiftKey ? download(.name + '.sql', @.queryText(.value.id)) : @.open(.value)">{{.name}}</span> <span style="line-height: 1.5em;"><span class=remove-button title="Remove this query." on-click="@.remove(.value)">&times;</span></span></div>{{/partial}}
         {{>node ~/queryTree}}
       </div>
     </tab>
@@ -475,7 +509,7 @@
       </div>
       <div style="overflow: auto;">
         {{#partial leaf}}
-          <div class=back-dots /><div class=tree-leaf><span class=name {{#if .value.host}}style="cursor: not-allowed;" title="This report utilizes SQL query sources, making it only accessible from a Host Explorer. ctrl or shift click to download." on-click="@event.shiftKey || @event.ctrlKey ? download(.name + '.raport-proj', @.reportText(.value.id)) : false"{{else}}title="Open report designer. ctrl or shift click to download." on-click="@event.shiftKey || @event.ctrlKey ? download(.name + '.raport-proj', @.reportText(.value.id)) : @.open(.value)"{{/if}}>{{.name}}</span> <span style="line-height: 1.5em;">{{.value.kind}} <span class=remove-button title="Remove this {{.value.type}}." on-click="@.remove(.value)">&times;</span></span></div>
+          <div class=back-dots /><div class=tree-leaf><span class=name as-marquee {{#if .value.host}}style="cursor: not-allowed;" title="This report utilizes SQL query sources, making it only accessible from a Host Explorer. ctrl or shift click to download." on-click="@event.shiftKey || @event.ctrlKey ? download(.name + '.raport-proj', @.reportText(.value.id)) : false"{{else}}title="Open report designer. ctrl or shift click to download." on-click="@event.shiftKey || @event.ctrlKey ? download(.name + '.raport-proj', @.reportText(.value.id)) : @.open(.value)"{{/if}}>{{.name}}</span> <span style="line-height: 1.5em;">{{.value.kind}} <span class=remove-button title="Remove this {{.value.type}}." on-click="@.remove(.value)">&times;</span></span></div>
         {{/partial}}
         {{>node ~/reportTree}}
       </div>
@@ -487,7 +521,7 @@
       </div>
       <div style="overflow: auto;">
         {{#partial leaf}}
-          <div class=back-dots /><div class=tree-leaf><span class=name title="Open scratch pad. ctrl or shift click to download." on-click="@event.ctrlKey || @event.shiftKey ? download(.name, @.scratchText(.value.id)) : @.open(.value)">{{.name}}</span> <span style="line-height: 1.5em;">{{.value.syntax}} <span class=remove-button title="Remove this scrath pad." on-click="@.remove(.value)">&times;</span></span></div>
+          <div class=back-dots /><div class=tree-leaf><span class=name as-marquee title="Open scratch pad. ctrl or shift click to download." on-click="@event.ctrlKey || @event.shiftKey ? download(.name, @.scratchText(.value.id)) : @.open(.value)">{{.name}}</span> <span style="line-height: 1.5em;">{{.value.syntax}} <span class=remove-button title="Remove this scrath pad." on-click="@.remove(.value)">&times;</span></span></div>
         {{/partial}}
         {{>node ~/scratchPadTree}}
       </div>
@@ -617,15 +651,16 @@
     <button left title="Open a new two-way diff window for local data." on-click="@.localDiff()">Local Diff</button>
     <button left title="Open a new evaluation pad for calculations or inspecting data." on-click="@.evalPad()">Eval Pad</button>
   </buttons>
-  {{#partial node}}
-    <div class=tree-line>{{#if .name}}<div class=back-dots /><span class=expander on-click="@context.toggle('.expand')">{{.expand ? '-' : '+'}}</span> <span class=name on-click="@context.toggle('.expand')"> {{.name}}/</span>{{else}}<span style="margin-left: 0.5em;" class=name>{{.name}}/</span>{{/if}}</div>
-    {{#if .expand}}
-      <div class=tree-children>
-        <div class=back-line />
-        {{#each .nodes}}{{>.type}}{{/each}}
-      </div>
-    {{/if}}
-  {{/partial}}
+</script>
+
+<script type=text/ractive id=tree>
+  <div class=tree-line>{{#if .name}}<div class=back-dots /><span class=expander on-click="@context.toggle('.expand')">{{.expand ? '-' : '+'}}</span> <span class=name as-marquee on-click="@context.toggle('.expand')"> {{.name}}/</span>{{else}}<span style="margin-left: 0.5em;" class=name as-marquee>{{.name}}/</span>{{/if}}</div>
+  {{#if .expand}}
+    <div class=tree-children>
+      <div class=back-line />
+      {{#each .nodes}}{{>.type}}{{/each}}
+    </div>
+  {{/if}}
 </script>
 
 <script type=text/ractive id=ace-themes>
@@ -1373,12 +1408,11 @@
                       </div>
                     {{/if}}
                   </div>
-                  <div style="width: 15em; flex-shrink: 0; background-color: rgba(128, 128, 128, 0.05); border-left: 1px solid #222;">
-                    {{#each ~/report.list}}
-                      {{#if .query}}
-                        <div style="padding: 0.5em;" on-click="@.swapReport('queryreport', .)" class-selected="~/queryreport._id === .id">{{.name}}</div>
-                      {{/if}}
-                    {{/each}}
+                  <div style="width: 15em; flex-shrink: 0; background-color: rgba(128, 128, 128, 0.05); border-left: 1px solid #222; overflow: auto;">
+                    {{#partial leaf}}
+                      <div class=back-dots /><div class=tree-leaf class-selected="~/queryreport._id === .value.id"><span class=name as-marquee on-click="@.swapReport('queryreport', .value)">{{.name}}</span></div>
+                    {{/partial}}
+                    {{>node ~/singleReportTree}}
                   </div>
                 </div>
               </tab>
@@ -1428,12 +1462,11 @@
                   </div>
                 {{/if}}
               </div>
-              <div style="width: 15em; flex-shrink: 0; background-color: rgba(128, 128, 128, 0.05); border-left: 1px solid #222;">
-                {{#each ~/report.list}}
-                  {{#if .queryAll}}
-                    <div style="padding: 0.5em;" on-click="@.swapReport('allreport', .)" class-selected="~/allreport._id === .id">{{.name}}</div>
-                  {{/if}}
-                {{/each}}
+              <div style="width: 15em; flex-shrink: 0; background-color: rgba(128, 128, 128, 0.05); border-left: 1px solid #222; overflow: auto;">
+                {{#partial leaf}}
+                  <div class=back-dots /><div class=tree-leaf class-selected="~/allreport._id === .value.id"><span class=name as-marquee on-click="@.swapReport('allreport', .value)">{{.name}}</span></div>
+                {{/partial}}
+                {{>node ~/multipleReportTree}}
               </div>
             </div>
           </tab>
