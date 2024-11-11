@@ -718,6 +718,16 @@
     <path style="stroke-width:1" d="M 16.00011,3.228628 A 12.771503,12.771503 0 0 0 14.886282,3.308861 L 13.781893,7.7216959 10.600878,4.4344882 A 12.771503,12.771503 0 0 0 8.6894353,5.5601152 L 9.9401325,9.9399127 5.5603348,8.6892168 a 12.771503,12.771503 0 0 0 -1.125627,1.9114422 l 3.2872078,3.181016 -4.4128347,1.104389 a 12.771503,12.771503 0 0 0 -0.080233,1.113828 12.771503,12.771503 0 0 0 0.080233,1.113828 l 4.4128347,1.104388 -3.2872078,3.181018 a 12.771503,12.771503 0 0 0 1.125627,1.913801 l 4.3797977,-1.253056 -1.2506972,4.379798 a 12.771503,12.771503 0 0 0 1.9138017,1.125626 l 3.178656,-3.287208 1.104389,4.412835 a 12.771503,12.771503 0 0 0 1.113828,0.08024 12.771503,12.771503 0 0 0 1.113828,-0.08024 l 1.104388,-4.412835 3.181018,3.289569 a 12.771503,12.771503 0 0 0 1.911441,-1.127987 l -1.250696,-4.379798 4.379798,1.253056 a 12.771503,12.771503 0 0 0 1.125626,-1.913801 L 24.278305,18.218108 28.69114,17.11372 a 12.771503,12.771503 0 0 0 0.08024,-1.113828 12.771503,12.771503 0 0 0 -0.04955,-1.106749 l -4.443513,-1.111468 3.294288,-3.185736 A 12.771503,12.771503 0 0 0 26.461136,8.6821366 L 22.0601,9.9399127 23.317875,5.5365171 A 12.771503,12.771503 0 0 0 21.404063,4.4297687 L 18.218326,7.7216959 17.106858,3.2805437 A 12.771503,12.771503 0 0 0 16.00011,3.228628 Z m 0,5.4794672 A 7.2902771,7.2902771 0 0 1 23.289547,15.999892 7.2902771,7.2902771 0 0 1 16.00011,23.289329 7.2902771,7.2902771 0 0 1 8.7106746,15.999892 7.2902771,7.2902771 0 0 1 16.00011,8.7080952 Z" />
   </svg>
 </script>
+<script type=text/ractive id="play">
+  <svg viewBox="0 0 16 16">
+    <path d="M 2.5273438,2.1328125 A 0.39691468,0.39691468 0 0 0 2.328125,2.4765625 V 14.357422 a 0.39691468,0.39691468 0 0 0 0.5957031,0.34375 L 13.201172,8.7675781 a 0.39691468,0.39691468 0 0 0 0,-0.6875 L 2.9238281,2.1328125 a 0.39691468,0.39691468 0 0 0 -0.3964843,0 z m 0.5957031,1.03125 9.0878911,5.2597656 -9.0878911,5.2460939 z" />
+  </svg>
+</script>
+<script type=text/ractive id="times">
+  <svg viewBox="0 0 16 16">
+    <path d="m 3.081157,3.2367593 a 0.39687499,0.39687499 0 0 0 -0.28125,0.1171875 0.39687499,0.39687499 0 0 0 0,0.5605469 L 7.3038132,8.4184 2.799907,12.920353 a 0.39687499,0.39687499 0 0 0 0,0.560547 0.39687499,0.39687499 0 0 0 0.5625,0 L 7.8643601,8.9789468 12.368266,13.4809 a 0.39687499,0.39687499 0 0 0 0.560547,0 0.39687499,0.39687499 0 0 0 0,-0.560547 L 8.424907,8.4184 12.928813,3.9144937 a 0.39687499,0.39687499 0 0 0 0,-0.5605469 0.39687499,0.39687499 0 0 0 -0.560547,0 L 7.8643601,7.8558999 3.362407,3.3539468 A 0.39687499,0.39687499 0 0 0 3.081157,3.2367593 Z" />
+  </svg>
+</script>
 
 <script type=text/ractive id=query>
   <div style="border-bottom: 1px solid; display: flex; justify-content: space-between; align-items: center;">
@@ -1116,8 +1126,8 @@
 
 <script type=text/ractive id=scratch-pad>
   {{#partial header}}
-    <div style="display: flex; flex-shrink: 0;">
-      {{#if pad.syntax === 'raport'}}<label as-field class=inline><button class=flat on-click="@.evaluate(pad.text)" style="line-height: 2.5em; height: 2em;" title="Evaluate expression (ctrl+enter). Highlight a portion of text and shift+click or ctrl+enter to evaluate only the highlighted text."><span style="font-size: 1.5em;">&#9658;</span></button></label>{{/if}}
+    <div style="display: flex; flex-shrink: 0; margin-bottom: -0.4em;">
+      {{#if pad.syntax === 'raport'}}<label as-field class=inline><button class=flat on-click="@.evaluate(pad.text)" title="Evaluate expression (ctrl+enter). Highlight a portion of text and shift+click or ctrl+enter to evaluate only the highlighted text.">{{>play}}</button></label>{{/if}}
       <label as-field class=inline title="Separating segments of a file name with / will result in the pad appearing in a sub-node of the scratch pad tree view."><input value="{{pad.name}}" placeholder="Name..." lazy=1000 /></label>
       <div style="flex-grow: 1; display: flex; justify-content: space-around;">
         {{#if ~/pad._id}}
@@ -1209,6 +1219,20 @@
             {{else}}
               <pre style="margin: 1em;"><code>{{{~/evalerror || ~/evalresult}}}</code></pre>
             {{/if}}
+          </tab>
+          <tab no-pad title="Logs">
+            <button class="flat round clear-logs" on-click="@.set('logs', [])" title="Clear log entries" style="position: absolute; bottom: 0.5em; right: 0.5em; z-index: 10;">{{>delete}}</button>
+            <div style="overflow: auto; height: 100%;">
+              {{#if ~/logs.length}}<div style="margin-top: 0.2em; border-bottom: 1px dotted rgba(128, 128, 128, 0.5);" />{{/if}}
+              {{#each ~/logs}}
+                <div class=log-entry>
+                  <pre><code>{{this.0}}</code></pre>
+                  <div class=time>{{this.1}}</div>
+                </div>
+              {{else}}
+                <div style="display: flex; justify-content: space-around; align-items: center; width: 100%; height: 100%; opacity: 0.5;">Values logged during expression evaluation using the log() operator will be aggregated here.</div>
+              {{/each}}
+            </div>
           </tab>
           <tab title="Language Reference" right no-pad>
             <iframe style="border: none; flex-grow: 1; flex-shrink: 1; max-height: 100%;" srcdoc="{{~/docs.languageReference(@style.scale || 100, @style.theme)}}" />

@@ -2,8 +2,6 @@ const { evaluate, template, registerOperator, parse, parseTemplate, run, Root, s
 const { docs } = Raport.Design;
 const { Window } = RauiWindow;
 
-registerOperator({ type: 'value', names: ['log'], apply: (_name, args) => console.log.apply(console, args) });
-
 Ractive.use(RauiButton.plugin(), RauiForm.plugin({ includeStyle: true }), RauiShell.plugin(), RauiSplit.plugin(), RauiMenu.plugin(), RauiWindow.plugin(), RauiAppBar.plugin(), RauiTabs.plugin(), RauiTable.plugin({ includeGrid: true }), RauiVirtualList.plugin());
 
 Ractive.perComponentStyleElements = true;
@@ -2044,6 +2042,15 @@ const checkLanguage = (function() {
 class ScratchPad extends Window {
   constructor(opts) {
     super(opts);
+    this.log = arr => {
+      console.log(...arr);
+      this.push('logs', [arr.map(v => {
+        if (Array.isArray(v)) return JSON.stringify(v);
+        const str = `${v}`;
+        if (str.startsWith('[object ')) return JSON.stringify(v);
+        else return v;
+      }).join(' '), evaluate(`#now##date,'HH:mm:ss yyyy-MM-dd'`)]);
+    }
   }
   async load(id, copy) {
     this.lock = true;
@@ -2105,6 +2112,7 @@ class ScratchPad extends Window {
       const opts = app.get('scratchroot') || {};
       const root = new Root({}, opts);
       root.sources = Object.assign({}, opts.sources);
+      root.log = this.log;
       if (opts.all) {
         for (const k in opts.all.apply || {}) if (opts.all.apply[k]) root.sources[k] = { value: opts.all.apply[k] };
         for (const k in opts.all.provide || {}) if (opts.all.provide[k]) root.sources[k] = { value: opts.all.provide[k] };
@@ -2195,12 +2203,19 @@ dt { margin-top: 1rem; font-family: monospace; }
 dd { margin: 0.5em 0 1em 2em; white-space: pre-wrap; }
 .ops-search { opacity: 0.2; }
 .ops-search:hover { opacity: 1; }
+.log-entry { padding: 0.5em; border-bottom: 1px dotted rgba(128, 128, 128, 0.5); position: relative; }
+.log-entry .time { position: absolute; top: 0; right: 0; width: 10em; background-color: rgba(128, 128, 128, 0.5); opacity: 0.2; transition: opacity 0.2s ease; padding: 0.2em; border-radius: 0 0 0 0.5em; }
+.log-entry .time:hover { opacity: 1; }
+.clear-logs { transition: opacity 0.2s ease; opacity: 0.2; }
+.clear-logs:hover { opacity: 1; }
 `,
   use: [RauiPopover.default({ name: 'pop' })],
   options: { flex: true, resizable: true, minimize: false, width: '50em', height: '35em' },
   partials: {
     'ace-themes': document.getElementById('ace-themes').innerText,
     cog: document.getElementById('cog').innerText,
+    play: document.getElementById('play').innerText,
+    delete: document.getElementById('times').innerText,
   },
   on: {
     init() {
