@@ -1211,7 +1211,7 @@
             {{/if}}
           </tab>
           <tab title="Language Reference" right no-pad>
-            <iframe style="border: none; flex-grow: 1; flex-shrink: 1; max-height: 100%;" srcdoc="{{~/docs.languageReference(100, @style.theme)}}" />
+            <iframe style="border: none; flex-grow: 1; flex-shrink: 1; max-height: 100%;" srcdoc="{{~/docs.languageReference(@style.scale || 100, @style.theme)}}" />
           </tab>
           <tab title="Operators" right no-pad>
             <div class="ops-search" style="display: flex; justify-content: space-between; background: transparent; position: absolute; top: 0; width: 100%;">
