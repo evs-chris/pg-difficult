@@ -509,7 +509,7 @@
       </div>
       <div style="overflow: auto;">
         {{#partial leaf}}
-          <div class=back-dots /><div class=tree-leaf><span class=name as-marquee {{#if .value.host}}style="cursor: not-allowed;" title="This report utilizes SQL query sources, making it only accessible from a Host Explorer. ctrl or shift click to download." on-click="@event.shiftKey || @event.ctrlKey ? download(.name + '.raport-proj', @.reportText(.value.id)) : false"{{else}}title="Open report designer. ctrl or shift click to download." on-click="@event.shiftKey || @event.ctrlKey ? download(.name + '.raport-proj', @.reportText(.value.id)) : @.open(.value)"{{/if}}>{{.name}}</span> <span style="line-height: 1.5em;">{{.value.kind}} <span class=remove-button title="Remove this {{.value.type}}." on-click="@.remove(.value)">&times;</span></span></div>
+          <div class=back-dots /><div class=tree-leaf><span class=name as-marquee {{#if .value.host}}style="cursor: not-allowed;" title="This report utilizes SQL query sources, making it only accessible from a Host Explorer. ctrl or shift click to download." on-click="@event.shiftKey || @event.ctrlKey ? download(.name + '.raport-proj', @.reportText(.value.id)) : false"{{else}}title="Open report designer. ctrl or shift click to download. alt+click to open a new copy of this report in the report designer." on-click="@event.shiftKey || @event.ctrlKey ? download(.name + '.raport-proj', @.reportText(.value.id)) : @.open(.value)"{{/if}}>{{.name}}</span> <span style="line-height: 1.5em;">{{.value.kind}} <span class=remove-button title="Remove this {{.value.type}}." on-click="@.remove(.value)">&times;</span></span></div>
         {{/partial}}
         {{>node ~/reportTree}}
       </div>
@@ -521,7 +521,7 @@
       </div>
       <div style="overflow: auto;">
         {{#partial leaf}}
-          <div class=back-dots /><div class=tree-leaf><span class=name as-marquee title="Open scratch pad. ctrl or shift click to download." on-click="@event.ctrlKey || @event.shiftKey ? download(.name, @.scratchText(.value.id)) : @.open(.value)">{{.name}}</span> <span style="line-height: 1.5em;">{{.value.syntax}} <span class=remove-button title="Remove this scrath pad." on-click="@.remove(.value)">&times;</span></span></div>
+          <div class=back-dots /><div class=tree-leaf><span class=name as-marquee title="Open scratch pad. ctrl or shift click to download. alt+click to open a new copy of this scratch pad." on-click="@event.ctrlKey || @event.shiftKey ? download(.name, @.scratchText(.value.id)) : @.open(.value)">{{.name}}</span> <span style="line-height: 1.5em;">{{.value.syntax}} <span class=remove-button title="Remove this scrath pad." on-click="@.remove(.value)">&times;</span></span></div>
         {{/partial}}
         {{>node ~/scratchPadTree}}
       </div>
@@ -1377,7 +1377,7 @@
                     {{#if ~/queryreport}}
                       <tabs style="overflow: hidden;" flex pad>
                         <tab title="Details">
-                          <div style="display: flex; justify-content: space-between; align-items: center;"><span>{{~/queryreport.definition.name}}</span><button on-click="@.reportDesigner(~/queryreport)">Report Designer</button></div>
+                          <div style="display: flex; justify-content: space-between; align-items: center;"><span>{{~/queryreport.definition.name}}</span><button on-click="@.reportDesigner(~/queryreport, @event.altKey)" title="Open this report in the report designer. alt+click to open a new copy of this report in the report designer.">Report Designer</button></div>
                           <h3>Queries</h3>
                           <dl>
                             {{#each ~/queryreport.sources}}
@@ -1430,7 +1430,7 @@
                 {{#if ~/allreport}}
                   <tabs style="overflow: hidden;" flex pad>
                     <tab title="Details">
-                      <div style="display: flex; justify-content: space-between; align-items: center;"><span>{{~/allreport.definition.name}}</span><button on-click="@.reportDesigner(~/allreport)">Report Designer</button></div>
+                      <div style="display: flex; justify-content: space-between; align-items: center;"><span>{{~/allreport.definition.name}}</span><button on-click="@.reportDesigner(~/allreport, @event.altKey)" title="Open this report in the report designer. alt+click to open a new copy of this report in the report designer.">Report Designer</button></div>
                       <h3>Queries</h3>
                       <dl>
                         {{#each ~/allreport.sources}}

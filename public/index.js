@@ -870,8 +870,8 @@ const app = globalThis.app = new App({
       this.host.addWindow(win, { id: wid, title: 'All Monitored Connections' });
     }
   },
-  async openReport(report, file) {
-    if (report?.id) {
+  async openReport(report, file, copy) {
+    if (report?.id && !copy) {
       const wid = `report-${report.id}`;
       const win = this.host.getWindow(wid);
       if (win) return win.raise(true);
@@ -882,7 +882,7 @@ const app = globalThis.app = new App({
       return;
     }
     const win = new Report();
-    if (report?.id) win.load(report.id);
+    if (report?.id) win.load(report.id, copy);
     this.host.addWindow(win, { title: report?.id ? `Loading report...` : 'New Report' });
     if (file) {
       try {
@@ -892,8 +892,8 @@ const app = globalThis.app = new App({
       } catch {}
     }
   },
-  async openScratch(pad, file) {
-    if (pad?.id) {
+  async openScratch(pad, file, copy) {
+    if (pad?.id && !copy) {
       const wid = `scratch-${pad.id}`;
       const win = this.host.getWindow(wid);
       if (win) return win.raise(true);
@@ -904,7 +904,7 @@ const app = globalThis.app = new App({
       return;
     }
     win = new ScratchPad();
-    if (pad?.id) win.load(pad.id);
+    if (pad?.id) win.load(pad.id, copy);
     this.host.addWindow(win, { title: pad?.id ? `Loading scratch pad...` : 'New Scratch Pad' });
     if (file) win.set('pad', file, { deep: true });
   },
@@ -1081,8 +1081,9 @@ class ControlPanel extends Window {
   }
   open(v) {
     const file = this.event?.event && (this.event.event.shiftKey || this.event.event.ctrlKey);
-    if (v.type === 'report') app.openReport(v, file);
-    else if (v.type === 'scratch') app.openScratch(v, file);
+    const copy = !file && this.event?.event && this.event.event.altKey;
+    if (v.type === 'report') app.openReport(v, file, copy);
+    else if (v.type === 'scratch') app.openScratch(v, file, copy);
     else if (v.type === 'query') app.set('loadedQuery', v.id);
   }
   async scratchText(id) {
@@ -2044,13 +2045,20 @@ class ScratchPad extends Window {
   constructor(opts) {
     super(opts);
   }
-  async load(id) {
+  async load(id, copy) {
     this.lock = true;
     const old = this.get('pad');
-    await store.acquire('scratch', id);
-    this.link(`store.scratch.${id}`, 'pad', { instance: app });
+    if (copy) {
+      const doc = Object.assign({}, await store.get(id));
+      delete doc._id;
+      delete doc._rev;
+      this.set('pad', doc);
+    } else {
+      await store.acquire('scratch', id);
+      this.link(`store.scratch.${id}`, 'pad', { instance: app });
+      if (id) this.host.changeWindowId(this.id, `scratch-${id}`);
+    }
     if (old?._id) store.release('scratch', old._id);
-    if (id) this.host.changeWindowId(this.id, `scratch-${id}`);
     this.lock = false;
   }
   async save() {
@@ -2476,8 +2484,8 @@ class HostExplore extends Window {
     }
   }
 
-  async reportDesigner(report) {
-    let file = this.event?.event && (this.event.event.shiftKey || this.event.event.ctrlKey);
+  async reportDesigner(report, copy) {
+    let file = !copy && this.event?.event && (this.event.event.shiftKey || this.event.event.ctrlKey);
     const id = report?.id ?? ++reportId;
     const wid = `report-${id}`;
     let win = this.host.getWindow(wid);
@@ -2489,7 +2497,7 @@ class HostExplore extends Window {
       return;
     }
     win = new Report({}, this);
-    if (report) win.load(report._id || report.id);
+    if (report) win.load(report._id || report.id, copy);
     this.host.addWindow(win, { id: wid, title: `Loading report...` });
     if (file) {
       try {
@@ -2785,13 +2793,20 @@ class Report extends Window {
     this._parent = parent;
   }
 
-  async load(id) {
+  async load(id, copy) {
     await this.unload();
-    await store.acquire('report', id);
-    this.link(`store.report.${id}`, 'report', { instance: app });
+    if (copy) {
+      const rep = Object.assign({}, await store.get(id));
+      delete rep._id;
+      delete rep._rev;
+      this.set('report', rep);
+    } else {
+      await store.acquire('report', id);
+      this.link(`store.report.${id}`, 'report', { instance: app });
+      if (id) setTimeout(() => this.host.changeWindowId(this.id, `report-${id}`));
+    }
     const rep = this.get('report');
     if (rep) this.respond({ action: 'set', set: { report: rep.definition, sources: rep.sources } });
-    if (id) setTimeout(() => this.host.changeWindowId(this.id, `report-${id}`));
   }
 
   async unload() {
