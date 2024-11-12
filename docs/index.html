@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
     <link rel="shortcut icon" href="./icon.png" />
     <script src="./ractive@1.4.2.js"></script>
-    <script src="./raport@0.24.8.js"></script>
-    <script src="./raport.design@0.24.8.js"></script>
+    <script src="./raport@0.25.0.js"></script>
+    <script src="./raport.design@0.25.0.js"></script>
     <script src="./raui@0.15.6/ace-editor.js"></script>
     <script src="./raui@0.15.6/button.js"></script>
     <script src="./raui@0.15.6/form.js"></script>
@@ -88,6 +88,9 @@
     max-height: 100%;
     max-width: 100%;
     width: 15em;
+  }
+  .waiting, .waiting * {
+    cursor: wait !important;
   }
   .loader {
     width: 100%;
@@ -261,16 +264,51 @@
     margin: 0 0.5em;
   }
 
+  @keyframes tree-marquee {
+    0% {
+      transform: translateX(0);
+    }
+    10% {
+      transform: translateX(0);
+    }
+    50% {
+      transform: translateX(var(--marquee));
+    }
+    60% {
+      transform: translateX(var(--marquee));
+    }
+    100% {
+      transform: translateX(0);
+    }
+  }
+
   .tree-line { height: 1.5em; line-height: 1.5em; }
-  .tree-children .back-dots { position: absolute; left: -1px; height: 0.6em; width: 0.75em; border-bottom: 1px dotted; }
+  .tree-children .back-dots { position: absolute; left: 0; height: 0.6em; width: 0.75em; border-bottom: 1px dotted; }
+  .tree-children .back-line { position: absolute; left: -2px; height: calc(100% - 0.8em); top: 0; border-left: 1px dotted; }
   .tree-children .expander { display: inline-block; border: 1px solid; opacity: 0.5; width: 1em; height: 1em; text-align: center; margin-left: 0.25em; margin-right: 0.5em; cursor: pointer; line-height: 1em; }
   .tree-children .name { cursor: pointer; line-height: 1.5em; }
-  .tree-children { position: relative; border-left: 1px dotted; margin-left: 0.75em; padding-left: 0.75em; }
-  .tree-children:after { content: ' '; position: absolute; display: block; width: 0.75em; height: 0.85em; bottom: 0; left: -0.32em; }
-  .tree-children .tree-leaf { height: 1.5em; display: flex; justify-content: space-between; margin-left: 0.5em; border-bottom: 1px solid rgba(128, 128, 128, 0.05); transition: background-color 0.2s ease; }
+  .tree-children { position: relative; margin-left: 0.75em; padding-left: 0.75em; }
+  .tree-children .tree-leaf { height: 1.5em; display: flex; justify-content: space-between; margin-left: 0.25em; padding-left: 0.25em; border-bottom: 1px solid rgba(128, 128, 128, 0.05); transition: background-color 0.2s ease; white-space: nowrap; overflow: hidden; }
+
+  .tree-children .tree-leaf .name {
+    transition: transform 2s linear;
+    transform: translateX(0);
+    animation-duration: 0s;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    padding-right: 0.5em;
+  }
+  .tree-children .tree-leaf .name:hover {
+    overflow: initial;
+  }
+  .tree-children .tree-leaf .name[data-marquee]:hover {
+    animation: tree-marquee 5s linear infinite;
+  }
+
   .tree-children .tree-leaf:hover { background-color: rgba(128, 128, 128, 0.05); }
   .tree-children .remove-button { cursor: pointer; margin-left: 1em; opacity: 0.5; transition: opacity 0.2s ease; }
   .tree-children .remove-button:hover { opacity: 1; }
+  .tree-children .tree-leaf .name { user-select: none; }
 
   .markdown-container code, .mermaid {
     border-radius: 0.5em;
@@ -285,7 +323,7 @@
 <script type=text/ractive id=template>
   <link rel=stylesheet href="./hljs@11.10.0/stackoverflow-{{@style.theme}}.css" />
   {{#if !~/halted || ~/connected}}
-    <shell on-init="@.set('@.shell', $1)">
+    <shell on-init="@.set('@.shell', $1)" class-waiting="~/waiting">
       <right hidden="{{menu.hidden}}" forced="{{menu.forced}}">
         <menu>
           <container>
@@ -344,6 +382,7 @@
       </h2>
     </div>
   {{/if}}
+  <input type="file" class=file-picker style="position: absolute; left: -500px; opacity: 0;" on-change="@.filesPicked(@node.files)" />
 </script>
 
 <script type=text/ractive id=loader>
@@ -459,6 +498,7 @@
         {{#if ~/loadedQuery}}<button on-click="@.set('loadedQuery', undefined)">Cancel</button>{{/if}}
       </div>
       <div style="overflow: auto;">
+        {{#partial leaf}}<div class=back-dots /><div class=tree-leaf><span class=name as-marquee title="Load this query. ctrl or shift click to download." on-click="@event.ctrlKey || @event.shiftKey ? download(.name + '.sql', @.queryText(.value.id)) : @.open(.value)">{{.name}}</span> <span style="line-height: 1.5em;"><span class=remove-button title="Remove this query." on-click="@.remove(.value)">&times;</span></span></div>{{/partial}}
         {{>node ~/queryTree}}
       </div>
     </tab>
@@ -469,7 +509,7 @@
       </div>
       <div style="overflow: auto;">
         {{#partial leaf}}
-          <div class=back-dots /><div class=tree-leaf><span class=name {{#if .value.host}}style="cursor: not-allowed;" title="This report utilizes SQL query sources, making it only accessible from a Host Explorer."{{else}}on-click="@.open(.value)"{{/if}}>{{.name}}</span> <span style="line-height: 1.5em;">{{.value.kind}} <span class=remove-button title="Remove this {{.value.type}}." on-click="@.remove(.value)">&times;</span></span></div>
+          <div class=back-dots /><div class=tree-leaf><span class=name as-marquee {{#if .value.host}}style="cursor: not-allowed;" title="This report utilizes SQL query sources, making it only accessible from a Host Explorer. ctrl or shift click to download." on-click="@event.shiftKey || @event.ctrlKey ? download(.name + '.raport-proj', @.reportText(.value.id)) : false"{{else}}title="Open report designer. ctrl or shift click to download. alt+click to open a new copy of this report in the report designer." on-click="@event.shiftKey || @event.ctrlKey ? download(.name + '.raport-proj', @.reportText(.value.id)) : @.open(.value)"{{/if}}>{{.name}}</span> <span style="line-height: 1.5em;">{{.value.kind}} <span class=remove-button title="Remove this {{.value.type}}." on-click="@.remove(.value)">&times;</span></span></div>
         {{/partial}}
         {{>node ~/reportTree}}
       </div>
@@ -480,6 +520,9 @@
         <div style="flex-shrink: 0;"><button title="Open a new scratch pad." on-click="@.open({ type: 'scratch' })">New Scratch Pad</button></div>
       </div>
       <div style="overflow: auto;">
+        {{#partial leaf}}
+          <div class=back-dots /><div class=tree-leaf><span class=name as-marquee title="Open scratch pad. ctrl or shift click to download. alt+click to open a new copy of this scratch pad." on-click="@event.ctrlKey || @event.shiftKey ? download(.name, @.scratchText(.value.id)) : @.open(.value)">{{.name}}</span> <span style="line-height: 1.5em;">{{.value.syntax}} <span class=remove-button title="Remove this scrath pad." on-click="@.remove(.value)">&times;</span></span></div>
+        {{/partial}}
         {{>node ~/scratchPadTree}}
       </div>
     </tab>
@@ -533,7 +576,7 @@
           <label as-field class=inline><input type=checkbox checked="{{~/store.settings.editor.highlightActive}}" /> Highlight active line?</label>
           <label as-field class=inline><input type=checkbox checked="{{~/store.settings.editor.highlightSelected}}" /> Highlight selected word?</label>
           <label as-field class=inline><input type=checkbox checked="{{~/store.settings.editor.printMargin}}" /> Show print margin?</label>
-          <label as-field class=inline><input type=checkbox twoway=false checked="{{~/store.settings.editor.softTabs}}" /> Use soft tabs?</label>
+          <label as-field class=inline><input type=checkbox checked="{{~/store.settings.editor.softTabs}}" /> Use soft tabs?</label>
           <div class=break />
           <label as-field>Input Mode<select value="{{~/store.settings.editor.keymode}}">
             <option value="{{undefined}}">default</option>
@@ -575,6 +618,7 @@
               <label as-field>Database<input value="{{.db}}" on-change="@context.set('valid', false)" /></label>
               <label as-field>Username<input value="{{.user}}" on-change="@context.set('valid', false)" /></label>
               <label as-field>Password<input type="password" value="{{.password}}" on-change="@context.set('valid', false)" /></label>
+              <label as-field title="Should this server be actively used for syncing?"><input type=checkbox twoway=false checked="{{!.inactive}}" on-change="@context.set('.inactive', !@node.checked)" /> Active?</label>
               <fieldset>
                 <legend>Sync Categories</legend>
                 <label as-field><input type=checkbox name="{{.types}}" value="settings" /> Settings</label>
@@ -607,66 +651,82 @@
     <button left title="Open a new two-way diff window for local data." on-click="@.localDiff()">Local Diff</button>
     <button left title="Open a new evaluation pad for calculations or inspecting data." on-click="@.evalPad()">Eval Pad</button>
   </buttons>
-  {{#partial node}}
-    <div class=tree-line>{{#if .name}}<div class=back-dots /><span class=expander on-click="@context.toggle('.expand')">{{.expand ? '-' : '+'}}</span> <span class=name on-click="@context.toggle('.expand')"> {{.name}}/</span>{{else}}<span style="display: inline-block; width: 0.5em;" /> <span>{{.name}}/{{/if}}</div>
-    {{#if .expand}}
-      <div class=tree-children>
-        {{#each .nodes}}{{>.type}}{{/each}}
-      </div>
-    {{/if}}
-  {{/partial}}
-  {{#partial leaf}}
-    <div class=back-dots /><div class=tree-leaf><span class=name on-click="@.open(.value)">{{.name}}</span> <span style="line-height: 1.5em;">{{.value.syntax}} <span class=remove-button title="Remove this scrath pad." on-click="@.remove(.value)">&times;</span></span></div>
-  {{/partial}}
-  {{#partial ace-themes}}
-    <option value="{{undefined}}">The Default&trade;</option>
-    <option>ambiance</option>
-    <option>chrome</option>
-    <option>cloud9_day</option>
-    <option>cloud9_night</option>
-    <option>cloud_editor</option>
-    <option>cloud_editor_dark</option>
-    <option>clouds</option>
-    <option>clouds_midnight</option>
-    <option>cobalt</option>
-    <option>crimson_editor</option>
-    <option>dawn</option>
-    <option>dracula</option>
-    <option>dreamweaver</option>
-    <option>eclipse</option>
-    <option>github</option>
-    <option>github_dark</option>
-    <option>github_light_default</option>
-    <option>gob</option>
-    <option>gruvbox</option>
-    <option>gruvbox_dark_hard</option>
-    <option>gruvbox_light_hard</option>
-    <option>idle_fingers</option>
-    <option>iplastic</option>
-    <option>katzenmilch</option>
-    <option>kr_theme</option>
-    <option>kuroir</option>
-    <option>merbivore</option>
-    <option>merbivore_soft</option>
-    <option>mono_industrial</option>
-    <option>monokai</option>
-    <option>nord_dark</option>
-    <option>one_dark</option>
-    <option>pastel_on_dark</option>
-    <option>solarized_dark</option>
-    <option>solarized_light</option>
-    <option>sqlserver</option>
-    <option>terminal</option>
-    <option>textmate</option>
-    <option>tomorrow</option>
-    <option>tomorrow_night</option>
-    <option>tomorrow_night_blue</option>
-    <option>tomorrow_night_bright</option>
-    <option>tomorrow_night_eighties</option>
-    <option>twilight</option>
-    <option>vibrant_ink</option>
-    <option>xcode</option>
-  {{/partial}}
+</script>
+
+<script type=text/ractive id=tree>
+  <div class=tree-line>{{#if .name}}<div class=back-dots /><span class=expander on-click="@context.toggle('.expand')">{{.expand ? '-' : '+'}}</span> <span class=name as-marquee on-click="@context.toggle('.expand')"> {{.name}}/</span>{{else}}<span style="margin-left: 0.5em;" class=name as-marquee>{{.name}}/</span>{{/if}}</div>
+  {{#if .expand}}
+    <div class=tree-children>
+      <div class=back-line />
+      {{#each .nodes}}{{>.type}}{{/each}}
+    </div>
+  {{/if}}
+</script>
+
+<script type=text/ractive id=ace-themes>
+  <option value="{{undefined}}">The Default&trade;</option>
+  <option>ambiance</option>
+  <option>chrome</option>
+  <option>cloud9_day</option>
+  <option>cloud9_night</option>
+  <option>cloud_editor</option>
+  <option>cloud_editor_dark</option>
+  <option>clouds</option>
+  <option>clouds_midnight</option>
+  <option>cobalt</option>
+  <option>crimson_editor</option>
+  <option>dawn</option>
+  <option>dracula</option>
+  <option>dreamweaver</option>
+  <option>eclipse</option>
+  <option>github</option>
+  <option>github_dark</option>
+  <option>github_light_default</option>
+  <option>gob</option>
+  <option>gruvbox</option>
+  <option>gruvbox_dark_hard</option>
+  <option>gruvbox_light_hard</option>
+  <option>idle_fingers</option>
+  <option>iplastic</option>
+  <option>katzenmilch</option>
+  <option>kr_theme</option>
+  <option>kuroir</option>
+  <option>merbivore</option>
+  <option>merbivore_soft</option>
+  <option>mono_industrial</option>
+  <option>monokai</option>
+  <option>nord_dark</option>
+  <option>one_dark</option>
+  <option>pastel_on_dark</option>
+  <option>solarized_dark</option>
+  <option>solarized_light</option>
+  <option>sqlserver</option>
+  <option>terminal</option>
+  <option>textmate</option>
+  <option>tomorrow</option>
+  <option>tomorrow_night</option>
+  <option>tomorrow_night_blue</option>
+  <option>tomorrow_night_bright</option>
+  <option>tomorrow_night_eighties</option>
+  <option>twilight</option>
+  <option>vibrant_ink</option>
+  <option>xcode</option>
+</script>
+
+<script type=text/ractive id=cog>
+  <svg viewBox="0 0 32 32">
+    <path style="stroke-width:1" d="M 16.00011,3.228628 A 12.771503,12.771503 0 0 0 14.886282,3.308861 L 13.781893,7.7216959 10.600878,4.4344882 A 12.771503,12.771503 0 0 0 8.6894353,5.5601152 L 9.9401325,9.9399127 5.5603348,8.6892168 a 12.771503,12.771503 0 0 0 -1.125627,1.9114422 l 3.2872078,3.181016 -4.4128347,1.104389 a 12.771503,12.771503 0 0 0 -0.080233,1.113828 12.771503,12.771503 0 0 0 0.080233,1.113828 l 4.4128347,1.104388 -3.2872078,3.181018 a 12.771503,12.771503 0 0 0 1.125627,1.913801 l 4.3797977,-1.253056 -1.2506972,4.379798 a 12.771503,12.771503 0 0 0 1.9138017,1.125626 l 3.178656,-3.287208 1.104389,4.412835 a 12.771503,12.771503 0 0 0 1.113828,0.08024 12.771503,12.771503 0 0 0 1.113828,-0.08024 l 1.104388,-4.412835 3.181018,3.289569 a 12.771503,12.771503 0 0 0 1.911441,-1.127987 l -1.250696,-4.379798 4.379798,1.253056 a 12.771503,12.771503 0 0 0 1.125626,-1.913801 L 24.278305,18.218108 28.69114,17.11372 a 12.771503,12.771503 0 0 0 0.08024,-1.113828 12.771503,12.771503 0 0 0 -0.04955,-1.106749 l -4.443513,-1.111468 3.294288,-3.185736 A 12.771503,12.771503 0 0 0 26.461136,8.6821366 L 22.0601,9.9399127 23.317875,5.5365171 A 12.771503,12.771503 0 0 0 21.404063,4.4297687 L 18.218326,7.7216959 17.106858,3.2805437 A 12.771503,12.771503 0 0 0 16.00011,3.228628 Z m 0,5.4794672 A 7.2902771,7.2902771 0 0 1 23.289547,15.999892 7.2902771,7.2902771 0 0 1 16.00011,23.289329 7.2902771,7.2902771 0 0 1 8.7106746,15.999892 7.2902771,7.2902771 0 0 1 16.00011,8.7080952 Z" />
+  </svg>
+</script>
+<script type=text/ractive id="play">
+  <svg viewBox="0 0 16 16">
+    <path d="M 2.5273438,2.1328125 A 0.39691468,0.39691468 0 0 0 2.328125,2.4765625 V 14.357422 a 0.39691468,0.39691468 0 0 0 0.5957031,0.34375 L 13.201172,8.7675781 a 0.39691468,0.39691468 0 0 0 0,-0.6875 L 2.9238281,2.1328125 a 0.39691468,0.39691468 0 0 0 -0.3964843,0 z m 0.5957031,1.03125 9.0878911,5.2597656 -9.0878911,5.2460939 z" />
+  </svg>
+</script>
+<script type=text/ractive id="times">
+  <svg viewBox="0 0 16 16">
+    <path d="m 3.081157,3.2367593 a 0.39687499,0.39687499 0 0 0 -0.28125,0.1171875 0.39687499,0.39687499 0 0 0 0,0.5605469 L 7.3038132,8.4184 2.799907,12.920353 a 0.39687499,0.39687499 0 0 0 0,0.560547 0.39687499,0.39687499 0 0 0 0.5625,0 L 7.8643601,8.9789468 12.368266,13.4809 a 0.39687499,0.39687499 0 0 0 0.560547,0 0.39687499,0.39687499 0 0 0 0,-0.560547 L 8.424907,8.4184 12.928813,3.9144937 a 0.39687499,0.39687499 0 0 0 0,-0.5605469 0.39687499,0.39687499 0 0 0 -0.560547,0 L 7.8643601,7.8558999 3.362407,3.3539468 A 0.39687499,0.39687499 0 0 0 3.081157,3.2367593 Z" />
+  </svg>
 </script>
 
 <script type=text/ractive id=query>
@@ -710,12 +770,12 @@
         <label as-field title="The segment name groups sets of changes together. The segment will automatically be updated when you stop typing, and any new changes will get the new segment name.">Segment<input value="{{~/newSegment}}" lazy=1500 /></label>
       {{/if}}
       <label class=filter class-error="~/exprError" as-field title="Raport expression used to filter out entries. Available fields are id, new, old, schema, segment, source, stamp, and table. new and old are objects containing the fields that changed in the record. table, schema, source, and segment are strings.{{#if ~/exprError}}{{'\n\nError: ' + ~/exprError.message + '\n' + ~/exprError.marked}}{{/if}}">Filter Expression<input value="{{expr}}" lazy=1000 /></label>
-      <button as-pop=`~/showSettings`>&#9881;</button>
+      <button class="settings flat" title="Settings" as-pop=`~/showSettings`>{{>cog}}</button>
     </div>
     <virtual-list bind-items="~/entries" size=75>
       <header>
         {{#if .segment}}
-          <div class=header><h2 title="Double click to rename segment" on-dblclick="@.renameSegment(.), false">{{.segment}}</h2> <div class=buttons style="padding-top: 0.9em;"><button class=undo on-click="@.toggleHidden(.)">{{#if .hide}}Show{{else}}Hide{{/if}}</button>{{#if ~/allowUndoSegment}}<button class=undo on-click="@.undoSegment(.), false" title="Undo all changes in this segment by replaying the changes in reverse. This will also create a new segment named 'Undo {{.segment}}', unless you hold the ctrl key when clicking this button.">Undo</button>{{/if}}</div></div>
+          <div class=header><h2 title="Double click to rename segment" on-dblclick="@.renameSegment(.), false">{{.segment}}</h2> <div class=buttons style="padding-top: 0.9em;"><button class=undo on-click="@.toggleHidden(., @event.ctrlKey || @event.shiftKey)" title="Skip confirmation by holding ctrl or shift when clicking.">{{#if .hide}}Show{{else}}Hide{{/if}}</button>{{#if ~/allowUndoSegment}}<button class=undo on-click="@event.altKey ? @.undoAndHide(.) : @.undoSegment(.), false" title="Undo all changes in this segment by replaying the changes in reverse. This will also create a new segment named 'Undo {{.segment}}', unless you hold the ctrl or shift key when clicking this button. Hold alt to undo the segment and hide both this and the new undo segment.">Undo</button>{{/if}}</div></div>
         {{/if}}
       </header>
       {{#with . as record, @.details(.) as entry}}
@@ -759,7 +819,7 @@
         {{/if}}
       {{/with}}
       {{#if ~/entries[index + 1] && ~/entries[index + 1].segment !== .segment}}{{#with ~/entries[index + 1]}}
-        <div class=header><h2 title="Double click to rename segment" on-dblclick="@.renameSegment(.), false">{{.segment}}</h2> <div class=buttons style="padding-top: 0.9em;"><button on-click="@.toggleHidden(.)">{{#if .hide}}Show{{else}}Hide{{/if}}</button>{{#if ~/allowUndoSegment}}<button class=undo on-click="@.undoSegment(.), false" title="Undo all changes in this segment by replaying the changes in reverse. This will also create a new segment named 'Undo {{.segment}}', unless you hold the ctrl key when clicking this button.">Undo</button>{{/if}}</div></div>
+        <div class=header><h2 title="Double click to rename segment" on-dblclick="@.renameSegment(.), false">{{.segment}}</h2> <div class=buttons style="padding-top: 0.9em;"><button on-click="@.toggleHidden(., @event.ctrlKey || @event.shiftKey)" title="Skip confirmation by holding ctrl or shift when clicking.">{{#if .hide}}Show{{else}}Hide{{/if}}</button>{{#if ~/allowUndoSegment}}<button class=undo on-click="@event.altKey ? @.undoAndHide(.) : @.undoSegment(.), false" title="Undo all changes in this segment by replaying the changes in reverse. This will also create a new segment named 'Undo {{.segment}}', unless you hold the ctrl or shift key when clicking this button. Hold alt to undo the segment and hide both this and the new undo segment.">Undo</button>{{/if}}</div></div>
       {{/with}}{{/if}}
       <else>
         {{#if ~/exprError}}<code class=expr>{{~/expr}}</code> is an invalid filter.<br /><br /><pre>Error: {{~/exprError.message + '\n\n'}}{{~/exprError.marked}}</pre>{{else}}No change entries have been recorded.{{/if}}
@@ -783,12 +843,12 @@
     </div>
     <div style="display: flex; justify-content: space-between;">
       {{#if ~/entries.length}}
-        <button class=reject on-click="@.clearEntries()" title="Remove recorded entries {{#if !~/loaded && !@.source}}for all diffs{{else}}for only this diff. Hold the ctrl key and click to clear all diff entries.{{/if}}.">Clear Entries</button>
+        <button class=reject on-click="@.clearEntries()" title="Remove recorded entries {{#if !~/loaded && !@.source}}for all diffs{{else}}for only this diff. Hold the ctrl or shift key and click to clear all diff entries.{{/if}}.">Clear Entries</button>
       {{else}}
         <div />
       {{/if}}
       {{#if ~/entries.length}}
-        <button class=download on-click="@.download()" title="Download a file containing these entries. Hold the ctrl key while clicking to open a popup window of the HTML. Hold the shift key while clicking to download the HTML directly.">Download</button>
+        <button class=download on-click="@.download()" title="Download a file containing these entries. Hold the ctrl or shift key while clicking to open a popup window of the HTML. Hold the alt key while clicking to download the HTML directly.">Download</button>
       {{else}}
         <div />
       {{/if}}
@@ -832,15 +892,17 @@
 
 <script type=text/ractive id=leaks>
   {{#partial leak}}
-    <div>Updated {{age(~/status.lastUpdate)}}</div>
     <div class="leak header">
       <div class=user>User</div>
       <div class=application>Application</div>
       <div class=client>Client</div>
       <div class=state>State</div>
       <div class=started>Started</div>
+      <div class=updated>Updated</div>
       <div class=constr>Connection</div>
       <div class=pid>Process ID</div>
+      <div class=queried>Queried</div>
+      <div class=query>Query</div>
     </div>
     {{#each leaks}}
       <div class="leak striped">
@@ -849,14 +911,17 @@
         <div class=client>{{.client}}</div>
         <div class=state>{{.state}}</div>
         <div class=started title="{{.started}}">{{age(.started)}}</div>
+        <div class=started title="{{.updated}}">{{age(.updated)}}</div>
         <div class=constr>{{.source}}</div>
         <div class=pid>{{.pid}}</div>
+        <div class=queried title="{{.queried}}">{{age(.queried)}}</div>
+        <div class=query title="{{.query}}">{{.query}}</div>
       </div>
     {{else}}
-      No connections.
+      <div style="padding: 0.2em;">No connections.</div>
     {{/each}}
   {{/partial}}
-  <tabs style="overflow: hidden;" no-pad>
+  <tabs style="overflow: hidden;" fill>
     <tab title="Added">
       <div class=content-wrapper>{{>leak leaks as leaks}}</div>
     </tab>
@@ -868,6 +933,9 @@
     </tab>
   </tabs>
   <div as-serverblock />
+  <div style="background-color: rgba(128, 128, 128, 0.1); padding: 0.2em; border-top: 1px solid;">
+    <div>Updated {{age(~/status.lastUpdate)}}</div>
+  </div>
 </script>
 
 <script type=text/ractive id=schema>
@@ -1058,70 +1126,73 @@
 
 <script type=text/ractive id=scratch-pad>
   {{#partial header}}
-    <div style="display: flex; flex-shrink: 0;">
-      {{#if pad.syntax === 'raport'}}<label as-field class=inline><button class=flat on-click="@.evaluate(pad.text)" style="line-height: 2.5em; height: 2em;" title="Evaluate expression (ctrl+enter). Highlight a portion of text and shift+click or ctrl+enter to evaluate only the highlighted text."><span style="font-size: 1.5em;">&#9658;</span></button></label>{{/if}}
+    <div style="display: flex; flex-shrink: 0; margin-bottom: -0.4em;">
+      {{#if pad.syntax === 'raport'}}<label as-field class=inline><button class=flat on-click="@.evaluate(pad.text)" title="Evaluate expression (ctrl+enter). Highlight a portion of text and shift+click or ctrl+enter to evaluate only the highlighted text.">{{>play}}</button></label>{{/if}}
       <label as-field class=inline title="Separating segments of a file name with / will result in the pad appearing in a sub-node of the scratch pad tree view."><input value="{{pad.name}}" placeholder="Name..." lazy=1000 /></label>
       <div style="flex-grow: 1; display: flex; justify-content: space-around;">
         {{#if ~/pad._id}}
           {{#if ~/unsaved && !nosave}}<div style="padding: 0.5em; opacity: 0.7; background-color: rgba(128, 128, 128, 0.5); border-radius: 0 0 0.5em 0.5em; height: 1em;">unsaved</div>{{/if}}
         {{else}}
-          <button style="align-self: center;" on-click="@.save()">Save</button>
+          <label as-field class=inline><button style="align-self: center;" on-click="@.save()">Save</button></label>
         {{/if}}
       </div>
-      <label as-field class=inline><select value="{{pad.syntax}}" lazy=1000>
-        <option value="{{undefined}}">plain text</option>
-        <option>c_cpp</option>
-        <option>csharp</option>
-        <option>css</option>
-        <option>ejs</option>
-        <option>golang</option>
-        <option>handlebars</option>
-        <option>html</option>
-        <option>ini</option>
-        <option>java</option>
-        <option>javascript</option>
-        <option>json</option>
-        <option>jsx</option>
-        <option>julia</option>
-        <option>kotlin</option>
-        <option>less</option>
-        <option>liquid</option>
-        <option>lisp</option>
-        <option>lua</option>
-        <option>markdown</option>
-        <option>mediawiki</option>
-        <option>nix</option>
-        <option>nunjucks</option>
-        <option>ocaml</option>
-        <option>odin</option>
-        <option>pascal</option>
-        <option>perl</option>
-        <option>pgsql</option>
-        <option>php</option>
-        <option>plain_text</option>
-        <option>python</option>
-        <option>raport</option>
-        <option>ruby</option>
-        <option>rust</option>
-        <option>sass</option>
-        <option>scala</option>
-        <option>scheme</option>
-        <option>sh</option>
-        <option>sql</option>
-        <option>stylus</option>
-        <option>svg</option>
-        <option>swift</option>
-        <option>tcl</option>
-        <option>toml</option>
-        <option>tsx</option>
-        <option>twig</option>
-        <option>typescript</option>
-        <option>vue</option>
-        <option>xml</option>
-        <option>xquery</option>
-        <option>yaml</option>
-        <option>zig</option>
-      </select></label>
+      <div>
+        <label as-field class=inline><button class="settings flat" title="Editor settings" as-pop=`~/showSettings`>{{>cog}}</button></label>
+        <label as-field class=inline><select value="{{pad.syntax}}" lazy=1000>
+          <option value="{{undefined}}">plain text</option>
+          <option>c_cpp</option>
+          <option>csharp</option>
+          <option>css</option>
+          <option>ejs</option>
+          <option>golang</option>
+          <option>handlebars</option>
+          <option>html</option>
+          <option>ini</option>
+          <option>java</option>
+          <option>javascript</option>
+          <option>json</option>
+          <option>jsx</option>
+          <option>julia</option>
+          <option>kotlin</option>
+          <option>less</option>
+          <option>liquid</option>
+          <option>lisp</option>
+          <option>lua</option>
+          <option>markdown</option>
+          <option>mediawiki</option>
+          <option>nix</option>
+          <option>nunjucks</option>
+          <option>ocaml</option>
+          <option>odin</option>
+          <option>pascal</option>
+          <option>perl</option>
+          <option>pgsql</option>
+          <option>php</option>
+          <option>plain_text</option>
+          <option>python</option>
+          <option>raport</option>
+          <option>ruby</option>
+          <option>rust</option>
+          <option>sass</option>
+          <option>scala</option>
+          <option>scheme</option>
+          <option>sh</option>
+          <option>sql</option>
+          <option>stylus</option>
+          <option>svg</option>
+          <option>swift</option>
+          <option>tcl</option>
+          <option>toml</option>
+          <option>tsx</option>
+          <option>twig</option>
+          <option>typescript</option>
+          <option>vue</option>
+          <option>xml</option>
+          <option>xquery</option>
+          <option>yaml</option>
+          <option>zig</option>
+        </select></label>
+      </div>
     </div>
   {{/partial}}
   <div style="flex-grow: 1; position: relative; display: flex; height: 100%;">
@@ -1136,14 +1207,35 @@
             <title>{{~/evalerror ? 'Error' : 'Result'}}</title>
             <pre><code on-click="copyToClipboard(~/evalresult)" title="click to copy result to the clipboard">{{~/evalerror || ~/evaltext}}</code></pre>
           </tab>
-          <tab hidden="{{~/evalerror}}" title="Tree" no-pad>
-            <div style="position: absolute; top: 0; right: 0; background-color: rgba(128, 128, 128, 0.2); border-radius: 0 0 0 1em;">
-              <label as-field class=inline style="min-height: 2.7em;"><input type="checkbox" checked="{{~/expandAll}}" /> Expand all?</label>
+          <tab hidden="{{~/evalerror}}" no-pad>
+            <title>{{#if ~/treeresult}}Tree{{else}}Text{{/if}}</title>
+            {{#if typeof ~/treeresult === 'object' && ~/treeresult}}
+              <div style="position: absolute; top: 0; right: 0; background-color: rgba(128, 128, 128, 0.2); border-radius: 0 0 0 1em;">
+                <label as-field class=inline style="min-height: 2.7em;"><input type="checkbox" checked="{{~/expandAll}}" /> Expand all?</label>
+              </div>
+            {{/if}}
+            {{#if ~/treeresult}}
+              {{>root ~/treeresult}}
+            {{else}}
+              <pre style="margin: 1em;"><code>{{{~/evalerror || ~/evalresult}}}</code></pre>
+            {{/if}}
+          </tab>
+          <tab no-pad title="Logs">
+            <button class="flat round clear-logs" on-click="@.set('logs', [])" title="Clear log entries" style="position: absolute; bottom: 0.5em; right: 0.5em; z-index: 10;">{{>delete}}</button>
+            <div style="overflow: auto; height: 100%;">
+              {{#if ~/logs.length}}<div style="margin-top: 0.2em; border-bottom: 1px dotted rgba(128, 128, 128, 0.5);" />{{/if}}
+              {{#each ~/logs}}
+                <div class=log-entry>
+                  <pre><code>{{this.0}}</code></pre>
+                  <div class=time>{{this.1}}</div>
+                </div>
+              {{else}}
+                <div style="display: flex; justify-content: space-around; align-items: center; width: 100%; height: 100%; opacity: 0.5;">Values logged during expression evaluation using the log() operator will be aggregated here.</div>
+              {{/each}}
             </div>
-            {{>root ~/treeresult}}
           </tab>
           <tab title="Language Reference" right no-pad>
-            <iframe style="border: none; flex-grow: 1; flex-shrink: 1; max-height: 100%;" srcdoc="{{~/docs.languageReference(100, @style.theme)}}" />
+            <iframe style="border: none; flex-grow: 1; flex-shrink: 1; max-height: 100%;" srcdoc="{{~/docs.languageReference(@style.scale || 100, @style.theme)}}" />
           </tab>
           <tab title="Operators" right no-pad>
             <div class="ops-search" style="display: flex; justify-content: space-between; background: transparent; position: absolute; top: 0; width: 100%;">
@@ -1205,6 +1297,29 @@
       </div>
     {{/if}}
   </div>
+  <pop bind-popped="~/showSettings" where="below" align="end" tail>
+    <div style="width: 28em; height: 20em; overflow: auto;">
+      <label as-field class=inline><input type=checkbox twoway=false checked="{{~/editor.wrap}}" on-change="@.updateSetting('wrap', @node.checked)" /> Word wrap?</label>
+      <label as-field class=inline><input type=checkbox twoway=false checked="{{~/editor.lineNumbers}}" on-change="@.updateSetting('lineNumbers', @node.checked)" /> Show line numbers?</label>
+      {{#if ~/editor.lineNumbers}}<label as-field class=inline><input type=checkbox twoway=false checked="{{~/editor.relativeLineNumbers}}" on-change="@.updateSetting('relativeLineNumbers', @node.checked)" /> Relative line numbers?</label>{{/if}}
+      <label as-field class=inline><input type=checkbox twoway=false checked="{{~/editor.highlightActive}}" on-change="@.updateSetting('highlightActive', @node.checked)" /> Highlight active line?</label>
+      <label as-field class=inline><input type=checkbox twoway=false checked="{{~/editor.highlightSelected}}" on-change="@.updateSetting('highlightSelected', @node.checked)" /> Highlight selected word?</label>
+      <label as-field class=inline><input type=checkbox twoway=false checked="{{~/editor.printMargin}}" on-change="@.updateSetting('printMargin', @node.checked)" /> Show print margin?</label>
+      <label as-field class=inline><input type=checkbox twoway=false checked="{{~/editor.softTabs}}" on-change="@.updateSetting('softTabs', @node.checked)" /> Use soft tabs?</label>
+      <div class=break />
+      <label as-field>Input Mode<select twoway=false value="{{~/editor.keymode}}" on-change="@.updateSetting('keymode', @node.value)">
+        <option value="{{undefined}}">default</option>
+        <option>emacs</option>
+        <option>sublime</option>
+        <option>vim</option>
+        <option>vscode</option>
+      </select></label>
+      <label as-field>Light Theme <tip>The Ace editor theme to use when retinal pain mode is selected.</tip><select twoway=false value="{{~/editor.lightTheme}}" on-change="@.updateSetting('lightTheme', @node.value)">{{>ace-themes}}</select></label>
+      <label as-field>Dark Theme <tip>The Ace editor theme to use when the correct mode is selected.</tip><select twoway=false value="{{~/editor.darkTheme}}" on-change="@.updateSetting('darkTheme', @node.value)">{{>ace-themes}}</select></label>
+      <label as-field>Tab Size<input type=number twoway=false placeholder=2 value="{{~/editor.tabSize}}" on-change="@.updateSetting('tabSize', @node.value)" /></label>
+      <label as-field>Autosave Timeout MS<tip>The number of milliseconds after a change is made to wait before triggering a save of the content. For editors that don't have a save action, this will do nothing. -1 will disable autosave. The default is 15000 (15 seconds).</tip><input type=number twoway=false value="{{~/editor.autosave}}" on-change="@.updateSetting('autosave', @node.value)" placeholder=15000 lazy /></label>
+    </div>
+  </pop>
 </script>
 
 <script type=text/ractive id=host-explore>
@@ -1286,7 +1401,7 @@
                     {{#if ~/queryreport}}
                       <tabs style="overflow: hidden;" flex pad>
                         <tab title="Details">
-                          <div style="display: flex; justify-content: space-between; align-items: center;"><span>{{~/queryreport.definition.name}}</span><button on-click="@.reportDesigner(~/queryreport)">Report Designer</button></div>
+                          <div style="display: flex; justify-content: space-between; align-items: center;"><span>{{~/queryreport.definition.name}}</span><button on-click="@.reportDesigner(~/queryreport, @event.altKey)" title="Open this report in the report designer. alt+click to open a new copy of this report in the report designer.">Report Designer</button></div>
                           <h3>Queries</h3>
                           <dl>
                             {{#each ~/queryreport.sources}}
@@ -1313,16 +1428,15 @@
                       </tabs>
                     {{else}}
                       <div style="padding: 0.5em; opacity: 0.5;">
-                        Select a report or <button on-click="@.reportDesigner()">Add Report</button>
+                        Select a report or <button title="ctrl+click or shift+click to load a new report from a file" on-click="@.reportDesigner()">Add Report</button>
                       </div>
                     {{/if}}
                   </div>
-                  <div style="width: 15em; flex-shrink: 0; background-color: rgba(128, 128, 128, 0.05); border-left: 1px solid #222;">
-                    {{#each ~/report.list}}
-                      {{#if .query}}
-                        <div style="padding: 0.5em;" on-click="@.swapReport('queryreport', .)" class-selected="~/queryreport._id === .id">{{.name}}</div>
-                      {{/if}}
-                    {{/each}}
+                  <div style="width: 15em; flex-shrink: 0; background-color: rgba(128, 128, 128, 0.05); border-left: 1px solid #222; overflow: auto;">
+                    {{#partial leaf}}
+                      <div class=back-dots /><div class=tree-leaf class-selected="~/queryreport._id === .value.id"><span class=name as-marquee on-click="@.swapReport('queryreport', .value)">{{.name}}</span></div>
+                    {{/partial}}
+                    {{>node ~/singleReportTree}}
                   </div>
                 </div>
               </tab>
@@ -1340,7 +1454,7 @@
                 {{#if ~/allreport}}
                   <tabs style="overflow: hidden;" flex pad>
                     <tab title="Details">
-                      <div style="display: flex; justify-content: space-between; align-items: center;"><span>{{~/allreport.definition.name}}</span><button on-click="@.reportDesigner(~/allreport)">Report Designer</button></div>
+                      <div style="display: flex; justify-content: space-between; align-items: center;"><span>{{~/allreport.definition.name}}</span><button on-click="@.reportDesigner(~/allreport, @event.altKey)" title="Open this report in the report designer. alt+click to open a new copy of this report in the report designer.">Report Designer</button></div>
                       <h3>Queries</h3>
                       <dl>
                         {{#each ~/allreport.sources}}
@@ -1372,12 +1486,11 @@
                   </div>
                 {{/if}}
               </div>
-              <div style="width: 15em; flex-shrink: 0; background-color: rgba(128, 128, 128, 0.05); border-left: 1px solid #222;">
-                {{#each ~/report.list}}
-                  {{#if .queryAll}}
-                    <div style="padding: 0.5em;" on-click="@.swapReport('allreport', .)" class-selected="~/allreport._id === .id">{{.name}}</div>
-                  {{/if}}
-                {{/each}}
+              <div style="width: 15em; flex-shrink: 0; background-color: rgba(128, 128, 128, 0.05); border-left: 1px solid #222; overflow: auto;">
+                {{#partial leaf}}
+                  <div class=back-dots /><div class=tree-leaf class-selected="~/allreport._id === .value.id"><span class=name as-marquee on-click="@.swapReport('allreport', .value)">{{.name}}</span></div>
+                {{/partial}}
+                {{>node ~/multipleReportTree}}
               </div>
             </div>
           </tab>
@@ -1429,6 +1542,7 @@
           <option value="query-all-sql">Query All</option>
         {{/if}}
         <option value="json">JSON</option>
+        <option value="pg-fetch">Fetch</option>
       </select></label>
       {{#if source.type === 'query'}}<label as-field><input type=checkbox checked="{{source.config !== undefined}}" twoway=false on-change="@.set('source.config', @node.checked ? {} : undefined)" /> Custom connection?</label>{{/if}}
     </div>
@@ -1457,6 +1571,36 @@
       </div>
     {{elseif source.type === 'json'}}
       <label as-field>JSON<textarea>{{source.json}}</textarea></label>
+    {{elseif source.type === 'pg-fetch'}}
+      {{#with .source}}
+      <div>
+        <label as-field style="width: 26em;">URL <tip>URL, header values, and body are evaluated as a template with parameters in scope.</tip><input value="{{.url}}" /></label>
+        <label as-field>Method<select value="{{.method}}">
+          <option>GET</option>
+          <option>POST</option>
+        </select></label>
+        <label as-field>Type<select value="{{.eval}}">
+          <option value=json>JSON</option>
+          <option value=txt>Plain Text</option>
+          <option value=raport>Raport</option>
+          <option value=try>XML/CSV/JSONish</option>
+        </select></label>
+        <label as-field>Cache <tip>Number of seconds to cache a request, with 0 being don't cache.</tip><input type=number value="{{.ttl}}" placeholder=0 /></label>
+        {{#if .eval === 'try' || .eval === 'csv'}}<label as-field><input type=checkbox checked="{{.csvHeader}}" /> CSV Header?</label>{{/if}}
+        <label as-field><input type=checkbox checked="{{.server}}" /> Run from server? <tip>Running the request from the server can bypass CORS requirements.</tip></label>
+        <label as-field><button on-click="@context.push('.headers', [])">Add Header</button></label>
+      </div>
+      <div>
+        {{#each .headers}}
+          <div>
+            <label as-field><button class=flat on-click="@context.splice('../', @index, 1)">&times;</button></label>
+            <label as-field>Name<input value="{{this.0}}" /></label>
+            <label as-field>Value<input value="{{this.1}}" /></label>
+          </div>
+        {{/each}}
+      </div>
+      {{#if .method === 'POST'}}<label as-field style="min-height: 15em;">Body<textarea>{{.body}}</textarea></label>{{/if}}
+      {{/with}}
     {{elseif source.type === 'query-all'}}
       <label as-field>Result Name<input value="{{source.result}}" /></label>
     {{elseif source.type === 'query-all-sql'}}
@@ -1580,7 +1724,6 @@
       </div>
     </div>
   {{/partial}}
-  {{#partial leaf}}<div class=value>{{.value}}</div>{{/partial}}
   {{#partial array}}
       <div class=type style="margin-left: 0.5em;">[</div>
       <div class=expand {{#if .children.length}}class-show on-click="@context.toggle('.expand')"{{/if}}>{{#if .expand}}-{{else}}+{{/if}}</div>
@@ -1609,6 +1752,7 @@
         <div class=type>}</div>
       {{/if}}
   {{/partial}}
+  {{#partial leaf}}<span class=value>{{.value}}</span>{{/partial}}
 </script>
 
 <script type=text/ractive id=confirm>

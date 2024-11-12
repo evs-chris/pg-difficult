@@ -1,3 +1,41 @@
+## 1.13.0
+
+2024-11-11
+
+### Bugs
+
+* Relative times older than the current day will now render correctly.
+* Diff listeners will no longer readily leak connections.
+* Leak monitors will now reconnect if the server loses connection with the target database instance.
+* The diff trigger can now handle inserts and deletes on postgres 10.
+* Starting and stopping diffs now uses a single message to the server to improve performance on laggy connections.
+* All uses of connection management now explicitly specify a timeout so socket timeouts don't result in hung connections.
+* The query tool can now run statements that can't be run in a transaction, like create database.
+* Diff HTML can be downloaded directly by hold alt.
+* Diff autoscroll will now work on unfocused browser tabs.
+* The raport scratch pad language reference will now follow the ui scale setting.
+* The diff and scratch pad result object trees will once again render leaf values.
+
+### Features
+
+* The server now supports requiring basic auth to connect. This is not a substitute for actual security, but it can prevent minor mishaps in a trusted environment.
+* The server will now accept a config file as an option that is read as a raport expression and the resulting object may contain keys that match the cli flags in addition to a users dictionary with password values that can be used with basic auth.
+* The leak monitor now includes query and session liveliness information.
+* There is a new fetch data source available to reports that can run fetches through the server.
+* Multi-database queries now include timing info and a completion estimate.
+* Diff segments can now be undone and hidden with one click by holding alt and clicking undo. This will also leave the segment name intact, and the undo segment will also be hidden.
+* Scratch pads, reports, and queries can now be downloaded. Scratch pads and reports can be uploaded from a local file or copied as a new entry.
+* The wait cursor is now universal.
+* Markdown scratch pads now support images in code fences with svg+inline, png+base64, and jpeg+base64.
+* Raport scratch pads will show literal output in the tree tab if the result is not an object.
+* Scratch pads now have local editor options that override the global settings only for their window.
+* Report paths are now separated from their names and are editable in the report designer.
+* Host-only reports are now displayed in a tree view in the host explorer.
+* Tree view items with long names will now marquee scroll the names on hover.
+* Raport scratch pads now support log message aggregation from raport 0.25.0.
+* Raport scratch pads now support highlighting spaceless symbolic binary operations.
+
+
 ## 1.12.1
 
 2023-08-30
@@ -18,7 +56,7 @@ This version also introduces a schema change to the diff recording tables that a
 
 ### Bugs
 
-* Diff details are now memoized, so lage diff views should no longer be make the windowing system laggy.
+* Diff details are now memoized, so lage diff views should no longer make the windowing system laggy.
 * Report designers will now follow the selected color scheme.
 * View definitions are now directly compared during schema comparison. Prior to this release, schema comparison that supported views only considered the columns of the view and not the statement that generated them.
 

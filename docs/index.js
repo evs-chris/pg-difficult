@@ -1,8 +1,6 @@
-const { evaluate, template, registerOperator, parse, run, Root, stringify } = Raport;
+const { evaluate, template, registerOperator, parse, parseTemplate, run, Root, stringify } = Raport;
 const { docs } = Raport.Design;
 const { Window } = RauiWindow;
-
-registerOperator({ type: 'value', names: ['log'], apply: (_name, args) => console.log.apply(console, args) });
 
 Ractive.use(RauiButton.plugin(), RauiForm.plugin({ includeStyle: true }), RauiShell.plugin(), RauiSplit.plugin(), RauiMenu.plugin(), RauiWindow.plugin(), RauiAppBar.plugin(), RauiTabs.plugin(), RauiTable.plugin({ includeGrid: true }), RauiVirtualList.plugin());
 
@@ -21,16 +19,18 @@ Ractive.helpers.age = function(ts) {
   let tmp;
   if ((tmp = +now - +d) < 120000) return `${Math.ceil(tmp / 1000)} second${tmp > 1000 ? 's' : ''} ago`;
   if ((tmp = +now - +d) < 5400000) return `${Math.ceil(tmp / 60000)} minute${tmp > 6000 ? 's' : ''} ago`;
-  const today = evaluate({ d: new Date(ts) }, 'date(d :midnight)');
+  const today = evaluate({ d: now }, 'date(d :midnight)');
   if (+d > +today) return `${evaluate({ d }, `d#date,'HH:mm'`)} today`;
-  const yesterday = evaluate({ d: new Date(ts) }, 'date(d :midnight) - #1d#');
+  const yesterday = evaluate({ d: now }, 'date(d :midnight) - #1d#');
   if (+d > +yesterday) return `${evaluate({ d }, `d#date,'HH:mm'`)} yesterday`;
-  if (+now - +d < (300 * 86400000)) return evaluate({ d }, `d#date,'MMM d'`);
-  if (+now - +d > (7 * 86400000)) return evaluate({ d }, `d#date,'yyyy-MM-dd'`);
+  if (+now - +d < (300 * 86400000)) return evaluate({ d }, `d#date,'MMM d - HH:mm'`);
+  if (+now - +d > (7 * 86400000)) return evaluate({ d }, `d#date,'yyyy-MM-dd - HH:mm'`);
   return evaluate({ d }, `d#date,'HH:mm EEE'`);
 }
 Ractive.helpers.escapeKey = Ractive.escapeKey;
 Ractive.helpers.evaluate = Raport.evaluate;
+Ractive.helpers.download = download;
+Ractive.helpers.basename = basename;
 
 Ractive.decorators.autofocus = function autofocus(node) {
   if (node) {
@@ -54,6 +54,42 @@ Ractive.decorators.tracked = function tracked(node, name) {
   };
 }
 Ractive.decorators.serverblock = serverblock;
+function marquee(node) {
+  const check = () => {
+    const w = node.clientWidth;
+    const p = node.parentElement.clientWidth;
+    if (w > p) {
+      const diff = Math.round(w - p);
+      node.style.setProperty('--marquee', `-${diff}px`);
+      node.setAttribute('data-marquee', `${diff}px`);
+    } else {
+      node.removeAttribute('data-marquee');
+    }
+  }
+  check();
+  if (marquee.observer) marquee.observer.observe(node);
+  return {
+    teardown() {
+      node.removeAttribute('data-marquee');
+      if (marquee.observer) marquee.observer.unobserve(node);
+    },
+    update() {
+      check();
+    },
+    invalidate() {
+      check();
+    },
+  };
+}
+if (typeof ResizeObserver === 'function') {
+  marquee.observer = new ResizeObserver(entries => {
+    for (const e of entries) {
+      const c = Ractive.getContext(e.target);
+      if (c.decorators?.marquee) c.decorators.marquee.update();
+    }
+  });
+}
+Ractive.decorators.marquee = marquee;
 
 const colors = {
   green: ['#325932', '#447A43'],
@@ -124,7 +160,7 @@ const store = globalThis.store = {};
           const qo = !!(d.sources || []).find(s => s.type === 'query');
           const qoh = !!(d.sources || []).find(s => s.type === 'query' && !s.config);
           const qa = !!(d.sources || []).find(s => s.type === 'query-all-sql');
-          emit(d.definition.name, {
+          emit(d.definition.path ? d.definition.path + '/' + d.definition.name : d.definition.name, {
             host: qa || qoh,
             query: qo,
             queryAll: qa,
@@ -307,7 +343,7 @@ const store = globalThis.store = {};
 
   let desync;
   store.sync = function sync(servers) {
-    if ((servers || []).map(s => JSON.stringify(s)).sort().join('') === (desync || []).map(d => d._pgdiff).sort().join('')) return;
+    if ((servers || []).filter(s => !s.inactive).map(s => JSON.stringify(s)).sort().join('') === (desync || []).map(d => d._pgdiff).sort().join('')) return;
     // TODO: install a backoff function that doesn't go back to 10 minues maybe?
     if (desync) for (const s of desync) s.cancel();
     desync = [];
@@ -432,6 +468,7 @@ let request;
     pr.message = msg;
     pr.id = msg.id;
     listeners[msg.id] = [ok, fail];
+    app.pendingMessages[msg.id] = msg;
     notify(msg);
     app.add('waiting', 1);
     return pr;
@@ -441,6 +478,7 @@ let request;
     if (Array.isArray(listener) && typeof listener[0] === 'function') {
       app.subtract('waiting', 1);
       delete listeners[id];
+      delete app.pendingMessages[id];
       listener[0](msg);
     }
   };
@@ -449,6 +487,7 @@ let request;
     if (Array.isArray(listener) && typeof listener[1] === 'function') {
       app.subtract('waiting', 1);
       delete listeners[id];
+      delete app.pendingMessages[id];
       listener[1](msg);
     }
   };
@@ -538,6 +577,48 @@ class App extends Ractive {
       this.host.toast('Click Compare on another schema to compare', { type: 'info', timeout: 4000 });
     }
   }
+
+  pickFile(accept, multi) {
+    if (this.file) return this.file;
+    this.set('filepicker', { accept: accept || '*', multi });
+    let ok, fail;
+    const res = new Promise((y, n) => (ok = y, fail = n));
+    res.resolve = ok;
+    res.reject = fail;
+    this.file = res;
+    const picker = this.find('.file-picker');
+    if (!picker) fail();
+    let nope;
+    nope = () => {
+      window.removeEventListener('focus', nope);
+      setTimeout(() => {
+        if (this.file) {
+          this.file.reject(new Error('Cancelled'));
+          this.file = undefined;
+        }
+      }, 100);
+    };
+    window.addEventListener('focus', nope);
+    this.find('.file-picker').click();
+    return res;
+  }
+
+  async filesPicked(list) {
+    const multi = this.get('filepicker.multi');
+    const pr = this.file;
+    if (!pr) return;
+    this.file = undefined;
+    if (!list || !list.length) return pr.reject(new Error('No file selected'));
+    const prs = Array.from(list).map(f => new Promise((ok, fail) => {
+      const read = new FileReader();
+      read.onerror = fail;
+      read.onload = () => ok({ name: f.name, text: read.result });
+      read.readAsText(f);
+    }));
+    const txts = await Promise.all(prs);
+    if (multi) pr.resolve(txts);
+    else pr.resolve(txts[0]);
+  }
 }
 Ractive.extendWith(App, {
   noCssTransform: true,
@@ -552,6 +633,8 @@ Ractive.extendWith(App, {
       .schema-row.sticky-header { background-color: ${data('raui.primary.bg') || '#fff'}; }
       .striped:nth-child(odd), .striped-odd { background-color: ${data('theme') === 'dark' ? '#353535' : '#f2f2f2'}; }
       .striped:nth-child(even), .striped-even { background-color: ${data('theme') === 'dark' ? '#3b3b3b' : '#fdfdfd'}; }
+      button svg { width: 1.5em; height: 1.5em; display: inline-block; vertical-align: middle; fill: ${data('raui.primary.bg') || '#fff'}; }
+      button.flat svg { fill: ${data('raui.primary.fg') || '#222'}; }
       .mermaid { background-color: ${data('theme') === 'dark' ? '#191919' : '#f7f7f7'}; }
     `;
   },
@@ -706,10 +789,6 @@ const app = globalThis.app = new App({
         });
       }
     },
-    waiting(v) {
-      if (v) document.body.style.cursor = 'wait';
-      else document.body.style.cursor = 'default';
-    },
     sync: {
       handler: debounce(() => {
         writeSync();
@@ -789,25 +868,43 @@ const app = globalThis.app = new App({
       this.host.addWindow(win, { id: wid, title: 'All Monitored Connections' });
     }
   },
-  openReport(report) {
-    if (report?.id) {
+  async openReport(report, file, copy) {
+    if (report?.id && !copy) {
       const wid = `report-${report.id}`;
       const win = this.host.getWindow(wid);
       if (win) return win.raise(true);
     }
+    try {
+      if (file) file = await app.pickFile('.raport-proj, .json, .raport');
+    } catch {
+      return;
+    }
     const win = new Report();
-    if (report?.id) win.load(report.id);
+    if (report?.id) win.load(report.id, copy);
     this.host.addWindow(win, { title: report?.id ? `Loading report...` : 'New Report' });
+    if (file) {
+      try {
+        const proj = JSON.parse(file.text);
+        if (proj.definition && proj.sources) win.respond({ action: 'set', set: { report: proj.definition, sources: proj.sources } });
+        else if (proj.widgets) win.respond({ action: 'set', set: { report: proj } });
+      } catch {}
+    }
   },
-  openScratch(pad) {
-    if (pad?.id) {
+  async openScratch(pad, file, copy) {
+    if (pad?.id && !copy) {
       const wid = `scratch-${pad.id}`;
       const win = this.host.getWindow(wid);
       if (win) return win.raise(true);
     }
+    try {
+      if (file) file = await app.pickFile();
+    } catch {
+      return;
+    }
     win = new ScratchPad();
-    if (pad?.id) win.load(pad.id);
+    if (pad?.id) win.load(pad.id, copy);
     this.host.addWindow(win, { title: pad?.id ? `Loading scratch pad...` : 'New Scratch Pad' });
+    if (file) win.set('pad', file, { deep: true });
   },
   openLocalDiff() {
     const id = ++localDiffId;
@@ -855,6 +952,8 @@ const app = globalThis.app = new App({
     app.host.addWindow(wnd);
   },
 });
+
+app.pendingMessages = {};
 
 Ractive.helpers.appSet = (p, v) => app.set(p, v);
 
@@ -979,9 +1078,23 @@ class ControlPanel extends Window {
     app.notify({ action: 'interval', time: this.get('status.pollingInterval') });
   }
   open(v) {
-    if (v.type === 'report') app.openReport(v);
-    else if (v.type === 'scratch') app.openScratch(v);
+    const file = this.event?.event && (this.event.event.shiftKey || this.event.event.ctrlKey);
+    const copy = !file && this.event?.event && this.event.event.altKey;
+    if (v.type === 'report') app.openReport(v, file, copy);
+    else if (v.type === 'scratch') app.openScratch(v, file, copy);
     else if (v.type === 'query') app.set('loadedQuery', v.id);
+  }
+  async scratchText(id) {
+    const v = await store.get(id);
+    return v.text;
+  }
+  async queryText(id) {
+    const v = await store.get(id);
+    return v.sql;
+  }
+  async reportText(id) {
+    const v = await store.get(id);
+    return JSON.stringify(v);
   }
   localDiff() {
     app.openLocalDiff();
@@ -1031,6 +1144,11 @@ Window.extendWith(ControlPanel, {
 .tree-children:after { background-color: ${data('raui.primary.bg') || '#fff'}; }
 `; },
   options: { title: 'Control Panel', flex: true, close: false, resizable: true, width: '60em', height: '45em', id: 'control-panel' },
+  partials: {
+    'ace-themes': document.getElementById('ace-themes').innerText,
+    cog: document.getElementById('cog').innerText,
+    node: document.getElementById('tree').innerText,
+  },
   on: {
     init() {
       // map in the data from the root instance
@@ -1459,7 +1577,7 @@ res
     const ext = this.event?.event?.shiftKey ? 'html' : 'pgdd';
     let html, css;
     let text;
-    if (this.event?.event?.shiftKey) {
+    if (this.event?.event?.altKey) {
       [html, css] = this.getHtml();
       text = `<html><head><title>${name}</title><style>${css}</style></head><body>${html}</body></html>`
     } else {
@@ -1545,7 +1663,33 @@ res
 
     if (!this.event?.event?.ctrlKey || this.event?.event?.shiftKey) await request({ action: 'segment', segment: `Undo ${entry.segment}` });
 
-    request({ action: 'query', query: reverse.map(p => p[0]), params: reverse.map(p => p[1]), client: Object.values(app.get('status.clients') || {}).find(c => c.source === this.source).config });
+    const blocked = this.blocked;
+    this.blocked = true;
+    try {
+      await request({ action: 'query', query: reverse.map(p => p[0]), params: reverse.map(p => p[1]), client: Object.values(app.get('status.clients') || {}).find(c => c.source === this.source).config });
+    } finally {
+      if (!blocked) this.blocked = false;
+    }
+    return true;
+  }
+
+  undoAndHide(entry) {
+    setTimeout(async () => {
+      app.add('waiting', 1);
+      this.blocked = true;
+      try {
+        const segment = app.get('newSegment');
+        await request({ action: 'hide', hide: true });
+        if (await this.undoSegment(entry)) {
+          if (!entry.hide) await this.toggleHidden(entry, true);
+          await request({ action: 'segment', segment });
+        }
+        await request({ action: 'hide', hide: false });
+      } finally {
+        app.subtract('waiting', 1);
+        this.blocked = false;
+      }
+    });
   }
 
   async renameSegment(entry, by) {
@@ -1581,8 +1725,8 @@ res
     (this.source ? app : this).update('entries');
   }
 
-  async toggleHidden(entry) {
-    if (!await app.confirm(`${entry.hide ? 'Restore' : 'Remove'} segment ${entry.segment}?`)) return;
+  async toggleHidden(entry, noconfirm) {
+    if (!noconfirm && !await app.confirm(`${entry.hide ? 'Show' : 'Hide'} segment ${entry.segment}?`)) return;
     const hide = !entry.hide;
     const all = (this.source || this.combined) ? app.get('entries') : this.get('entries') || [];
     const targets = adjacentEntries(entry, all, 'segment');
@@ -1672,7 +1816,10 @@ Window.extendWith(Entries, {
     'entries.length'() {
       if (this.scroller) {
         const s = this.scroller;
-        if (s.scrollTop + s.clientHeight >= s.scrollHeight - 10) setTimeout(() => s.scrollTo({ top: s.scrollHeight, behavior: 'smooth', block: 'end' }), 100);
+        if (s.scrollTop + s.clientHeight >= s.scrollHeight - 10) setTimeout(() => {
+          s.scrollTo({ top: s.scrollHeight, behavior: 'smooth', block: 'end' });
+          setTimeout(() => s.scrollTop = s.scrollHeight - s.clientHeight, 600);
+        }, 100);
       }
     },
     'loaded.expr'(v) {
@@ -1696,15 +1843,18 @@ Window.extendWith(Leaks, {
   template: '#leaks',
   options: { flex: true, resizable: true, width: '40em', height: '30em' },
   css(data) { return `
+.content-wrapper { padding: 0; }
 .leak { display: flex; flex-wrap: wrap; }
 .leak > * { box-sizing: border-box; padding: 0.2em; }
-.leak.header { font-weight: bold; position: sticky; top: -0.5em; background-color: ${data('raui.window.host.bg') || '#fff'}; border-bottom: 1px solid; z-index: 1; padding: 0.3em; }
+.leak.header { font-weight: bold; position: sticky; top: 0; background-color: ${data('raui.window.host.bg') || '#fff'}; border-bottom: 1px solid; z-index: 1; padding: 0.3em; }
 .leak .user { width: 8em; }
 .leak .application { width: 12em; }
 .leak .client { width: 12em; }
 .leak .state { width: 5em; }
-.leak .started { width: 13em; }
+.leak .started, .leak .updated, .leak .queried { width: 13em; }
+.leak .constr, .leak .query { white-space: nowrap; text-overflow: ellipsis; }
 .leak .constr { width: 18em; }
+.leak .query { width: 99%; }
 .leak .pid { width: 6em; text-align: right; }
 `; },
   computed: {
@@ -1892,14 +2042,30 @@ const checkLanguage = (function() {
 class ScratchPad extends Window {
   constructor(opts) {
     super(opts);
+    this.log = arr => {
+      console.log(...arr);
+      this.push('logs', [arr.map(v => {
+        if (Array.isArray(v)) return JSON.stringify(v);
+        const str = `${v}`;
+        if (str.startsWith('[object ')) return JSON.stringify(v);
+        else return v;
+      }).join(' '), evaluate(`#now##date,'HH:mm:ss yyyy-MM-dd'`)]);
+    }
   }
-  async load(id) {
+  async load(id, copy) {
     this.lock = true;
     const old = this.get('pad');
-    await store.acquire('scratch', id);
-    this.link(`store.scratch.${id}`, 'pad', { instance: app });
+    if (copy) {
+      const doc = Object.assign({}, await store.get(id));
+      delete doc._id;
+      delete doc._rev;
+      this.set('pad', doc);
+    } else {
+      await store.acquire('scratch', id);
+      this.link(`store.scratch.${id}`, 'pad', { instance: app });
+      if (id) this.host.changeWindowId(this.id, `scratch-${id}`);
+    }
     if (old?._id) store.release('scratch', old._id);
-    if (id) this.host.changeWindowId(this.id, `scratch-${id}`);
     this.lock = false;
   }
   async save() {
@@ -1921,6 +2087,16 @@ class ScratchPad extends Window {
     },
     target: this,
   });
+  updateSetting(path, value) {
+    const base = this.get(`editor.${path}`);
+    if (base === value) {
+      const sets = this.get('_settings');
+      delete sets[path];
+      this.set('_settings', sets);
+    } else {
+      this.set(`_settings.${path}`, value);
+    }
+  }
   evaluate(txt) {
     if (this.ace) {
       const sel = this.getContext(this.ace).decorators.ace.editor.getSelectedText();
@@ -1936,6 +2112,7 @@ class ScratchPad extends Window {
       const opts = app.get('scratchroot') || {};
       const root = new Root({}, opts);
       root.sources = Object.assign({}, opts.sources);
+      root.log = this.log;
       if (opts.all) {
         for (const k in opts.all.apply || {}) if (opts.all.apply[k]) root.sources[k] = { value: opts.all.apply[k] };
         for (const k in opts.all.provide || {}) if (opts.all.provide[k]) root.sources[k] = { value: opts.all.provide[k] };
@@ -1946,7 +2123,7 @@ class ScratchPad extends Window {
       this.set({
         evalresult: res,
         evaltext,
-        treeresult: treeify(res),
+        treeresult: typeof res !== 'object' ? undefined : treeify(res),
         evalerror: '',
       });
     }
@@ -1992,6 +2169,12 @@ class ScratchPad extends Window {
           const l = checkLanguage(lang);
           if (lang === 'mermaid') {
             return `<pre class="mermaid">---\nconfig:\n  theme: ${Ractive.styleGet('theme') === 'light' ? 'forest' : 'dark'}\n---\n${code}</pre>`;
+          } else if (lang === 'svg+inline') {
+            return code;
+          } else if (lang === 'png+base64') {
+            return `<img src="data:image/png;base64,${code}" />`;
+          } else if (lang === 'jpeg+base64') {
+            return `<img src="data:image/jpeg;base64,${code}" />`;
           } else {
             const highlighted = l && hljs.getLanguage(l) ? hljs.highlight(code, { language: l, ignoreIllegals: true }).value : code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
             return `<pre><code class="hljs ${l}">${highlighted}</code></pre>`;
@@ -2020,16 +2203,28 @@ dt { margin-top: 1rem; font-family: monospace; }
 dd { margin: 0.5em 0 1em 2em; white-space: pre-wrap; }
 .ops-search { opacity: 0.2; }
 .ops-search:hover { opacity: 1; }
+.log-entry { padding: 0.5em; border-bottom: 1px dotted rgba(128, 128, 128, 0.5); position: relative; }
+.log-entry .time { position: absolute; top: 0; right: 0; width: 10em; background-color: rgba(128, 128, 128, 0.5); opacity: 0.2; transition: opacity 0.2s ease; padding: 0.2em; border-radius: 0 0 0 0.5em; }
+.log-entry .time:hover { opacity: 1; }
+.clear-logs { transition: opacity 0.2s ease; opacity: 0.2; }
+.clear-logs:hover { opacity: 1; }
 `,
+  use: [RauiPopover.default({ name: 'pop' })],
   options: { flex: true, resizable: true, minimize: false, width: '50em', height: '35em' },
+  partials: {
+    'ace-themes': document.getElementById('ace-themes').innerText,
+    cog: document.getElementById('cog').innerText,
+    play: document.getElementById('play').innerText,
+    delete: document.getElementById('times').innerText,
+  },
   on: {
     init() {
-      this.link('store.settings.editor', 'editor', { instance: app });
+      this.link('store.settings.editor', '_editor', { instance: app });
       const ps = Diff.prototype.template.p;
       this.partials.root = ps.root;
       this.partials.array = ps.array;
-      this.partials.leaf = ps.leaf;
       this.partials.node = ps.node;
+      this.partials.leaf = ps.leaf;
 
       this._markd = this.observe('pad.text', debounce(() => {
         this.renderMD();
@@ -2067,6 +2262,11 @@ dd { margin: 0.5em 0 1em 2em; white-space: pre-wrap; }
       }
       return ops;
     },
+    editor() {
+      const base = this.get('_editor');
+      const local = this.get('_settings');
+      return Object.assign({}, base, local);
+    }
   },
   observe: {
     'pad.name'(n) {
@@ -2171,11 +2371,14 @@ class HostExplore extends Window {
 
     this.blocked = true;
     const progress = this.host.toast('Processing queries...', { type: 'info', timeout: 0 });
+    const start = Date.now() / 1000;
     const req = request({ action: 'query-all', clients: list, query: [query], batch });
     let total = 0;
     const listen = request.listen(`query-all-progress-${req.id}`, msg => {
       total = msg.total;
-      progress.message = `Queries ${msg.done} of ${msg.total} complete...`;
+      const elapsed = (Date.now() / 1000) - start;
+      const estimate = (elapsed / (msg.done / msg.total));
+      progress.message = `Queries ${msg.done} of ${msg.total} complete... (${(estimate - elapsed).toFixed(0)} of ~${estimate.toFixed(0)}s remaining)`;
     });
     const res = await req;
     listen.stop();
@@ -2232,11 +2435,14 @@ class HostExplore extends Window {
       else if (batch > 500) batch = 500;
       else batch = undefined;
       const progress = this.host.toast('Processing queries...', { type: 'info', timeout: 0 });
+      const start = Date.now() / 1000;
       const req = request({ action: 'query-all', clients: connections, query: [source.query], params: [queryParams(report.definition, source, params)], batch });
       let total = 0;
       const listen = request.listen(`query-all-progress-${req.id}`, msg => {
         total = msg.total;
-        progress.message = `Queries ${msg.done} of ${msg.total} complete...`;
+        const elapsed = (Date.now() / 1000) - start;
+        const estimate = (elapsed / (msg.done / msg.total));
+        progress.message = `Queries ${msg.done} of ${msg.total} complete... (${(estimate - elapsed).toFixed(0)} of ~${estimate.toFixed(0)}s remaining)`;
       });
       const res = await req;
       listen.stop();
@@ -2252,6 +2458,10 @@ class HostExplore extends Window {
         }
       }
       return { value: set };
+    } else if (source.type === 'json') {
+      return { value: JSON.parse(source.json) };
+    } else if (source.type === 'pg-fetch') {
+      return { value: await makeRequest(source, params) };
     }
   }
   
@@ -2276,7 +2486,7 @@ class HostExplore extends Window {
 
       for (const src of report.sources) {
         data[src.name] = await this.reportData(list, src, sample, this.get('params'), report);
-      } // TODO: other sources?
+      }
 
       let html = run(report.definition, data);
       if (dl) {
@@ -2289,14 +2499,28 @@ class HostExplore extends Window {
     }
   }
 
-  reportDesigner(report) {
+  async reportDesigner(report, copy) {
+    let file = !copy && this.event?.event && (this.event.event.shiftKey || this.event.event.ctrlKey);
     const id = report?.id ?? ++reportId;
     const wid = `report-${id}`;
     let win = this.host.getWindow(wid);
     if (win) return win.raise(true);
+
+    try {
+      if (file) file = await app.pickFile('.raport-proj, .json, .raport');
+    } catch {
+      return;
+    }
     win = new Report({}, this);
-    if (report) win.load(report._id || report.id);
+    if (report) win.load(report._id || report.id, copy);
     this.host.addWindow(win, { id: wid, title: `Loading report...` });
+    if (file) {
+      try {
+        const proj = JSON.parse(file.text);
+        if (proj.definition && proj.sources) win.respond({ action: 'set', set: { report: proj.definition, sources: proj.sources } });
+        else if (proj.widgets) win.respond({ action: 'set', set: { report: proj } });
+      } catch {}
+    }
   }
 
   async singleReportQuery(report, src, params) {
@@ -2463,9 +2687,12 @@ Window.extendWith(HostExplore, {
 .query .query-text { height: 100%; }
 .query textarea { width: 100%; border: 0; outline: none; }
 .query .result { display: flex; border-top: 1px solid; overflow: hidden; flex-grow: 1; height: 100%; box-sizing: border-box; }
-.selected { background-color: rgba(128, 128, 128, 0.1); }
+.selected { background-color: rgba(128, 128, 128, 0.3); }
 dd { white-space: pre-wrap; }
 `;
+  },
+  partials: {
+    node: document.getElementById('tree').innerText,
   },
   options: { flex: true, resizable: true, minimize: false, width: '70em', height: '45em', title: 'Host Explorer' },
   helpers: { escapeKey: Ractive.escapeKey },
@@ -2493,6 +2720,18 @@ dd { white-space: pre-wrap; }
           config: c,
         };
       });
+    },
+    singleReportTree() {
+      const old = this.get('_singleReportTree');
+      const tree = dirify(this.get('report.list').filter(r => r.query), old);
+      this.set('_singleReportTree', tree);
+      return tree;
+    },
+    multipleReportTree() {
+      const old = this.get('_multipleReportTree');
+      const tree = dirify(this.get('report.list').filter(r => r.queryAll), old);
+      this.set('_multipleReportTree', tree);
+      return tree;
     },
   },
   data() {
@@ -2569,13 +2808,20 @@ class Report extends Window {
     this._parent = parent;
   }
 
-  async load(id) {
+  async load(id, copy) {
     await this.unload();
-    await store.acquire('report', id);
-    this.link(`store.report.${id}`, 'report', { instance: app });
+    if (copy) {
+      const rep = Object.assign({}, await store.get(id));
+      delete rep._id;
+      delete rep._rev;
+      this.set('report', rep);
+    } else {
+      await store.acquire('report', id);
+      this.link(`store.report.${id}`, 'report', { instance: app });
+      if (id) setTimeout(() => this.host.changeWindowId(this.id, `report-${id}`));
+    }
     const rep = this.get('report');
     if (rep) this.respond({ action: 'set', set: { report: rep.definition, sources: rep.sources } });
-    if (id) setTimeout(() => this.host.changeWindowId(this.id, `report-${id}`));
   }
 
   async unload() {
@@ -2670,6 +2916,8 @@ class Report extends Window {
       }
     } else if (src.type === 'json') {
       this.respond({ data: JSON.parse(src.json) }, msg);
+    } else if (src.type === 'pg-fetch') {
+      this.respond({ data: await makeRequest(src, msg.params) }, msg);
     } else if (src.type === 'query-all') {
       this.respond({ data: app.get(`results.${Ractive.escapeKey(src.result)}`) || {} }, msg);
     } else if (src.type === 'query-all-sql') {
@@ -2694,7 +2942,7 @@ class Report extends Window {
     const base = {};
     if (source && source.designId != null) base.designId = source.designId;
     const msg = Object.assign(base, message);
-    if (wnd) wnd.postMessage(msg);
+    if (wnd && this.frameId != null) wnd.postMessage(msg);
     else (this.queue || (this.queue = [])).push(msg);
   }
 
@@ -2705,7 +2953,7 @@ class Report extends Window {
     const res = new Promise((o, f) => (ok = o, fail = f));
     this.callbacks[id] = [ok, fail];
     message.ownerId = id;
-    if (wnd) wnd.postMessage(message);
+    if (wnd && this.frameId != null) wnd.postMessage(message);
     else (this.queue || (this.queue = [])).push(message);
     return res;
   }
@@ -2729,6 +2977,7 @@ Window.extendWith(Report, {
   on: {
     init() {
       this.link('store.settings', 'settings', { instance: app });
+      this.respond({ action: 'set', set: { extraProperties: [{ name: 'path', tip: 'Combined with the name, sets the path to the report in the tree view', label: 'Path' }] } });
     },
     render() {
       window.addEventListener('message', (this._messageHandler = this.handleMessage.bind(this)));
@@ -2885,7 +3134,12 @@ function reconnect(wait = 10000) {
   if (!app.get('connected')) setTimeout(() => connect(), wait);
 }
 
-function download(name, value, type) {
+function basename(name) {
+  return name.slice(name.lastIndexOf('/') + 1);
+}
+
+async function download(name, value, type) {
+  if (typeof value === 'object' && typeof value.then === 'function') value = await value;
   const blob = typeof value === 'string' ? new Blob([value], { type: type || 'application/octet-stream' }) : value;
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -3132,6 +3386,50 @@ function serverblock(node) {
       watch.cancel();
     },
   };
+}
+
+const requestCache = {};
+async function makeRequest(config, params) {
+  const now = +new Date();
+  for (const k in requestCache) if (requestCache[k].expire < now) delete requestCache[k];
+  let key;
+  if (config.ttl) {
+    key = `${JSON.stringify(config)}-${JSON.stringify(params)}`;
+    const entry = requestCache[key];
+    if (entry) return entry.cache;
+  }
+  const root = new Root({}, { parser: parseTemplate, parameters: params });
+  const req = { url: evaluate(root, config.url) };
+  if (Array.isArray(config.headers)) {
+    req.headers = {};
+    for (const [k, v] of config.headers) req.headers[k] = evaluate(root, v);
+  }
+  if (config.body) req.body = evaluate(root, config.body);
+  if (config.method) req.method = config.method;
+  let res;
+  try {
+    if (config.server) res = (await request(Object.assign({ action: 'fetch' }, req))).result;
+    else res = await (await fetch(req.url, req)).text();
+    if (!config.eval || config.eval === 'json') res = JSON.parse(res);
+    else if (config.eval === 'raport') res = evaluate({}, res);
+    else if (config.eval === 'try') {
+      let val = res;
+      if (val[0] === '<') return evaluate({ val }, 'parse(val xml:1)');
+      try {
+        return JSON.parse(val);
+      } catch {}
+      val = evaluate({ val }, 'parse(val)')?.v;
+      if (val === undefined || Object.keys(val).length === 1 && val.r && val.r.k) {
+        val = evaluate({ val: res, header: config.csvHeader }, `parse(val csv:1 detect:1 header:header)`);
+      }
+      res = val;
+    }
+    if (config.ttl && key) requestCache[key] = { expire: now + (1000 * config.ttl), cache: res };
+    return res;
+  } catch (e) {
+    console.warn(`failed to load fetch data source`, e);
+    return res ?? [];
+  }
 }
 
 window.addEventListener('beforeunload', unload);

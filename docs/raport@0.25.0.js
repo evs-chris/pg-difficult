@@ -247,6 +247,13 @@
         };
         return res;
     }
+    const nop = {
+        parse(_s, p, r) {
+            r[0] = '';
+            r[1] = p;
+            return r;
+        }
+    };
     function concat$1(strings) {
         let res = '';
         const len = strings.length;
@@ -1467,13 +1474,13 @@
         }, first);
         return { op, args: [left, right] };
     }
-    const binop_e = map(seq(operand, rep(seq(rws, name$1(str('**'), 'exp op'), rws, operand))), ([arg1, more]) => more.length ? rightassoc(arg1, more) : arg1, 'exp-op');
-    const binop_md = map(seq(binop_e, rep(seq(rws, name$1(str('*', '/%', '/', '%'), 'muldiv-op'), rws, binop_e))), ([arg1, more]) => more.length ? more.reduce(leftassoc, arg1) : arg1, 'muldiv-op');
-    const binop_as = map(seq(binop_md, rep(seq(rws, name$1(str('+', '-'), 'addsub-op'), rws, binop_md))), ([arg1, more]) => more.length ? more.reduce(leftassoc, arg1) : arg1, 'addsub-op');
-    const binop_cmp = map(seq(binop_as, rep(seq(rws, name$1(str('>=', '>', '<=', '<', 'gte', 'gt', 'lte', 'lt', 'in', 'like', 'ilike', 'not-in', 'not-like', 'not-ilike', 'contains', 'does-not-contain'), 'cmp-op'), rws, binop_as))), ([arg1, more]) => more.length ? more.reduce(leftassoc, arg1) : arg1, 'cmp-op');
-    const binop_eq = map(seq(binop_cmp, rep(seq(rws, name$1(str('is-not', 'is', 'strict-is-not', 'strict-is', 'deep-is-not', 'deep-is', '===', '==', '!==', '!='), 'eq-op'), rws, binop_cmp))), ([arg1, more]) => more.length ? more.reduce(leftassoc, arg1) : arg1, 'eq-op');
-    const binop_and = map(seq(binop_eq, rep(seq(rws, name$1(str('and', '&&'), 'and-op'), rws, binop_eq))), ([arg1, more]) => more.length ? more.reduce(leftassoc, arg1) : arg1, 'and-op');
-    const binop_or = map(seq(binop_and, rep(seq(rws, name$1(str('or', '||', '??'), 'or-op'), rws, binop_and))), ([arg1, more]) => more.length ? more.reduce(leftassoc, arg1) : arg1, 'or-op');
+    const binop_e = map(seq(operand, rep(alt(seq(nop, name$1(str('**'), 'exp op'), nop, operand), seq(rws, name$1(str('**'), 'exp op'), rws, operand)))), ([arg1, more]) => more.length ? rightassoc(arg1, more) : arg1, 'exp-op');
+    const binop_md = map(seq(binop_e, rep(alt(seq(nop, name$1(str('*', '/%', '/', '%'), 'muldiv-op'), nop, binop_e), seq(rws, name$1(str('*', '/%', '/', '%'), 'muldiv-op'), rws, binop_e)))), ([arg1, more]) => more.length ? more.reduce(leftassoc, arg1) : arg1, 'muldiv-op');
+    const binop_as = map(seq(binop_md, rep(alt(seq(nop, name$1(str('+', '-'), 'addsub-op'), nop, binop_md), seq(rws, name$1(str('+', '-'), 'addsub-op'), rws, binop_md)))), ([arg1, more]) => more.length ? more.reduce(leftassoc, arg1) : arg1, 'addsub-op');
+    const binop_cmp = map(seq(binop_as, rep(alt(seq(nop, name$1(str('>=', '>', '<=', '<'), 'cmp-op'), nop, binop_as), seq(rws, name$1(str('>=', '>', '<=', '<', 'gte', 'gt', 'lte', 'lt', 'in', 'like', 'ilike', 'not-in', 'not-like', 'not-ilike', 'contains', 'does-not-contain'), 'cmp-op'), rws, binop_as)))), ([arg1, more]) => more.length ? more.reduce(leftassoc, arg1) : arg1, 'cmp-op');
+    const binop_eq = map(seq(binop_cmp, rep(alt(seq(nop, name$1(str('===', '==', '!==', '!='), 'eq-op'), nop, binop_cmp), seq(rws, name$1(str('===', '==', '!==', '!=', 'is-not', 'is', 'strict-is-not', 'strict-is', 'deep-is-not', 'deep-is'), 'eq-op'), rws, binop_cmp)))), ([arg1, more]) => more.length ? more.reduce(leftassoc, arg1) : arg1, 'eq-op');
+    const binop_and = map(seq(binop_eq, rep(alt(seq(nop, name$1(str('&&'), 'and-op'), nop, binop_eq), seq(rws, name$1(str('and', '&&'), 'and-op'), rws, binop_eq)))), ([arg1, more]) => more.length ? more.reduce(leftassoc, arg1) : arg1, 'and-op');
+    const binop_or = map(seq(binop_and, rep(alt(seq(nop, name$1(str('||', '??'), 'or-op'), nop, binop_and), seq(rws, name$1(str('or', '||', '??'), 'or-op'), rws, binop_and)))), ([arg1, more]) => more.length ? more.reduce(leftassoc, arg1) : arg1, 'or-op');
     binop.parser = map(binop_or, v => v, { primary: true, name: 'binary-op' });
     if_op$1.parser = alt({ primary: true, name: 'conditional' }, map(seq(str('if'), rws, value, rws, block, rep(seq(ws$2, str('else if', 'elseif', 'elsif', 'elif'), rws, value, rws, block)), opt(seq(ws$2, str('else'), rws, block))), ([, , cond1, , block1, elifs, el]) => {
         const op = { op: 'if', args: [cond1, block1] };
@@ -1539,17 +1546,17 @@
     }
     const operation = alt('expression', if_op$1, case_op$1, binop);
     const pair = map(seq(alt('key', string, map(ident, v => ({ v }))), ws$2, str(':'), ws$2, value), t => [t[0], t[4]], 'pair');
-    array.parser = map(bracket(check(ws$2, str('['), ws$2), repsep(value, read1(space$2 + ','), 'allow'), check(ws$2, str(']'))), args => args.filter(a => !('v' in a)).length ? { op: 'array', args } : { v: args.map(a => a.v) }, { primary: true, name: 'array' });
+    array.parser = map(bracket(check(str('['), ws$2), repsep(value, read1(space$2 + ','), 'allow'), check(ws$2, str(']'))), args => args.filter(a => !('v' in a)).length ? { op: 'array', args } : { v: args.map(a => a.v) }, { primary: true, name: 'array' });
     function objectOp(pairs) {
         return pairs.filter(p => !('v' in p[0] && 'v' in p[1])).length ?
             { op: 'object', args: pairs.reduce((a, c) => (a.push(c[0], c[1]), a), []) } :
             { v: pairs.reduce((a, c) => (a[c[0].v] = c[1].v, a), {}) };
     }
-    object.parser = map(bracket(check(ws$2, str('{'), ws$2), repsep(pair, read1(space$2 + ','), 'allow'), check(ws$2, str('}'))), objectOp, { primary: true, name: 'object' });
-    block.parser = map(bracket(check(ws$2, str('{'), ws$2), rep1sep(value, read1(space$2 + ';'), 'allow'), check(ws$2, str('}'))), args => ({ op: 'block', args }), { primary: true, name: 'block' });
+    object.parser = map(bracket(check(str('{'), ws$2), repsep(pair, read1(space$2 + ','), 'allow'), check(ws$2, str('}'))), objectOp, { primary: true, name: 'object' });
+    block.parser = map(bracket(check(str('{'), ws$2), rep1sep(value, read1(space$2 + ';'), 'allow'), check(ws$2, str('}'))), args => ({ op: 'block', args }), { primary: true, name: 'block' });
     value.parser = unwrap(comment('c', operation));
     const namedArg = map(seq(ident, str(':'), ws$2, value), ([k, , , v]) => [{ v: k }, v], 'named-arg');
-    application.parser = map(seq(opt(bracket(check(str('|'), ws$2), rep1sep(opName, read1(space$2 + ','), 'allow'), str('|'))), ws$2, str('=>', '=\\'), ws$2, value), ([names, , , , value]) => (names ? { a: value, n: names } : { a: value }), { primary: true, name: 'application' });
+    application.parser = map(seq(opt(bracket(check(str('|'), ws$2), rep1sep(opName, read1(space$2 + ','), 'allow'), seq(str('|'), ws$2))), str('=>', '=\\'), ws$2, value), ([names, , , value]) => (names ? { a: value, n: names } : { a: value }), { primary: true, name: 'application' });
     args.parser = map(repsep(alt('argument', namedArg, value), read1(space$2 + ','), 'allow'), (args) => {
         const [plain, obj] = args.reduce((a, c) => ((Array.isArray(c) ? a[1].push(c) : a[0].push(c)), a), [[], []]);
         if (obj.length)
@@ -2253,7 +2260,12 @@
                 Object.assign(this.special, opts.special);
                 if (opts.parser)
                     this.parser = opts.parser;
+                if (opts.log && typeof opts.log === 'function')
+                    this.log = opts.log;
             }
+        }
+        log(v) {
+            console.log(...v);
         }
     }
     function join$1(context, path) {
@@ -2461,6 +2473,7 @@
             a.setDate(num + 1);
             if (a.getMonth() !== tmp1) {
                 a.setDate(1);
+                a.setFullYear(tmp2);
                 a.setMonth(tmp1 + 2);
                 a.setDate(0);
             }
@@ -2469,6 +2482,7 @@
                 a.setMonth(tmp1 + 1);
                 if (tmp1 === 11 ? a.getMonth() !== 0 : a.getMonth() !== tmp1 + 1) {
                     a.setDate(1);
+                    a.setFullYear(tmp2);
                     a.setMonth(tmp1 + 2);
                     a.setDate(0);
                 }
@@ -2753,10 +2767,14 @@
                         const l = layout ? layouts[layout] || layouts.row : layouts.row;
                         p = l(w, offset, m, placement, ps, context);
                         if (h > p.availableY) {
-                            const offset = maxYOffset(ps);
-                            state = state || { offset };
-                            state.last = i;
-                            return { output: s, continue: state, height: offset };
+                            if (w.height === 'grow')
+                                h = getHeightWithMargin(w, p, context);
+                            if (h > p.availableY) {
+                                const offset = maxYOffset(ps);
+                                state = state || { offset };
+                                state.last = i;
+                                return { output: s, continue: state, height: offset };
+                            }
                         }
                     }
                     p.maxX = p.maxX || placement.maxX;
@@ -3181,8 +3199,12 @@
                 let val = f ? evaluate(c, f) : '';
                 if (val === undefined)
                     val = '';
-                if (typeof val !== 'string')
-                    val = `${val}`;
+                if (typeof val !== 'string') {
+                    const v = val;
+                    val = `${v}`;
+                    if (val.slice(0, 7) === '[object')
+                        val = JSON.stringify(v);
+                }
                 return `<td>${val}</td>`;
             }).join('')}</tr>`;
                 idx++;
@@ -3204,8 +3226,12 @@
                     let val = f ? evaluate(c, f) : '';
                     if (val === undefined)
                         val = '';
-                    if (typeof val !== 'string')
-                        val = `${val}`;
+                    if (typeof val !== 'string') {
+                        const v = val;
+                        val = `${v}`;
+                        if (val.slice(0, 7) === '[object')
+                            val = JSON.stringify(v);
+                    }
                     if (unquote)
                         val = val.replace(unquote, report.quote + report.quote);
                     return `${report.quote || ''}${val}${report.quote || ''}`;
@@ -3251,7 +3277,7 @@
                 maxY -= footSize;
             }
         }
-        for (let w of report.widgets) {
+        for (let w of report.widgets || []) {
             if (w.macro)
                 w = expandMacro(w.macro, w, ctx, { x: 0, y: 0, availableX, availableY, maxX: availableX, maxY }, state);
             let r;
@@ -3369,7 +3395,7 @@
             render(report.watermark, 'watermark');
         let maxY = y || 0;
         y = 0;
-        for (const w of report.widgets)
+        for (const w of report.widgets || [])
             render(w, 'main');
         if (y > maxY)
             maxY = y;
@@ -5826,7 +5852,7 @@
         return false;
     }
     /**
-     * Find a the first overlapping substring that contains threshhold percent characters of the smallest string length.
+     * Find the first overlapping substring that contains threshhold percent characters of the smallest string length.
      * @param a - the first string
      * @param b - the second string
      * @param threshhold - defaults to 0.5 - the percentage of the smaller string length needed to match
@@ -5840,12 +5866,15 @@
      * Finds the percentage similarity between two strings based on a minimum threshhold and a fudge factor. The minimum threshhold determins the earliest that the search can return. The fudge factor allows skipping characters in either string, though there is no backtracking.
      * @param a - the first string
      * @param b - the second string
-     * @param threshhold - defaults to 0.5 - the required similarity between two substrings, accounting for the fidge factor
+     * @param threshhold - defaults to 0.5 - the required similarity between two substrings, accounting for the fudge factor
      * @param fudges - the number skippable characters in either string without a match
+     * @param whole - adjust the similarity account for the whole string rather than only the first matching substring
      * @returns - the similarity of the first qualifying match
      */
-    function similarity(a, b, threshhold = 0.5, fudges = 2) {
+    function similarity(a, b, threshhold = 0.5, fudges = 2, whole = false) {
         const res = similar(a, b, threshhold, fudges);
+        if (res && whole)
+            return (res[2] || 0) * (((res[0].length / a.length) + (res[1].length / b.length)) / 2);
         return res && res[2] || 0;
     }
     /**
@@ -6383,6 +6412,14 @@
         if (res.slice(0, 7) === '[object')
             return JSON.stringify(value);
         return res;
+    }), simple(['log'], (_name, args, _opts, ctx) => {
+        try {
+            ctx.root.log(args);
+        }
+        catch (e) {
+            console.error(e);
+            console.log(...args);
+        }
     }), simple(['call'], (_name, args, _opts, ctx) => {
         if (args[0] != null && typeof args[1] === 'string' && typeof args[0][args[1]] === 'function') {
             const obj = args.shift();

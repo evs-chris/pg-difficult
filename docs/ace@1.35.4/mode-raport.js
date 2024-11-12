@@ -5,6 +5,7 @@ define("ace/mode/raport_highlight_rules",["require","exports","module","ace/lib/
     var TextHighlightRules = require("./text_highlight_rules").TextHighlightRules;
 
     var binopsRE = '(\\*\\*|[\\+\\-\\*\\%]|\\/%?|<=?|>=?|==?=?|!==?|\\|\\||\\?\\?|\\&\\&|gte?|lte?|in|like|ilike|not-in|not-like|not-ilike|contains|does-not-contain|is-not|is|strict-is-not|deep-is-not|deep-is|and|or)';
+    var symbopsRE = '(\\*\\*|[\\+\\-\\*\\%]|\\/%?|<=?|>=?|==?=?|!==?|\\|\\||\\?\\?|\\&\\&)';
     var unopsRE = '(not|\\+|-)';
 
     var RaportHighlightRules = function() {
@@ -214,7 +215,7 @@ define("ace/mode/raport_highlight_rules",["require","exports","module","ace/lib/
             },
             binops: {
                 token : "keyword.operator",
-                regex : `(?:\\s)${binopsRE}(?:\\s)`
+                regex : `(?:\\s)${binopsRE}(?:\\s)|${symbopsRE}`
             },
             unops: {
                 token: 'keyword.operator',
