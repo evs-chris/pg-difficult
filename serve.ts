@@ -41,8 +41,9 @@ const config = {
   monitorInterval: 30000,
   listen: '127.0.0.1',
   noui: false,
-  user: undefined as string,
-  password: undefined as string,
+  user: undefined as unknown as string,
+  users: undefined as unknown as { [user: string]: string },
+  password: undefined as unknown as string,
   ssl: undefined as any,
   connect_timeout: 30,
 };
@@ -305,7 +306,8 @@ interface Leak { action: 'leak'; config: DatabaseConfig }
 interface Unleak { action: 'unleak'; config: DatabaseConfig }
 interface Interval { action: 'interval'; time: number }
 interface Halt { action: 'halt' }
-type Message = Ping|Start|Restart|Resume|Stop|Status|Clear|Segment|Check|Schema|Query|QueryAll|Leak|Unleak|Interval|Halt;
+interface ServerFetch extends FetchRequest { action: 'fetch', id: string }
+type Message = Ping|Start|Restart|Resume|Stop|Status|Clear|Segment|Hide|Check|Schema|Query|QueryAll|Leak|Unleak|Interval|Halt|ServerFetch;
 
 async function message(this: WebSocket, msg: Message) {
   try {
@@ -372,7 +374,7 @@ async function start(config: DatabaseConfig, id: number, ws: WebSocket, start?: 
 
 
   const did = state.diffId++;
-  const rec = { client: undefined as any, config, id: did, lock: false };
+  const rec = { client: undefined as any, config, id: did, lock: false, listening: false };
   const client = await connectClient(rec, 1);
   state.diffs[did] = rec;
 
@@ -401,7 +403,7 @@ async function start(config: DatabaseConfig, id: number, ws: WebSocket, start?: 
     if (restart && start === 'resume') {
       await client`notify __pg_difficult, 'joined'`;
       if (state.segment === 'Initial') {
-        state.segment = await diff.getState(client, 'segment');
+        state.segment = (await diff.getState(client, 'segment')) || state.segment;
         state.hide = await diff.getState(client, 'hide') === 'true';
       }
       notify({ id, action: 'resumed' }, ws);
@@ -692,10 +694,10 @@ async function query(client: DatabaseConfig|number|string, query: string[], para
     const cl: Client = state.diffs[+client];
     if (!cl) return error(`Could not query unknown client ${client}.`, ws, { id });
     if (!cl.client) return error(`Could not query disconnected client ${client} (${source(cl.config)})`);
+    const start = Date.now();
 
     let c: PGClient = undefined as any;
     try {
-      const start = Date.now();
       c = postgres(prepareConfig(cl.config, { app: 'query' }));
       await c`select 1 as x`;
       await c.begin(async sql => {
@@ -737,8 +739,8 @@ async function query(client: DatabaseConfig|number|string, query: string[], para
       return error(`Error running query: ${e.message}`, ws, { id });
     }
 
+    const start = Date.now();
     try {
-      const start = Date.now();
       await c.begin(async sql => {
         const results: unknown[] = [];
         for (let i = 0; i < query.length; i++) results.push(await sql.unsafe(query[i], params[i] as JSONValue[]));
@@ -868,7 +870,7 @@ async function leak(config: DatabaseConfig) {
 
   try {
     const connections = await listConnections(c);
-    state.leaks[id] = { client: { id, client: c, config }, initial: { [config.database || 'postgres']: connections }, current: connections, databases: [config.database || 'postgres'] };
+    state.leaks[id] = { client: { id, client: c, config, listening: false }, initial: { [config.database || 'postgres']: connections }, current: connections, databases: [config.database || 'postgres'] };
   } catch (e) {
     try {
       await c.end({ timeout: 10 });
@@ -982,9 +984,9 @@ async function makeRequest(config: FetchRequest, ws: WebSocket, id: string) {
     if (config.body) init.body = config.body;
     if (config.method) init.method = config.method;
     const res = await fetch(config.url, init);
-    notify({ id, result: await res.text() }, ws);
+    notify({ id, action: 'result', result: await res.text() }, ws);
   } catch (e) {
-    notify({ id, result: { error: e.stack } });
+    notify({ id, action: 'result', result: { error: e.stack } });
   }
 }
 

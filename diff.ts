@@ -127,6 +127,10 @@ export interface Change {
   stamp: string;
 }
 
+function escape(client: Client, str: string): string {
+  return (client(str) as unknown as { value: string }).value;
+}
+
 export interface StartOptions {
   maxlen?: number;
   changes?: 'whole'|'whole-old'|'diff';
@@ -200,8 +204,8 @@ export async function start(client: Client, opts?: StartOptions) {
   $trigger$ language plpgsql;\n`;
     sql += `grant all on function pgdifficult.record() to public;\n`;
     for (const table of tables) {
-      sql += `drop trigger if exists __pgdifficult_notify on ${client(table.schema).value}.${client(table.name).value};\n`;
-      sql += `create constraint trigger __pgdifficult_notify after insert or update or delete on ${client(table.schema).value}.${client(table.name).value} deferrable initially deferred for each row execute procedure pgdifficult.record();\n`;
+      sql += `drop trigger if exists __pgdifficult_notify on ${escape(client, table.schema)}.${escape(client, table.name)};\n`;
+      sql += `create constraint trigger __pgdifficult_notify after insert or update or delete on ${escape(client, table.schema)}.${escape(client, table.name)} deferrable initially deferred for each row execute procedure pgdifficult.record();\n`;
     }
 
     await client.unsafe(sql);
@@ -323,7 +327,7 @@ export async function stop(client: Client): Promise<Segment> {
   await client.begin(async t => {
     const tables: Table[] = await t.unsafe(tableQuery);
     let sql = '';
-    for (const table of tables) sql += `drop trigger if exists __pgdifficult_notify on ${t(table.schema).value}.${t(table.name).value};\n`;
+    for (const table of tables) sql += `drop trigger if exists __pgdifficult_notify on ${escape(t, table.schema)}.${escape(t, table.name)};\n`;
     sql += `drop table if exists __pgdifficult_entries;\n`;
     sql += `drop table if exists __pgdifficult_state;\n`;
     sql += `drop table if exists pgdifficult.entries;\n`;
