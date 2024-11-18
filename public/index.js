@@ -200,6 +200,7 @@ const store = globalThis.store = {};
     linkMap = { query: {}, report: {}, scratch: {} };
     store._pdb = pdb = new PouchDB('pgdifficult');
 
+    await pdb.compact();
     await migrate(pdb);
 
     // TODO: update export settings to have local storage for sync config and all docs for pouch
