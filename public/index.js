@@ -128,16 +128,12 @@ const store = globalThis.store = {};
   let pdb;
   let linkMap;
 
-  // init pouchdb
-  store.init = async function init() {
-    if (deinit) for (const c of deinit) c();
-    if (pdb) pdb.close();
-    deinit = [];
-    linkMap = { query: {}, report: {}, scratch: {} };
-    store._pdb = pdb = new PouchDB('pgdifficult');
-
+  const migrate = async function migrate(store) {
     // make sure views are in place
-    let design = await store.get('_design/pgdiff'); 
+    let design;
+    try {
+      design = await store.get('_design/pgdiff'); 
+    } catch {}
     let changed = false;
     if (!design) {
       design = { _id: '_design/pgdiff' };
@@ -193,7 +189,18 @@ const store = globalThis.store = {};
       }
     }
 
-    if (changed) await store.save(design);
+    if (changed) await store.put(design);
+  }
+
+  // init pouchdb
+  store.init = async function init() {
+    if (deinit) for (const c of deinit) c();
+    if (pdb) pdb.close();
+    deinit = [];
+    linkMap = { query: {}, report: {}, scratch: {} };
+    store._pdb = pdb = new PouchDB('pgdifficult');
+
+    await migrate(pdb);
 
     // TODO: update export settings to have local storage for sync config and all docs for pouch
 
@@ -342,16 +349,22 @@ const store = globalThis.store = {};
   }
 
   let desync;
-  store.sync = function sync(servers) {
+  store.sync = async function sync(servers) {
     if ((servers || []).filter(s => !s.inactive).map(s => JSON.stringify(s)).sort().join('') === (desync || []).map(d => d._pgdiff).sort().join('')) return;
     // TODO: install a backoff function that doesn't go back to 10 minues maybe?
     if (desync) for (const s of desync) s.cancel();
     desync = [];
     if (Array.isArray(servers)) {
       for (const s of servers) {
-        if (!s.valid) continue;
+        if (!s.valid || s.inactive) continue;
         const url = `${s.protocol}://${s.user ? `${s.user}:${s.password}@` : ''}${s.host}:${s.port}/${s.db}`;
         const types = s.types;
+
+        // ensure design docs are in place
+        const remote = new PouchDB(url);
+        await migrate(remote);
+        await remote.close();
+
         const sync = pdb.sync(url, {
           filter: 'pgdiff/by_type',
           query_params: { types },
