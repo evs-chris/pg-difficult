@@ -628,29 +628,33 @@ async function clear(client?: number) {
 }
 
 async function check(ws: WebSocket, client: string|number, id: string, since?: string) {
-  const entries: diff.Entry[] = since ? [] : ([] as diff.Entry[]).concat(state.saved);
-  for (const k in state.diffs) {
-    if (+client === +k) {
-      const client = state.diffs[k];
-      if (!client.client) return error('Cannot check entries while disconnected', ws, { id });
-      try {
-        await listenerPing(client);
-      } catch {
-        await reconnectDiff(client);
+  try {
+    const entries: diff.Entry[] = since ? [] : ([] as diff.Entry[]).concat(state.saved);
+    for (const k in state.diffs) {
+      if (+client === +k) {
+        const client = state.diffs[k];
+        if (!client.client) return error('Cannot check entries while disconnected', ws, { id });
+        try {
+          await listenerPing(client);
+        } catch {
+          await reconnectDiff(client);
+        }
+        const src = source(client.config);
+        let res: diff.Entry[];
+        try {
+          res = await diff.entries(client.client, since);
+        } catch {
+          await reconnectDiff(client);
+          res = await diff.entries(client.client, since);
+        }
+        for (const e of res) e.source = src;
+        entries.push.apply(entries, res);
       }
-      const src = source(client.config);
-      let res: diff.Entry[];
-      try {
-        res = await diff.entries(client.client, since);
-      } catch {
-        await reconnectDiff(client);
-        res = await diff.entries(client.client, since);
-      }
-      for (const e of res) e.source = src;
-      entries.push.apply(entries, res);
     }
+    notify({ action: 'entries', entries, id }, ws);
+  } catch (e) {
+    error(`Failed checking entries`, ws, { id, stack: e.stack });
   }
-  notify({ action: 'entries', entries, id }, ws);
 }
 
 async function schema(ws: WebSocket, client?: string|number|DatabaseConfig, id?: string) {
