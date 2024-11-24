@@ -8,7 +8,7 @@ import { evaluate } from 'https://cdn.jsdelivr.net/npm/raport@0.24.8/lib/index.j
 
 type JSONValue = postgres.JSONValue;
 
-const VERSION = '1.13.0';
+const VERSION = '1.13.1';
 
 interface DatabaseConfig {
   host: string;

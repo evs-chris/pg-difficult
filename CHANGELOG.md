@@ -1,3 +1,14 @@
+## 1.13.1
+
+2024-11-24
+
+### Bugs
+
+* Remote sync servers will now be initialized the same way as the local store is to ensure that partial syncs work correctly.
+* Check requests from the client should no longer time out if the server has become disconnected.
+* Markdown tables and headers will now render more legibly in the viewer.
+
+
 ## 1.13.0
 
 2024-11-11
