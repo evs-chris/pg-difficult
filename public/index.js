@@ -2128,7 +2128,7 @@ class ScratchPad extends Window {
     if (ok && 'cause' in ok) {
       this.set({
         evalresult: '',
-        evalerror: `Invalid expression: ${ok.message}\n\n${ok.marked}`,
+        evalerror: `Invelid expression: ${ok.message}\n\n${ok.marked}`,
       });
     } else {
       const opts = app.get('scratchroot') || {};
