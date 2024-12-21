@@ -1182,6 +1182,14 @@ Window.extendWith(ControlPanel, {
     newSegment(v) {
       if (v && v !== this.get('status.segment')) this.next(v);
     },
+    'store.settings.defaultPanel'(v) {
+      if (v && !this.get('activeTab')) {
+        setTimeout(() => {
+          const tab = { diffs: 1, monitor: 2, queries: 3, reports: 4, scratch: 5, settings: 6 }[v] || 0;
+          this.findComponent('tabs')?.select(tab);
+        });
+      }
+    },
   },
   computed: {
     connections() {

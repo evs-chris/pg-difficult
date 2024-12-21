@@ -572,6 +572,15 @@
           <label as-field>Title <tip>Set the title for clients attached to this namespace, for the same reasons you may want to set a different color.</tip><input value="{{~/store.settings.title}}" /></label>
           <label as-field>Paste Timeout ms <tip>Some actions, like clicking on an evaluated result in a raport scratch pad, will automatically copy the value to the clipboard and an internal storage area tha can be accessed by other tools, like the local diff tool. These tools will offer to load the value just copied with a click for a limited amount of time. This is that limit.</tip><input type=number placeholder=10000 step=1000 value="{{~/store.settings.pasteTimeout}}" /></label>
           <label as-field>Menu Width <tip>Sets the width of the menu in em. You have big titles and need a wider menu? Try 26.</tip><input type=number min=10 max=50 value="{{~/store.settings.menuWidth}}" lazy placeholder=18 /></label>
+          <label as-field>Default Control Panel<select value="{{~/store.settings.defaultPanel}}">
+            <option value="{{undefined}}">Connections</option>
+            <option value="diffs">Active Diffs</option>
+            <option value="monitor">Connection Monitor</option>
+            <option value="queries">Saved Queries</option>
+            <option value="reports">Reports</option>
+            <option value="scratch">Scratch Pads</option>
+            <option value="settings">Settings</option>
+          </select></label>
         </fieldset>
         <fieldset style="margin-top: 1em;">
           <legend>Diff Entries Options</legend>
