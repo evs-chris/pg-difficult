@@ -310,7 +310,7 @@
   .tree-children .remove-button:hover { opacity: 1; }
   .tree-children .tree-leaf .name { user-select: none; }
 
-  .markdown-container code, .mermaid {
+  .markdown-container code, .mermaid-chart {
     border-radius: 0.5em;
   }
   .markdown-container table {
@@ -331,12 +331,33 @@
   }
   .markdown-container h1, .markdown-container h2, .markdown-container h3 {
     padding: 0;
-    margin: 1em 0 0.5em 0;
+    margin: 0em 0 0.5em 0;
   }
-  .mermaid {
+  .markdown-container * ~ h1, .markdown-container * ~ h2, .markdown-container * ~ h3 {
+    margin-top: 1em;
+  }
+  .mermaid-chart {
     display: flex;
     justify-content: center;
     margin: 1em 0;
+  }
+  .mermaid-chart.light {
+    background-color: #f9f9f9;
+  }
+  .mermaid-chart.dark {
+    background-color: #222;
+  }
+
+  button.print {
+    position: absolute;
+    top: -0.15em;
+    right: 0;
+    opacity: 0.5;
+    transition: opacity 0.2s ease;
+    z-index: 10;
+  }
+  button.print:hover {
+    opacity: 1;
   }
 </style>
 <!-- HEAD -->
@@ -1306,7 +1327,7 @@
       </split>
     {{elseif pad.syntax === 'markdown'}}
       {{#if ~/unsaved}}<div style="position: absolute; left: 50%; top: 0; padding: 0.5em; opacity: 0.7; background-color: rgba(128, 128, 128, 0.5); border-radius: 0 0 0.5em 0.5em; height: 1em; z-index: 100;">unsaved</div>{{/if}}
-      <tabs pad flex style="height: 100%;">
+      <tabs pad flex style="height: 100%;" bind-selected="~/activeTab">
         <tab no-pad title="Edit">
           <div style="flex-grow: 1; display: flex; flex-direction: column;">
             {{>header, true as nosave}}
@@ -1319,6 +1340,7 @@
           </div>
         </tab>
       </tabs>
+      {{#if ~/activeTab === 1}}<button class="print flat" on-click="@.printMarkdown(_markdown)">Print</button>{{/if}}
     {{elseif pad && 'text' in pad}}
       <div style="flex-grow: 1; display: flex; flex-direction: column;">
         {{>header}}
@@ -1813,6 +1835,7 @@
 
   </head>
   <body>
+<iframe id=print style="position: absolute; left: -1000px; width: 800px;"></iframe>
 <div id=target />
 
 <script src="./index.js"></script>
@@ -1827,6 +1850,29 @@
     vim.map('jk', '<Esc>', 'insert');
     vim.map('kj', '<Esc>', 'insert');
     vim.defineEx('write', 'w', cm => cm.ace.execCommand('save'));
+  });
+  setTimeout(() => {
+    const frame = document.getElementById('print').contentDocument;
+    const link = frame.createElement('link');
+    link.setAttribute('rel', 'stylesheet');
+    link.setAttribute('href', './hljs@11.10.0/stackoverflow-light.css');
+    const css = frame.createElement('style');
+    css.textContent = `
+@page { margin: 5mm; }
+code, .mermaid-chart { border-radius: 0.5em; }
+table { margin: 1em 0; border-collapse: collapse; border: 1px sold rgba(128, 128, 128, 0.5); }
+td, th { padding: 0.25em 0.5em; border: 1px solid rgba(128, 128, 128, 0.5); }
+th { text-align: center; border-bottom: 1px solid; }
+tbody tr:nth-child(2n+1) td { background-color: rgba(128, 128, 128, 0.1); }
+h1, h2, h3 { padding: 0; margin: 0em 0 0.5em 0; }
+* ~ h1, * ~ h2, * ~ h3 { margin-top: 1em; }
+.mermaid-chart { display: flex; justify-content: center; margin: 1em 0; }
+html { font-family: sans-serif; margin: 0; padding: 0; }
+body { margin: 0; padding: 0; }
+`;
+    const head = frame.getElementsByTagName('head')[0];
+    head.appendChild(link);
+    head.appendChild(css);
   });
 </script>
 <script src="./marked@14.0.0.js"></script>

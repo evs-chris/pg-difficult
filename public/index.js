@@ -2037,28 +2037,74 @@ Window.extendWith(SchemaCompare, {
 `,
 });
 
-let md;
-const checkLanguage = (function() {
-  const map = { bash: false, c: false, cpp: false, csharp: false, go: false, handlebars: false, javascript: false, lua: false, mermaid: false, pgsql: false, php: false, rust: false, sql: false, typescript: false, vbnet: false, xml: false };
-  const alias = { js: 'javascript', ts: 'typescript', ractive: 'handlebars', sh: 'bash', vb: 'vbnet', 'c#': 'csharp', golang: 'go', rs: 'rust', hbs: 'handlebars', chart: 'mermaid' };
-  const deps = { handlebars: ['xml'] };
-  const urls = {
-    mermaid: './mermaidjs@11.0.2.js',
-  };
-  return function(l) {
-    if (!(l in map) && alias[l]) l = alias[l];
-    if (map[l] === false) {
-      map[l] = true;
-      if (deps[l]) for (const d of deps[l]) checkLanguage(d);
-      const el = document.createElement('script');
-      el.setAttribute('src', urls[l] || `./hljs@11.10.0/languages/${l}.js`);
-      el.async = false;
-      document.head.appendChild(el);
-      checkLanguage.rerun = true;
-      if (l === 'mermaid') setTimeout(() => globalThis.mermaid.initialize({ securityLevel: 'loose' }), 100);
+const renderMD = (function() {
+  const checkLanguage = (function() {
+    const map = { bash: false, c: false, cpp: false, csharp: false, go: false, handlebars: false, javascript: false, lua: false, mermaid: false, pgsql: false, php: false, rust: false, sql: false, typescript: false, vbnet: false, xml: false };
+    const alias = { js: 'javascript', ts: 'typescript', ractive: 'handlebars', sh: 'bash', vb: 'vbnet', 'c#': 'csharp', golang: 'go', rs: 'rust', hbs: 'handlebars', chart: 'mermaid' };
+    const deps = { handlebars: ['xml'] };
+    const urls = {
+      mermaid: './mermaidjs@11.0.2.js',
+    };
+    return function(l) {
+      if (!(l in map) && alias[l]) l = alias[l];
+      if (map[l] === false) {
+        map[l] = true;
+        if (deps[l]) for (const d of deps[l]) checkLanguage(d);
+        const el = document.createElement('script');
+        el.setAttribute('src', urls[l] || `./hljs@11.10.0/languages/${l}.js`);
+        el.async = false;
+        document.head.appendChild(el);
+        checkLanguage.rerun = true;
+        if (l === 'mermaid') setTimeout(() => globalThis.mermaid.initialize({ securityLevel: 'loose' }), 100);
+      }
+      return l;
     }
-    return l;
-  }
+  })();
+
+  let md;
+  let theme;
+  let subs;
+  let id = 1;
+  return async function(str, opts = {}) {
+    theme = opts.theme || Ractive.styleGet('theme');
+    if (!md) {
+      md = marked.parse;
+      const renderer = new marked.Renderer();
+      renderer.code = ({ lang, text: code }) => {
+        const l = checkLanguage(lang);
+        if (lang === 'mermaid') {
+          if (typeof subs[code] === 'string') return subs[code];
+          else if (globalThis.mermaid) subs[code] = globalThis.mermaid.render(`graph${id++}`, `---\nconfig:\n  theme: ${theme === 'light' ? 'forest' : 'dark'}\n---\n${code}`).then(v => `<div class="mermaid-chart ${theme || 'light'}">${v.svg}</div>`);
+          return `<pre>${code}</pre>`;
+        } else if (lang === 'svg+inline') {
+          return code;
+        } else if (lang === 'png+base64') {
+          return `<img src="data:image/png;base64,${code}" />`;
+        } else if (lang === 'jpeg+base64') {
+          return `<img src="data:image/jpeg;base64,${code}" />`;
+        } else if (lang === 'raport+html') {
+          return evaluate(code);
+        } else {
+          const highlighted = l && hljs.getLanguage(l) ? hljs.highlight(code, { language: l, ignoreIllegals: true }).value : code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+          return `<pre><code class="hljs ${l}">${highlighted}</code></pre>`;
+        }
+      };
+      marked.setOptions({ renderer });
+    }
+    subs = {};
+    let html = marked.parse(str);
+    if (checkLanguage.rerun) {
+      checkLanguage.rerun = false;
+      await new Promise(ok => setTimeout(ok, 250));
+      html = await renderMD(str, opts);
+    }
+    if (Object.keys(subs).length) {
+      for (const k in subs) subs[k] = await subs[k];
+      html = marked.parse(str);
+    }
+    if (!opts.nochecks) html = html.replace(/\<input (checked="" )?disabled="" type="checkbox"/g, '<input $1type="checkbox"');
+    return html;
+  };
 })();
 
 class ScratchPad extends Window {
@@ -2181,40 +2227,14 @@ class ScratchPad extends Window {
       this.set('pad.text', txt);
     }
   }
-  renderMD() {
+  async printMarkdown() {
+    const frame = document.getElementById('print');
+    frame.contentDocument.body.innerHTML = await renderMD(this.get('pad.text'), { theme: 'light', nochecks: true });
+    frame.contentWindow.print();
+  }
+  async renderMD() {
     const v = this.get('pad.text');
-    if (v && this.get('pad.syntax') === 'markdown') {
-      if (!md) {
-        md = marked.parse;
-        const renderer = new marked.Renderer();
-        renderer.code = ({ lang, text: code }) => {
-          const l = checkLanguage(lang);
-          if (lang === 'mermaid') {
-            return `<pre class="mermaid">---\nconfig:\n  theme: ${Ractive.styleGet('theme') === 'light' ? 'forest' : 'dark'}\n---\n${code}</pre>`;
-          } else if (lang === 'svg+inline') {
-            return code;
-          } else if (lang === 'png+base64') {
-            return `<img src="data:image/png;base64,${code}" />`;
-          } else if (lang === 'jpeg+base64') {
-            return `<img src="data:image/jpeg;base64,${code}" />`;
-          } else {
-            const highlighted = l && hljs.getLanguage(l) ? hljs.highlight(code, { language: l, ignoreIllegals: true }).value : code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-            return `<pre><code class="hljs ${l}">${highlighted}</code></pre>`;
-          }
-        };
-        marked.setOptions({ renderer });
-      }
-      let html = marked.parse(v);
-      html = html.replace(/\<input (checked="" )?disabled="" type="checkbox"/g, '<input $1type="checkbox"');
-      this.set('_markdown', html);
-      if (globalThis.mermaid) setTimeout(() => mermaid.run(), 30);
-      if (checkLanguage.rerun) {
-        checkLanguage.rerun = false;
-        setTimeout(() => {
-          this.renderMD();
-        }, 200);
-      }
-    }
+    if (v && this.get('pad.syntax') === 'markdown') this.set('_markdown', await renderMD(v));
   }
 }
 Window.extendWith(ScratchPad, {
