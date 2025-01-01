@@ -2111,6 +2111,8 @@ const renderMD = (function() {
           return `<img src="data:image/jpeg;base64,${code}" />`;
         } else if (lang === 'raport+html') {
           return evaluate(code);
+        } else if (lang === 'raport+text') {
+          return `<pre><code class="hljs text">${evaluate(code)}</code></pre>`;
         } else {
           const highlighted = l && hljs.getLanguage(l) ? hljs.highlight(code, { language: l, ignoreIllegals: true }).value : code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
           return `<pre><code class="hljs ${l}">${highlighted}</code></pre>`;
