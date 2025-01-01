@@ -1539,7 +1539,7 @@ h2 { padding: 1em 0 0.5em 0; margin: 0; }
 .header h2 { flex-shrink: 1; user-select: none; }
 .header > .buttons, .wrapper > .buttons { opacity: 0; transition: opacity 0.3s ease; }
 .header:hover .buttons, .wrapper:hover > .buttons, .diff.whole:hover .buttons { opacity: 1; z-index: 20; }
-.wrapper > .buttons { position: absolute; right: 0.2em; top: 0.2em; }
+.header > .buttons, .wrapper > .buttons { position: absolute; right: 0.2em; top: 0.2em; }
 .rvlitem { position: relative; }
 .rvlitem .buttons { position: absolute; top: 0; right: 0; opacity: 0; transition: opacity 0.2s ease-in-out; }
 `
@@ -1778,12 +1778,27 @@ res
     if (this.event?.event?.ctrlKey || this.event?.event?.shiftKey || !this.source) notify({ action: 'clear' });
     else notify({ action: 'clear', source: this.source });
   }
+
+  collapseAll() {
+    const entries = this.get('allEntries') || [];
+    const res = {};
+    for (const e of entries) if (!res[e.segment]) res[e.segment] = true;
+    this.set('collapse', res);
+  }
+
+  scrollLock() {
+    this.scrolllock = true;
+    setTimeout(() => this.scrolllock = false, 500);
+  }
 }
 Window.extendWith(Entries, {
   template: '#entries',
   options: { flex: true, resizable: true, width: '50em', height: '40em' },
   use: [RauiPopover.default({ name: 'pop' })],
   css: EntryCSS,
+  data() {
+    return { collapse: {} };
+  },
   computed: {
     allEntries() {
       const source = this.get('@.source');
@@ -1804,8 +1819,20 @@ Window.extendWith(Entries, {
       let res = this.get('allEntries');
       const expr = this.get('expr');
       const showHidden = this.get('showHidden');
+      const collapse = this.get('collapse') || {};
       if (expr) res = evaluate({ list: res }, `filter(list =>(${expr}))`);
       if (!showHidden) res = res.filter(e => !e.hide);
+      if (Object.keys(collapse).length) {
+        const added = {};
+        res = res.reduce((a, c) => {
+          if (!collapse[c.segment]) a.push(c);
+          else if (!added[c.segment]) {
+            added[c.segment] = true;
+            a.push({ segment: c.segment, placeholder: true });
+          }
+          return a;
+        }, []);
+      }
       return res;
     },
     exprError() {
@@ -1836,7 +1863,7 @@ Window.extendWith(Entries, {
   },
   observe: {
     'entries.length'() {
-      if (this.scroller) {
+      if (this.scroller && !this.scrolllock) {
         const s = this.scroller;
         if (s.scrollTop + s.clientHeight >= s.scrollHeight - 10) setTimeout(() => {
           s.scrollTo({ top: s.scrollHeight, behavior: 'smooth', block: 'end' });
@@ -1850,7 +1877,7 @@ Window.extendWith(Entries, {
     'hideBlankFields hideDefaultFields'() {
       this._cache = {};
       this.update('@.details', { force: true });
-    }
+    },
   },
 });
 
