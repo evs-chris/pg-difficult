@@ -3076,6 +3076,12 @@ class Report extends Window {
     report.type = 'report';
     report.definition = (await this.request({ action: 'get', get: 'report' })).get;
     report.sources = (await this.request({ action: 'get', get: 'sources' })).get;
+    for (const s of report.sources) {
+      if (['pg-fetch', 'query', 'query-all'].includes(s.type) && s.data) {
+        delete s.cached;
+        delete s.data;
+      }
+    }
     await store.save(report);
     if (!id) await this.load(report._id);
     this.lock = false;
