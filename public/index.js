@@ -2034,15 +2034,22 @@ Window.extendWith(Schema, {
     init() {
       this.link('compareSchema', 'compareSchema', { instance: app });
     },
-    async render() {
-      if (!this.config) return;
-      this.blocked = true;
-      try {
-        const msg = await request({ action: 'schema', client: this.config });
-        this.blocked = false;
-        this.set('schema', msg.schema);
-      } catch {
-        setTimeout(() => this.close(), 1000);
+    render() {
+      if (this.config) {
+        if (!this.refreshSchema) {
+          this.set('@.refreshSchema', async function refreshSchema() {
+            if (!this.config) return;
+            this.blocked = true;
+            try {
+              const msg = await request({ action: 'schema', client: this.config });
+              this.blocked = false;
+              this.set('schema', msg.schema);
+            } catch {
+              setTimeout(() => this.close(), 1000);
+            }
+          });
+        }
+        this.refreshSchema();
       }
     },
   },
@@ -2397,6 +2404,8 @@ class HostExplore extends Window {
   }
 
   async refreshSchema(selected) {
+    if (!selected) selected = this.get('selectedDB');
+    if (!selected) return;
     this.blocked = true;
 
     try {
