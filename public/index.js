@@ -2497,10 +2497,18 @@ class HostExplore extends Window {
       connections = this.visibleDBs(sample);
     }
 
+    if (source.condition) {
+      const root = new Root({}, { parameters: params });
+      const ok = evaluate(root, source.condition);
+      if (!ok) {
+        if (source.alternate) return { value: evaluate(root, source.alternate) };
+        else return  { value: [] };
+      }
+    }
+
     if (!connections.length) return { value: {} };
 
     if (source.type === 'query-all-sql') {
-
       let batch = +this.get('concurrency');
       if (batch > 0) ;
       else if (batch > 500) batch = 500;
@@ -2538,11 +2546,13 @@ class HostExplore extends Window {
   
   async runReport(report, sample, dl) {
     const list = this.visibleDBs();
+    const params = this.get('allparams');
+    const delimited = report.definition.type !== 'delimited' && this.get('allrun.delimited');
 
     if (!list.length) return;
     let file;
-    const name = template(new Root({}, { parameters: this.get('params') }), report.definition.name) || report.definition.name || 'Report';
-    const csv = report.definition.type === 'delimited';
+    const name = template(new Root({}, { parameters: params }), report.definition.name) || report.definition.name || 'Report';
+    const csv = report.definition.type === 'delimited' || delimited;
     if (dl) {
       file = await app.ask(`Please enter a file name:`, 'Report File Name', `${name}.${csv ? 'csv' : 'html'}`);
       if (!file) return;
@@ -2556,10 +2566,12 @@ class HostExplore extends Window {
       const data = {};
 
       for (const src of report.sources) {
-        data[src.name] = await this.reportData(list, src, sample, this.get('params'), report);
+        data[src.name] = await this.reportData(list, src, sample, params, report);
       }
 
-      let html = run(report.definition, data);
+      const extra = delimited ? Object.assign({}, this.get('allrun')) : {};
+      for (const k in extra) if (typeof extra[k] === 'string') extra[k] = evaluate(`"${extra[k].replaceAll('"', '\\"')}"`);
+      let html = run(report.definition, data, params, extra);
       if (dl) {
         download(file, html, csv ? 'text/csv' : 'text/html');
       } else {
@@ -2613,9 +2625,10 @@ class HostExplore extends Window {
   async runSingleReport(report, sample, params, dl) {
     const selected = this.get('selectedDB.connection.config');
     if (!selected) return;
+    const delimited = report.definition.type !== 'delimited' && this.get('queryrun.delimited');
 
-    const name = template(new Root({}, { parameters: this.get('params') }), report.definition.name) || report.definition.name || 'Report';
-    const csv = report.definition.type === 'delimited';
+    const name = template(new Root({}, { parameters: params }), report.definition.name) || report.definition.name || 'Report';
+    const csv = report.definition.type === 'delimited' || delimited;
     if (dl) {
       file = await app.ask(`Please enter a file name:`, 'Report File Name', `${name}.${csv ? 'csv' : 'html'}`);
       if (!file) return;
@@ -2629,12 +2642,25 @@ class HostExplore extends Window {
       const data = {};
 
       for (const src of report.sources) {
+        if (src.condition) {
+          const root = new Root({}, { parameters: params });
+          const ok = evaluate(root, src.condition);
+          if (!ok) {
+            if (src.alternate) data[src.name] = { value: evaluate(root, src.alternate) };
+            else data[src.name] = { value: [] };
+            continue;
+          }
+        }
         if (src.type === 'query') {
           data[src.name] = (await request({ action: 'query', query: [src.query], params: [queryParams(report.definition, src, params)], client })).result;
+        } else if (src.type === 'pg-fetch') {
+          data[src.name] = { value: await makeRequest(src, params) };
         }
       } // TODO: other sources?
 
-      let html = run(report.definition, data);
+      const extra = delimited ? Object.assign({}, this.get('queryrun')) : {};
+      for (const k in extra) if (typeof extra[k] === 'string') extra[k] = evaluate(`"${extra[k].replaceAll('"', '\\"')}"`);
+      let html = run(report.definition, data, params, extra);
       if (dl) {
         download(file, html, csv ? 'text/csv' : 'text/html');
       } else {
@@ -2741,8 +2767,13 @@ class HostExplore extends Window {
   async swapReport(path, report) {
     const cur = this.get(path);
     if (report) {
-      await store.acquire('report', report.id);
+      const rep = await store.acquire('report', report.id);
       this.link(`store.report.${report.id}`, path, { instance: app });
+      const params = {};
+      if (rep.definition?.parameters) {
+        for (const p of rep.definition.parameters) if (p.init) params[p.name] = evaluate(p.init);
+      }
+      this.set(path === 'queryreport' ? 'queryparams' : 'allparams', params);
     } else {
       this.unlink(path);
     }
@@ -2806,7 +2837,7 @@ dd { white-space: pre-wrap; }
     },
   },
   data() {
-    return { hosts: {}, schemas: {}, meta: {}, expanded: {}, schemaexpanded: { table: {} } };
+    return { hosts: {}, schemas: {}, meta: {}, expanded: {}, schemaexpanded: { table: {} }, params: {} };
   },
   observe: {
     'hosts filter'() {
@@ -2965,6 +2996,15 @@ class Report extends Window {
 
   async fetchSource(msg) {
     const src = msg.source;
+    if (src.condition) {
+      const root = new Root({}, { parameters: msg.params || {} });
+      const ok = evaluate(root, src.condition);
+      if (!ok) {
+        if (src.alternate) this.respond({ data: evaluate(root, src.alternate) }, msg);
+        else this.respond({ data: [] }, msg);
+        return;
+      }
+    }
     if (src.type === 'diff') {
       if (Object.keys(app.get('status.clients') || {}).length) {
         this.respond({ data: app.get('entries') }, msg);

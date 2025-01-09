@@ -1453,10 +1453,10 @@
                 </div>
               </tab>
               <tab title="Reports" no-pad>
-                <div style="display: flex; height: 100%; margin-top: 2px;">
-                  <div style="flex-grow: 1;">
+                <div style="display: flex; height: 100%; width: 100%; padding-top: 2px; box-sizing: border-box;">
+                  <div style="flex-grow: 1; width: calc(100% - 15em);">
                     {{#if ~/queryreport}}
-                      <tabs style="overflow: hidden;" flex pad>
+                      <tabs style="overflow: hidden; height: 100%;" flex pad>
                         <tab title="Details">
                           <div style="display: flex; justify-content: space-between; align-items: center;"><span>{{~/queryreport.definition.name}}</span><button on-click="@.reportDesigner(~/queryreport, @event.altKey)" title="Open this report in the report designer. alt+click to open a new copy of this report in the report designer.">Report Designer</button></div>
                           <h3>Queries</h3>
@@ -1471,12 +1471,32 @@
                         <tab title="Run">
                           <div>
                             {{#each ~/queryreport.definition.parameters}}
-                              <label as-field>{{.label || .name}}<input value="{{~/params[.name]}}" /></label>
+                              <label as-field>
+                                {{#if .type === 'boolean'}}
+                                  <input type=checkbox checked="{{~/queryparams[.name]}}" /> {{.label || .name}}
+                                {{elseif .options}}
+                                  <select value="{{~/queryparams[.name]}}">
+                                    {{#each .options}}
+                                      <option value="{{.value || .name}}">{{.name || .value}}</option>
+                                    {{/each}}
+                                  </select>
+                                {{else}}
+                                  {{.label || .name}}<input {{#if .type === 'number'}}type=number{{/if}} value="{{~/queryparams[.name]}}" />
+                                {{/if}}
+                              </label>
                             {{/each}}
+                            {{#if ~/queryreport.definition.type !== 'delimited'}}
+                              <label as-field><input type=checkbox checked="{{~/queryrun.delimited}}" /> Run displayed report as delimited?</label>
+                              {{#if ~/queryrun.delimited}}
+                                <label as-field>Quote<input value="{{~/queryrun.quote}}" /></label>
+                                <label as-field>Field<input value="{{~/queryrun.field}}" placeholder="," /></label>
+                                <label as-field>Record<input value="{{~/queryrun.record}}" placeholder="\n" /></label>
+                              {{/if}}
+                            {{/if}}
                           </div>
                           <div>
-                            <button on-click="@.runSingleReport(queryreport, false, ~/params, false)">View Report</button>
-                            <button on-click="@.runSingleReport(queryreport, false, ~/params, true)">Download Report</button>
+                            <button on-click="@.runSingleReport(queryreport, false, ~/queryparams, false)">View Report</button>
+                            <button on-click="@.runSingleReport(queryreport, false, ~/queryparams, true)">Download Report</button>
                           </div>
                         </tab>
                         <tab button right hidden="{{!~/queryreport}}" on-click="@.swapReport('queryreport')">
@@ -1506,10 +1526,10 @@
       <tab title="Query All" no-pad>
         <tabs style="margin-top: 2px; overflow: hidden; height: 100%;" pad flex>
           <tab title="Reports" no-pad>
-            <div style="display: flex; height: 100%; margin-top: 2px;">
-              <div style="flex-grow: 1;">
+            <div style="display: flex; height: 100%; width: 100%; padding-top: 2px; box-sizing: border-box;">
+              <div style="flex-grow: 1; flex-shrink: 1; width: calc(100% - 15em);">
                 {{#if ~/allreport}}
-                  <tabs style="overflow: hidden;" flex pad>
+                  <tabs style="overflow: hidden; height: 100%;" flex pad>
                     <tab title="Details">
                       <div style="display: flex; justify-content: space-between; align-items: center;"><span>{{~/allreport.definition.name}}</span><button on-click="@.reportDesigner(~/allreport, @event.altKey)" title="Open this report in the report designer. alt+click to open a new copy of this report in the report designer.">Report Designer</button></div>
                       <h3>Queries</h3>
@@ -1525,8 +1545,28 @@
                       <div style="padding: 0.3em; display: flex;"><div style="flex-shrink: 1;">Reports will run against all visible databases in the Host Explorer tree.</div><label style="width: 9em; flex-shrink: 0;" as-field>Concurrency <tip>The number of concurrent connections to utilize on the server. This is used for all requested databases, so up to this number could be used on a single target server or down to 1/x of this number where x is the number of servers with visible databases.</tip><input type=number placeholder=10 value="{{~/concurrency}}" /></label></div>
                       <div>
                         {{#each ~/allreport.definition.parameters}}
-                          <label as-field>{{.label || .name}}<input value="{{~/params[.name]}}" /></label>
+                          <label as-field>
+                            {{#if .type === 'boolean'}}
+                              <input type=checkbox checked="{{~/allparams[.name]}}" /> {{.label || .name}}
+                            {{elseif .options}}
+                              <select value="{{~/allparams[.name]}}">
+                                {{#each .options}}
+                                  <option value="{{.value || .name}}">{{.name || .value}}</option>
+                                {{/each}}
+                              </select>
+                            {{else}}
+                              {{.label || .name}}<input {{#if .type === 'number'}}type=number{{/if}} value="{{~/allparams[.name]}}" />
+                            {{/if}}
+                          </label>
                         {{/each}}
+                        {{#if ~/allreport.definition.type !== 'delimited'}}
+                          <label as-field><input type=checkbox checked="{{~/allrun.delimited}}" /> Run displayed report as delimited?</label>
+                          {{#if ~/allrun.delimited}}
+                            <label as-field>Quote<input value="{{~/allrun.quote}}" /></label>
+                            <label as-field>Field<input value="{{~/allrun.field}}" placeholder="," /></label>
+                            <label as-field>Record<input value="{{~/allrun.record}}" placeholder="\n" /></label>
+                          {{/if}}
+                        {{/if}}
                       </div>
                       <div>
                         <button on-click="@.runReport(allreport, false, false)" {{#unless @.visibleDBs().length}}disabled title="At least one database must be visible in the list of databases to run this report."{{/unless}}>View Report</button>
@@ -1657,6 +1697,10 @@
         {{/each}}
       </div>
       {{#if .method === 'POST'}}<label as-field style="min-height: 15em;">Body<textarea>{{.body}}</textarea></label>{{/if}}
+      <label as-field>Condition <tip>Set a condition expression to avoid running a request that isn't necessary for how the report is being run. Parameters are available to the condition expression, and if it returns false, the request will not be made.</tip><textarea>{{.condition}}</textarea></label>
+      {{#if .condition}}
+      <label as-field>Alterante <tip>Set an alternate expression to provide a default value if the conditional expression returned false.</tip><textarea>{{.alternate}}</textarea></label>
+      {{/if}}
       {{/with}}
     {{elseif source.type === 'query-all'}}
       <label as-field>Result Name<input value="{{source.result}}" /></label>
