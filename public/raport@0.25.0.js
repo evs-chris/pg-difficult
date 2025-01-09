@@ -1213,6 +1213,7 @@
     const value = {};
     const values$1 = {};
     const application = {};
+    const inlineTemplate = {};
     const escmap = { n: '\n', r: '\r', t: '\t', b: '\b' };
     const pathesc = map(seq(str('\\'), chars(1)), ([, char]) => escmap[char] || char);
     const pathident = map(rep1(alt('ref-part', read1To(endRef, true), pathesc)), parts => parts.join(''), 'keypath-part');
@@ -1417,7 +1418,7 @@
     const date$2 = bracket(str('#'), alt('date', dateexact, daterel, timespan), str('#'), { primary: true, name: 'date' });
     const typelit = map(seq(str('@['), ws$2, schema(), ws$2, str(']')), ([, , v]) => ({ v, s: 1 }), { name: 'typelit', primary: true });
     const parseDate = parser$1(map(seq(opt(str('#')), alt('date', dateexact, daterel, timespan), opt(str('#'))), ([, d,]) => d), { trim: true, consumeAll: true, undefinedOnError: true });
-    const string = alt({ primary: true, name: 'string' }, map(seq(str(':'), read1To(endSym, true)), v => ({ v: v[1] })), map(bracket(str('"'), rep(alt('string-part', read1To('\\"'), JStringEscape, JStringUnicode, JStringHex)), str('"')), a => ({ v: ''.concat(...a) })), map(bracket(str(`'`), rep(alt('string-part', map(read1To(`'\\$\{`, true), v => ({ v })), map(str('\\$', '$$'), () => ({ v: '$' })), bracket(str('${', '{'), value, str('}'), { primary: true, name: 'string-interpolation' }), map(str('$', '{'), v => ({ v })), map(JStringUnicode, v => ({ v })), map(JStringHex, v => ({ v })), map(JStringEscape, v => ({ v })))), str(`'`)), stringInterp), map(bracket(str('`'), rep(alt('string-part', map(read1To('`\\${', true), v => ({ v })), map(str('\\$', '$$'), () => ({ v: '$' })), bracket(str('${'), value, str('}'), { primary: true, name: 'string-interpolation' }), map(str('$', '{'), v => ({ v })), map(JStringUnicode, v => ({ v })), map(JStringHex, v => ({ v })), map(JStringEscape, v => ({ v })))), str('`')), stringInterp));
+    const string = alt({ primary: true, name: 'string' }, bracket(str('$$$'), inlineTemplate, str('$$$')), map(seq(str(':'), read1To(endSym, true)), v => ({ v: v[1] })), map(bracket(str('"""'), rep(alt('string-part', read1To('\\"'), JStringEscape, JStringUnicode, JStringHex, andNot(str('"'), str('""')))), str('"""')), a => ({ v: ''.concat(...a) })), map(bracket(str('"'), rep(alt('string-part', read1To('\\"'), JStringEscape, JStringUnicode, JStringHex)), str('"')), a => ({ v: ''.concat(...a) })), map(bracket(str(`'''`), rep(alt('string-part', map(read1To(`'\\$\{`, true), v => ({ v })), map(str('\\$', '$$'), () => ({ v: '$' })), bracket(str('${', '{'), value, str('}'), { primary: true, name: 'string-interpolation' }), map(str('$', '{'), v => ({ v })), map(JStringUnicode, v => ({ v })), map(JStringHex, v => ({ v })), map(JStringEscape, v => ({ v })), map(andNot(str(`'`), str(`''`)), v => ({ v })))), str(`'''`)), stringInterp), map(bracket(str(`'`), rep(alt('string-part', map(read1To(`'\\$\{`, true), v => ({ v })), map(str('\\$', '$$'), () => ({ v: '$' })), bracket(str('${', '{'), value, str('}'), { primary: true, name: 'string-interpolation' }), map(str('$', '{'), v => ({ v })), map(JStringUnicode, v => ({ v })), map(JStringHex, v => ({ v })), map(JStringEscape, v => ({ v })))), str(`'`)), stringInterp), map(bracket(str('```'), rep(alt('string-part', map(read1To('`\\${', true), v => ({ v })), map(str('\\$', '$$'), () => ({ v: '$' })), bracket(str('${'), value, str('}'), { primary: true, name: 'string-interpolation' }), map(str('$', '{'), v => ({ v })), map(JStringUnicode, v => ({ v })), map(JStringHex, v => ({ v })), map(JStringEscape, v => ({ v })), map(andNot(str('`'), str('``')), v => ({ v })))), str('```')), stringInterp), map(bracket(str('`'), rep(alt('string-part', map(read1To('`\\${', true), v => ({ v })), map(str('\\$', '$$'), () => ({ v: '$' })), bracket(str('${'), value, str('}'), { primary: true, name: 'string-interpolation' }), map(str('$', '{'), v => ({ v })), map(JStringUnicode, v => ({ v })), map(JStringHex, v => ({ v })), map(JStringEscape, v => ({ v })))), str('`')), stringInterp));
     const literal = map(alt('literal', map(JNum, v => v, { primary: true, name: 'number' }), keywords, date$2), v => {
         if (v instanceof Date || v == null || typeof v !== 'object')
             return { v };
@@ -1653,6 +1654,7 @@
     const endTxt$1 = '\\{';
     const txtEsc = alt(map(str('\\{{'), () => '{{'), map(seq(str('\\'), chars(1)), ([, c]) => c));
     const text$1 = map(rep1(alt(read1To(endTxt$1, true), txtEsc, andNot(str('{'), str('{')))), txts => ({ v: txts.join('') }), 'text');
+    const nestedText = map(rep1(alt(read1To(endTxt$1 + '$'), txtEsc, andNot(str('$'), str('$$')), andNot(str('{'), str('{')))), txts => ({ v: txts.join('') }), 'text');
     function tag_value(names) {
         return map(seq(str('{{'), ws$2, str(...names), rws, value, ws$2, str('}}')), arr => [arr[2], arr[4]], 'tag');
     }
@@ -1722,11 +1724,12 @@
     function concat(values) {
         if (values.length === 1)
             return values[0];
-        return { op: '+', args: values };
+        return { op: 'cat', args: values, meta: '$' };
     }
     const _parse$1 = parser$1(alt(map(rep1(content$1), args => concat(args)), map(ws$2, () => ({ v: '' }))), { trim: true });
     _parse$1.namespace = 'template';
     const parse$2 = _parse$1;
+    inlineTemplate.parser = map(rep1(alt({ name: 'inline-template' }, nestedText, each_op, if_op, with_op, case_op, unless_op, interpolator)), args => concat(args));
 
     function toDataSet(value) {
         if (Array.isArray(value))
@@ -1888,7 +1891,7 @@
     function evaluate(root, value) {
         let r;
         let e;
-        if (isValueOrExpr(root)) {
+        if (!value && isValueOrExpr(root)) {
             r = new Root();
             e = root;
         }
@@ -3134,6 +3137,8 @@
         }
         if (report.type === 'delimited')
             return runDelimited(report, ctx, { table: extra === null || extra === void 0 ? void 0 : extra.table });
+        else if (extra === null || extra === void 0 ? void 0 : extra.delimited)
+            return runAsDelimited(report, ctx, extra);
         else if (report.type === 'flow')
             return runFlow(report, ctx, extra);
         else
@@ -3187,7 +3192,7 @@
         if (options === null || options === void 0 ? void 0 : options.table) {
             let idx = 1;
             for (const value of values) {
-                const c = extend$1(context, { value });
+                const c = extend$1(context, { value, special: { index: idx - 1 } });
                 if (report.rowContext) {
                     if (!c.locals)
                         c.locals = {};
@@ -3213,8 +3218,9 @@
         }
         else {
             const unquote = report.quote ? new RegExp(report.quote, 'g') : undefined;
+            let index = 0;
             for (const value of values) {
-                const c = extend$1(context, { value });
+                const c = extend$1(context, { value, special: { index } });
                 if (report.rowContext) {
                     if (!c.locals)
                         c.locals = {};
@@ -3236,6 +3242,7 @@
                         val = val.replace(unquote, report.quote + report.quote);
                     return `${report.quote || ''}${val}${report.quote || ''}`;
                 }).join(report.field || ',') + (report.record || '\n');
+                index++;
             }
         }
         return res;
@@ -3282,6 +3289,7 @@
                 w = expandMacro(w.macro, w, ctx, { x: 0, y: 0, availableX, availableY, maxX: availableX, maxY }, state);
             let r;
             do {
+                context.special.page = page + 1;
                 r = renderWidget(w, ctx, { x: 0, y, availableX, availableY, maxX: availableX, maxY }, state);
                 pages[page] += r.output;
                 if (r.continue) {
@@ -3416,6 +3424,51 @@
       body { margin: 1rem${width ? ' auto' : ''}; background-color: #fff; box-shadow: 1px 1px 10px rgba(0, 0, 0, 0.4); padding: ${margin[0]}rem ${margin[1]}rem ${margin[2]}rem ${margin[3]}rem !important; }
     }${Object.entries(ctx.styles).map(([_k, v]) => v).join('\n')}${Object.entries(ctx.styleMap.styles).map(([style, id]) => `.${id} { ${style} }`).join('\n')}
   </style>${extras && extras.head || ''}</head><body>\n<div class=page-back><div id=wrapper>${html}</div></div>${extras && extras.foot || ''}</body></html>`;
+    }
+    function findWidgets(from, type, first, results) {
+        results = results || [];
+        if (from.type === type)
+            results.push(from);
+        if (first && results.length)
+            return results;
+        if (from.widgets)
+            for (const w of from.widgets)
+                findWidgets(w, type, first, results);
+        return results;
+    }
+    // TODO: this could try harder to carry context forward and use non-named sources if it seems necessary
+    function runAsDelimited(report, context, extra) {
+        var _a;
+        const [repeater] = findWidgets({ type: 'container', widgets: report.widgets }, 'repeater', true);
+        if (repeater && typeof ((_a = repeater === null || repeater === void 0 ? void 0 : repeater.source) === null || _a === void 0 ? void 0 : _a.source) === 'string') {
+            let headers;
+            let fields;
+            const rowContext = repeater.row.context;
+            if (repeater.header) {
+                const labels = findWidgets(repeater.header, 'label');
+                headers = labels.map(l => typeof l.text === 'string' ? parse$3(l.text) : l.text);
+            }
+            fields = findWidgets(repeater.row, 'label').map(l => l.text);
+            const source = '_tmp';
+            if (typeof repeater.source === 'object') {
+                const src = repeater.source;
+                let data;
+                if ('source' in src) {
+                    const s = src;
+                    let base = context.sources[s.source] || { value: [] };
+                    if (s.base)
+                        base = { value: evaluate(extend$1(context, { value: base.value, special: { source: base } }), s.base) };
+                    if (s.filter || s.sort || s.group)
+                        base = filter(base, s.filter, s.sort, s.group, context);
+                    data = toDataSet(base);
+                }
+                else
+                    data = toDataSet(evaluate(context, src));
+                context.sources._tmp = data;
+            }
+            return runDelimited(Object.assign({ type: 'delimited', headers, fields, source, rowContext }, extra), context, (extra === null || extra === void 0 ? void 0 : extra.table) ? { table: true } : {});
+        }
+        return '';
     }
 
     // zero width space
@@ -3884,6 +3937,7 @@
             }
             else {
                 for (let i = (state && state.state && state.state.current) || 0; i < arr.length; i++) {
+                    let row = false;
                     const c = group && group.grouped ?
                         extend(rctx, { value: arr[i], special: { index: i, values: {} }, commit: {} }) :
                         extend(rctx, { value: arr[i], special: { index: i } });
@@ -3900,6 +3954,7 @@
                         }
                         else {
                             r = renderWidget(w.row, c, { x: usedX, y, availableX: availableX - usedX, maxX: placement.maxX, availableY, maxY: placement.maxY }, state ? state.child : undefined);
+                            row = true;
                         }
                     }
                     if (state)
@@ -3941,6 +3996,11 @@
                     }
                     html += r.output;
                     commit = true;
+                    if (row && w.header && ctx.report.type === 'flow' && w.headerRepeat > 0 && i + 1 && (i + 1) % w.headerRepeat === 0) {
+                        const h = renderWidget(w.header, ctx, { x: 0, y, availableX: placement.availableX, maxX: placement.maxX, maxY: placement.maxY });
+                        html += h.output;
+                        y += h.height;
+                    }
                     if (r.continue) {
                         if (initY === y && usedY)
                             y += usedY;
@@ -4054,7 +4114,7 @@
         else
             return v;
     }
-    const dateRE = /y+|M+|d+|E+|H+|m+|s+|k+|h+|a+|S+|z+/g;
+    const dateRE = /\\.|y+|M+|d+|E+|H+|m+|s+|k+|h+|a+|S+|z+/g;
     const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
     const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
     let dateDefault;
@@ -4090,7 +4150,10 @@
         if (!fmt)
             fmt = dateDefault || 'yyyy-MM-dd';
         return fmt.replace(dateRE, m => {
-            if (m[0] === 'y') {
+            if (m[0] === '\\') {
+                return m[1];
+            }
+            else if (m[0] === 'y') {
                 return m.length <= 2 ? (`${Y}`).substr(2, 2) : `${Y}`;
             }
             else if (m[0] === 'M') {
@@ -5045,7 +5108,7 @@
 
     const space$1 = ' \t\r\n';
     const num$2 = map(seq(opt(str('-')), read1(digits)), ([neg, num]) => neg ? -num : +num);
-    const num_range = map(seq(num$2, str('-', ':'), num$2), ([start, , end]) => [start, end]);
+    const num_range = map(seq(num$2, str('-', ':'), num$2), ([start, , end]) => [start, end].sort((l, r) => l < r ? -1 : l > r ? 1 : 0));
     const sign_range = map(seq(str('<', '>'), ws$2, num$2), ([sign, , num]) => sign === '<' ? [-Infinity, num - 1] : [num + 1, Infinity]);
     const star_range = map(str('*'), () => [-Infinity, Infinity]);
     const not_range = map(seq(str('!'), alt(num_range, sign_range, num$2)), ([, range]) => ({ not: range }));
@@ -5493,11 +5556,36 @@
             return res;
         };
     }
+    // TODO: handle ascii curses tables?
+    function table(options) {
+        Object.assign({ header: true }, options);
+        return function parse(input, options) {
+            const parts = input.split(/\r?\n/).filter(v => v);
+            if (parts[1][0] === '|') {
+                for (let i = 0; i < parts.length; i++) {
+                    const p = parts[i];
+                    parts[i] = p.replace(/^\|\s*|\s*\|$/g, '');
+                }
+            }
+            return parts.map(p => p.trim().split(/\s*\|\s*/));
+        };
+    }
     const fields = [',', '|', '\t', ':', ';', '~'];
     const records = ['\r\n', '\r', '\n'];
     const quotes = ['\'', '"', '`', '$'];
-    function detect(data, amount = 2048) {
+    function detect(data, amount) {
+        var _a;
+        if (amount === undefined) {
+            amount = data.indexOf('\n', data.indexOf('\n', data.indexOf('\n', 1) + 1) + 1);
+            amount = amount !== null && amount !== void 0 ? amount : 2048;
+            if (amount < 2048)
+                amount = 2048;
+        }
         const sample = data.slice(0, amount);
+        // look for tables
+        if ((_a = sample.split(/\r?\n/).filter(v => v)[1]) === null || _a === void 0 ? void 0 : _a.match(/^[-|+\s_=]+$/)) {
+            return { table: 1, header: true };
+        }
         const fs = fields.reduce((a, c) => (a[c] = sample.replace(new RegExp(`[^${c}]`, 'g'), '').length / c.length, a), {});
         const rs = records.reduce((a, c) => (a[c] = sample.replace(new RegExp(`[^${c}]`, 'g'), '').length / c.length, a), {});
         const qs = quotes.reduce((a, c) => (a[c] = sample.replace(new RegExp(`[^${c}]`, 'g'), '').length / c.length, a), {});
@@ -5516,16 +5604,37 @@
                 (res.quote = k, max = qs[k]);
         return res;
     }
+    function isTableOpts(opts) {
+        return opts && 'table' in opts && opts.table === 1;
+    }
     function parse$1(data, options) {
-        const base = csv(Object.assign({}, options, { header: false }))(data);
-        if ('message' in base)
-            return [];
-        if (options.header && base.length) {
-            const header = base.shift().map((k, i) => [k, i]);
-            header.sort((a, b) => a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0);
-            return base.map(v => header.reduce((a, c) => (a[c[0]] = v[c[1]], a), {}));
+        var _a, _b, _c;
+        let values;
+        if (isTableOpts(options)) {
+            values = table(options)(data);
+            values.splice(1, 1);
         }
-        return base;
+        else {
+            const base = csv(Object.assign({}, options, { header: false }))(data);
+            if ('message' in base)
+                return [];
+            values = base;
+        }
+        if ((_a = options.fixedSize) !== null && _a !== void 0 ? _a : true) {
+            const min = (_b = values[0]) === null || _b === void 0 ? void 0 : _b.length;
+            values = values.filter(v => v.length >= min);
+        }
+        if (options.header && values.length) {
+            const header = values.shift().map((k, i) => [k, i]);
+            if ((_c = options.order) !== null && _c !== void 0 ? _c : true)
+                header.sort((a, b) => {
+                    const l = `${a}`.toLowerCase();
+                    const r = `${b}`.toLowerCase();
+                    return l < r ? -1 : l > r ? 1 : 0;
+                });
+            return values.map(v => header.reduce((a, c) => (a[c[0]] = v[c[1]], a), {}));
+        }
+        return values;
     }
 
     const ws = read(' \r\n\t');
@@ -6117,6 +6226,7 @@
         else
             return evaluate(c, r);
     }), simple(['generate'], (_name, [apply], opts, ctx) => {
+        let r;
         if (apply && isApplication(apply)) {
             const res = [];
             let state = opts;
@@ -6141,6 +6251,29 @@
                     res.push(it);
             }
             return res;
+        }
+        else if ((r = range(apply)) && Array.isArray(r)) {
+            r = r.filter(v => typeof v === 'number' || Array.isArray(v) && !v.find(v => v === Infinity || v === -Infinity) || typeof v === 'object' && !Array.isArray(v));
+            const nums = [];
+            const no = [];
+            for (const v of r)
+                if (typeof v === 'object' && !Array.isArray(v))
+                    no.push(typeof v.not === 'number' ? [v.not, v.not] : v.not);
+            for (const v of r) {
+                if (nums.length >= generateDefaults.max)
+                    break;
+                if (typeof v === 'number' && !no.find(([l, r]) => v >= l && v <= r))
+                    nums.push(v);
+                else if (Array.isArray(v)) {
+                    for (let i = v[0]; i <= v[1]; i++) {
+                        if (!no.find(([l, r]) => i >= l && i <= r))
+                            nums.push(i);
+                        if (nums.length >= generateDefaults.max)
+                            break;
+                    }
+                }
+            }
+            return nums;
         }
         return [];
     }), simple(['array'], (_name, values, opts) => {
@@ -6508,6 +6641,8 @@
         else {
             return values.reduce((a, c) => a + (c === undefined || c === null ? '' : c), '');
         }
+    }), simple(['cat'], (_name, values) => {
+        return values.reduce((a, c) => a + (c === undefined || c === null ? '' : c), '');
     }), simple(['num'], (_name, [v]) => {
         let match;
         if (match = hasNum.exec(v))
@@ -6607,11 +6742,11 @@
             str = '' + str;
         if (!isNum(count))
             return str;
-        if (!pad)
-            pad = ' ';
         if (typeof pad !== 'string')
             pad = '' + pad;
-        if (pad.length < 1)
+        if (!pad)
+            pad = ' ';
+        if (pad.length !== 1)
             pad = ' ';
         const ct = (count - str.length) / 2;
         for (let i = 0; str.length < count; i++) {
@@ -6898,19 +7033,19 @@
             return range(v, opts);
         else if (opts.xml)
             return parse(v, opts.strict);
-        else if (opts.csv) {
-            if (opts.detect)
-                opts = Object.assign(detect(v), opts);
+        else if (opts.csv || opts.delimited) {
+            if (opts.detect || (!opts.field && !opts.separator && !opts.record && !opts.quote))
+                opts = Object.assign(detect(v, opts.context), opts);
             return parse$1(v, opts);
         }
         else if (opts.base64)
             return atob(v);
         else
             return parse$3(v, opts);
-    }), simple(['detect-delimiters'], (_name, [data]) => {
+    }), simple(['detect-delimiters'], (_name, [data, max], opts) => {
         if (typeof data !== 'string')
             return {};
-        return detect(data);
+        return detect(data, max !== null && max !== void 0 ? max : opts === null || opts === void 0 ? void 0 : opts.context);
     }));
     // short circuiting
     registerOperator({
