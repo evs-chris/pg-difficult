@@ -3379,7 +3379,7 @@ Ractive.helpers.copyToClipboard = (function() {
 
 let unloadTm;
 function unload(ev) {
-  if (app.get('halted')) return;
+  if (app.get('halted') || !app.get('status.VERSION')) return;
   ev.preventDefault();
   ev.returnValue = '';
   app.set('unloading', true);
