@@ -2263,10 +2263,65 @@ class ScratchPad extends Window {
       this.set('pad.text', txt);
     }
   }
-  async printMarkdown() {
-    const frame = document.getElementById('print');
-    frame.contentDocument.body.innerHTML = await renderMD(this.get('pad.text'), { theme: 'light', nochecks: true });
-    frame.contentWindow.print();
+  async printMarkdown(md, dl) {
+    if (dl) {
+      const name = ((this.get('pad.name') || 'untitled') + '.html').split('/').pop();
+      download(name, `<html><head><style>
+html {
+  font-family: sans-serif;
+}
+code, .mermaid-chart {
+  border-radius: 0.5em;
+  margin: 0.5em 0;
+}
+code {
+  white-space: pre-wrap;
+}
+table {
+  margin: 1em 0;
+  border-collapse: collapse;
+  border: 1px sold rgba(128, 128, 128, 0.5);
+}
+td, th {
+  padding: 0.25em 0.5em;
+  border: 1px solid rgba(128, 128, 128, 0.5);
+}
+th {
+  text-align: center;
+  border-bottom: 1px solid;
+}
+tbody tr:nth-child(2n+1) td {
+  background-color: rgba(128, 128, 128, 0.1);
+}
+tbody tr:hover td {
+  background-color: rgba(128, 128, 128, 0.25);
+}
+h1, h2, h3 {
+  padding: 0;
+  margin: 0em 0 0.5em 0;
+}
+* ~ h1, * ~ h2, * ~ h3 {
+  margin-top: 1em;
+}
+.mermaid-chart {
+  display: flex;
+  justify-content: center;
+  margin: 1em 0;
+}
+.mermaid-chart.light {
+  background-color: #f9f9f9;
+}
+.mermaid-chart.dark {
+  background-color: #222;
+}
+${await (await fetch('./hljs@11.10.0/stackoverflow-light.css')).text()}
+</style></head><body>
+${md}</body></html>`, 'text/html');
+    } else {
+      const frame = document.getElementById('print');
+      frame.contentDocument.body.innerHTML = await renderMD(this.get('pad.text'), { theme: 'light', nochecks: true });
+      frame.contentWindow.print();
+    }
   }
   async renderMD() {
     const v = this.get('pad.text');
