@@ -310,8 +310,12 @@
   .tree-children .remove-button:hover { opacity: 1; }
   .tree-children .tree-leaf .name { user-select: none; }
 
-  .markdown-container code, .mermaid {
+  .markdown-container code, .mermaid-chart {
     border-radius: 0.5em;
+    margin: 0.5em 0;
+  }
+  .markdown-container code {
+    .white-space: pre-wrap;
   }
   .markdown-container table {
     margin: 1em 0;
@@ -329,14 +333,38 @@
   .markdown-container tbody tr:nth-child(2n+1) td {
     background-color: rgba(128, 128, 128, 0.1);
   }
+  .markdown-container tbody tr:hover td {
+    background-color: rgba(128, 128, 128, 0.25);
+  }
   .markdown-container h1, .markdown-container h2, .markdown-container h3 {
     padding: 0;
-    margin: 1em 0 0.5em 0;
+    margin: 0em 0 0.5em 0;
   }
-  .mermaid {
+  .markdown-container * ~ h1, .markdown-container * ~ h2, .markdown-container * ~ h3 {
+    margin-top: 1em;
+  }
+  .mermaid-chart {
     display: flex;
     justify-content: center;
     margin: 1em 0;
+  }
+  .mermaid-chart.light {
+    background-color: #f9f9f9;
+  }
+  .mermaid-chart.dark {
+    background-color: #222;
+  }
+
+  button.print {
+    position: absolute;
+    top: -0.15em;
+    right: 0;
+    opacity: 0.5;
+    transition: opacity 0.2s ease;
+    z-index: 10;
+  }
+  button.print:hover {
+    opacity: 1;
   }
 </style>
 <script>clientOnly = true</script>
@@ -572,6 +600,15 @@
           <label as-field>Title <tip>Set the title for clients attached to this namespace, for the same reasons you may want to set a different color.</tip><input value="{{~/store.settings.title}}" /></label>
           <label as-field>Paste Timeout ms <tip>Some actions, like clicking on an evaluated result in a raport scratch pad, will automatically copy the value to the clipboard and an internal storage area tha can be accessed by other tools, like the local diff tool. These tools will offer to load the value just copied with a click for a limited amount of time. This is that limit.</tip><input type=number placeholder=10000 step=1000 value="{{~/store.settings.pasteTimeout}}" /></label>
           <label as-field>Menu Width <tip>Sets the width of the menu in em. You have big titles and need a wider menu? Try 26.</tip><input type=number min=10 max=50 value="{{~/store.settings.menuWidth}}" lazy placeholder=18 /></label>
+          <label as-field>Default Control Panel<select value="{{~/store.settings.defaultPanel}}">
+            <option value="{{undefined}}">Connections</option>
+            <option value="diffs">Active Diffs</option>
+            <option value="monitor">Connection Monitor</option>
+            <option value="queries">Saved Queries</option>
+            <option value="reports">Reports</option>
+            <option value="scratch">Scratch Pads</option>
+            <option value="settings">Settings</option>
+          </select></label>
         </fieldset>
         <fieldset style="margin-top: 1em;">
           <legend>Diff Entries Options</legend>
@@ -795,51 +832,53 @@
     <virtual-list bind-items="~/entries" size=75>
       <header>
         {{#if .segment}}
-          <div class=header><h2 title="Double click to rename segment" on-dblclick="@.renameSegment(.), false">{{.segment}}</h2> <div class=buttons style="padding-top: 0.9em;"><button class=undo on-click="@.toggleHidden(., @event.ctrlKey || @event.shiftKey)" title="Skip confirmation by holding ctrl or shift when clicking.">{{#if .hide}}Show{{else}}Hide{{/if}}</button>{{#if ~/allowUndoSegment}}<button class=undo on-click="@event.altKey ? @.undoAndHide(.) : @.undoSegment(.), false" title="Undo all changes in this segment by replaying the changes in reverse. This will also create a new segment named 'Undo {{.segment}}', unless you hold the ctrl or shift key when clicking this button. Hold alt to undo the segment and hide both this and the new undo segment.">Undo</button>{{/if}}</div></div>
+          <div class=header><h2 title="Double click to rename segment" on-dblclick="@.renameSegment(.), false">{{#if ~/collapse[.segment]}}&raquo;{{/if}}{{.segment}}</h2> <div class=buttons style="padding-top: 0.9em;"><button class=undo on-click="@.toggleHidden(., @event.ctrlKey || @event.shiftKey)" title="{{.hide ? 'Show' : 'Hide'}} this segment. This will modify the entries in the segment, which will persist across clients and downloads. Skip confirmation by holding ctrl or shift when clicking.">{{#if .hide}}Show{{else}}Hide{{/if}}</button>{{#if ~/allowUndoSegment}}<button class=undo on-click="@event.altKey ? @.undoAndHide(.) : @.undoSegment(.), false" title="Undo all changes in this segment by replaying the changes in reverse. This will also create a new segment named 'Undo {{.segment}}', unless you hold the ctrl or shift key when clicking this button. Hold alt to undo the segment and hide both this and the new undo segment.">Undo</button>{{/if}}<button on-click="@.scrollLock(), @.toggle('collapse.' + escapeKey(.segment))" title="{{~/collapse[.segment] ? 'Expand' : 'Collapse'}} all segments named '{{.segment}}'. This does not modify the entries in the segment.">{{~/collapse[.segment] ? 'Expand' : 'Collapse'}}</button></div></div>
         {{/if}}
       </header>
-      {{#with . as record, @.details(.) as entry}}
-        {{#if entry.status}}
-          {{#if entry.changed}}
-            <div class="wrapper striped-{{index % 2 == 0 ? 'even' : 'odd'}}" on-click="@event.shiftKey ? copyToClipboard(record.old || {}, 'Copied old record JSON to clipboard.') : copyToClipboard(Object.keys(record.new).length !== Object.keys(record.old).length ? Object.assign({}, record.old, record.new) : record.new || {}, 'Copied new record JSON to clipboard.'), false">
-              <div class=name><span>{{record.table}} {{entry.id || ''}} {{entry.status}}</span><span class=src>({{record.source}})</span></div>
-              {{#each entry.changed}}
-                <div class="diff">
-                  <div class="name">{{this.0}}</div>
-                  <div class="left" on-click="copyToClipboard(this.1.0, 'Copied value to clipboard.'), false">{{typeof this.1.0 === 'object' ? JSON.stringify(this.1.0) : this.1.0}}</div>
-                  <div class="right" on-click="copyToClipboard(this.1.1, 'Copied value to clipboard.'), false">{{typeof this.1.1 === 'object' ? JSON.stringify(this.1.1) : this.1.1}}</div>
+      {{#unless .placeholder}}
+        {{#with . as record, @.details(.) as entry}}
+          {{#if entry.status}}
+            {{#if entry.changed}}
+              <div class="wrapper striped-{{index % 2 == 0 ? 'even' : 'odd'}}" on-click="@event.shiftKey ? copyToClipboard(record.old || {}, 'Copied old record JSON to clipboard.') : copyToClipboard(Object.keys(record.new).length !== Object.keys(record.old).length ? Object.assign({}, record.old, record.new) : record.new || {}, 'Copied new record JSON to clipboard.'), false">
+                <div class=name><span>{{record.table}} {{entry.id || ''}} {{entry.status}}</span><span class=src>({{record.source}})</span></div>
+                {{#each entry.changed}}
+                  <div class="diff">
+                    <div class="name">{{this.0}}</div>
+                    <div class="left" on-click="copyToClipboard(this.1.0, 'Copied value to clipboard.'), false">{{typeof this.1.0 === 'object' ? JSON.stringify(this.1.0) : this.1.0}}</div>
+                    <div class="right" on-click="copyToClipboard(this.1.1, 'Copied value to clipboard.'), false">{{typeof this.1.1 === 'object' ? JSON.stringify(this.1.1) : this.1.1}}</div>
+                  </div>
+                {{/each}}
+
+                <div class=buttons>
+                  {{#if ~/allowUndoSingle}}<button class=undo on-click="@.undoSingle(record), false" title="Undo this change by running the inverse of the statment that created the change.">Undo</button>{{/if}}
+                  <button class=split-up title="Split this entry and all entries above it up to the previous segment into a new segment" on-click="@.renameSegment(record, 'above'), false">&#9650;</button> <button class=split-down title="Split this entry and all entries below it down to the next segment into a new segment" on-click="@.renameSegment(record, 'below'), false">&#9660;</button>
                 </div>
-              {{/each}}
-
-              <div class=buttons>
-                {{#if ~/allowUndoSingle}}<button class=undo on-click="@.undoSingle(record), false" title="Undo this change by running the inverse of the statment that created the change.">Undo</button>{{/if}}
-                <button class=split-up title="Split this entry and all entries above it up to the previous segment into a new segment" on-click="@.renameSegment(record, 'above'), false">&#9650;</button> <button class=split-down title="Split this entry and all entries below it down to the next segment into a new segment" on-click="@.renameSegment(record, 'below'), false">&#9660;</button>
               </div>
-            </div>
-          {{else}}
-            <div class="diff whole striped-{{index % 2 == 0 ? 'even' : 'odd'}}" on-click="@event.shiftKey ? copyToClipboard(record.old || {}, 'Copied old record JSON to clipboard.') : copyToClipboard(record.new || {}, 'Copied new record JSON to clipboard.'), false">
-              <div class=name><span>{{record.table}} {{entry.id || ''}} {{entry.status}}</span><span class=src>({{record.source}})</span></div>
-              {{#each entry.record}}
-                <div class="entry"><div class="key">{{this.0}}</div><div class="value" on-click="copyToClipboard(this.1, 'Copied value to clipboard.'), false">{{typeof this.1 === 'object' ? JSON.stringify(this.1) : this.1}}</div></div>
-              {{/each}}
+            {{else}}
+              <div class="diff whole striped-{{index % 2 == 0 ? 'even' : 'odd'}}" on-click="@event.shiftKey ? copyToClipboard(record.old || {}, 'Copied old record JSON to clipboard.') : copyToClipboard(record.new || {}, 'Copied new record JSON to clipboard.'), false">
+                <div class=name><span>{{record.table}} {{entry.id || ''}} {{entry.status}}</span><span class=src>({{record.source}})</span></div>
+                {{#each entry.record}}
+                  <div class="entry"><div class="key">{{this.0}}</div><div class="value" on-click="copyToClipboard(this.1, 'Copied value to clipboard.'), false">{{typeof this.1 === 'object' ? JSON.stringify(this.1) : this.1}}</div></div>
+                {{/each}}
 
+                <div class=buttons>
+                  {{#if ~/allowUndoSingle}}<button class=undo on-click="@.undoSingle(record), false" title="Undo this change by running the inverse of the statment that created the change.">Undo</button>{{/if}}
+                  <button class=split-up title="Split this entry and all entries above it up to the previous segment into a new segment" on-click="@.renameSegment(record, 'above'), false">&#9650;</button> <button class=split-down title="Split this entry and all entries below it down to the next segment into a new segment" on-click="@.renameSegment(record, 'below'), false">&#9660;</button>
+                </div>
+              </div>
+            {{/if}}
+          {{else}}
+            <div class="wrapper striped-{{index % 2 == 0 ? 'even' : 'odd'}}" on-click="@event.shiftKey ? copyToClipboard(record.old || {}, 'Copied old record JSON to clipboard.') : copyToClipboard(record.new || {}, 'Copied new record JSON to clipboard.'), false">
+              <div class=name><span>{{record.table}} {{entry.id || ''}} {{entry.status || '(empty changeset)'}}</span><span class=src>({{record.source}})</span></div>
               <div class=buttons>
-                {{#if ~/allowUndoSingle}}<button class=undo on-click="@.undoSingle(record), false" title="Undo this change by running the inverse of the statment that created the change.">Undo</button>{{/if}}
                 <button class=split-up title="Split this entry and all entries above it up to the previous segment into a new segment" on-click="@.renameSegment(record, 'above'), false">&#9650;</button> <button class=split-down title="Split this entry and all entries below it down to the next segment into a new segment" on-click="@.renameSegment(record, 'below'), false">&#9660;</button>
               </div>
             </div>
           {{/if}}
-        {{else}}
-          <div class="wrapper striped-{{index % 2 == 0 ? 'even' : 'odd'}}" on-click="@event.shiftKey ? copyToClipboard(record.old || {}, 'Copied old record JSON to clipboard.') : copyToClipboard(record.new || {}, 'Copied new record JSON to clipboard.'), false">
-            <div class=name><span>{{record.table}} {{entry.id || ''}} {{entry.status || '(empty changeset)'}}</span><span class=src>({{record.source}})</span></div>
-            <div class=buttons>
-              <button class=split-up title="Split this entry and all entries above it up to the previous segment into a new segment" on-click="@.renameSegment(record, 'above'), false">&#9650;</button> <button class=split-down title="Split this entry and all entries below it down to the next segment into a new segment" on-click="@.renameSegment(record, 'below'), false">&#9660;</button>
-            </div>
-          </div>
-        {{/if}}
-      {{/with}}
+        {{/with}}
+      {{/unless}}
       {{#if ~/entries[index + 1] && ~/entries[index + 1].segment !== .segment}}{{#with ~/entries[index + 1]}}
-        <div class=header><h2 title="Double click to rename segment" on-dblclick="@.renameSegment(.), false">{{.segment}}</h2> <div class=buttons style="padding-top: 0.9em;"><button on-click="@.toggleHidden(., @event.ctrlKey || @event.shiftKey)" title="Skip confirmation by holding ctrl or shift when clicking.">{{#if .hide}}Show{{else}}Hide{{/if}}</button>{{#if ~/allowUndoSegment}}<button class=undo on-click="@event.altKey ? @.undoAndHide(.) : @.undoSegment(.), false" title="Undo all changes in this segment by replaying the changes in reverse. This will also create a new segment named 'Undo {{.segment}}', unless you hold the ctrl or shift key when clicking this button. Hold alt to undo the segment and hide both this and the new undo segment.">Undo</button>{{/if}}</div></div>
+        <div class=header><h2 title="Double click to rename segment" on-dblclick="@.renameSegment(.), false">{{#if ~/collapse[.segment]}}&raquo;{{/if}}{{.segment}}</h2> <div class=buttons style="padding-top: 0.9em;"><button on-click="@.toggleHidden(., @event.ctrlKey || @event.shiftKey)" title="{{.hide ? 'Show' : 'Hide'}} this segment. This will modify the entries in the segment, which will persist across clients and downloads. Skip confirmation by holding ctrl or shift when clicking.">{{#if .hide}}Show{{else}}Hide{{/if}}</button>{{#if ~/allowUndoSegment}}<button class=undo on-click="@event.altKey ? @.undoAndHide(.) : @.undoSegment(.), false" title="Undo all changes in this segment by replaying the changes in reverse. This will also create a new segment named 'Undo {{.segment}}', unless you hold the ctrl or shift key when clicking this button. Hold alt to undo the segment and hide both this and the new undo segment.">Undo</button>{{/if}}<button on-click="@.scrollLock(), @.toggle('collapse.' + escapeKey(.segment))" title="{{~/collapse[.segment] ? 'Expand' : 'Collapse'}} all segments named '{{.segment}}'. This does not modify the entries in the segment.">{{~/collapse[.segment] ? 'Expand' : 'Collapse'}}</button></div></div>
       {{/with}}{{/if}}
       <else>
         {{#if ~/exprError}}<code class=expr>{{~/expr}}</code> is an invalid filter.<br /><br /><pre>Error: {{~/exprError.message + '\n\n'}}{{~/exprError.marked}}</pre>{{else}}No change entries have been recorded.{{/if}}
@@ -860,6 +899,10 @@
       {{#unless (@.source && !~/loaded) && schemas}}
         <div />
       {{/unless}}
+    </div>
+    <div style="border-bottom: 1px solid; margin-bottom: 0.5em; padding: 0.5em 0;">
+      <button on-click="@.collapseAll()" title="Collapse all sections. Sections that appear afterwards will still be expanded.">Collapse All</button>
+      <button on-click="@.set('collapse', {})" title="Expand all sections.">Expand All</button>
     </div>
     <div style="display: flex; justify-content: space-between;">
       {{#if ~/entries.length}}
@@ -1118,6 +1161,7 @@
         {{_schema.functions.length}} functions
       </div>
     </tab>
+    <tab right button on-click="@.refreshSchema()" hidden="{{!@.refreshSchema}}"><title>&#10227;</title></tab>
   </tabs>
 </script>
 
@@ -1297,7 +1341,7 @@
       </split>
     {{elseif pad.syntax === 'markdown'}}
       {{#if ~/unsaved}}<div style="position: absolute; left: 50%; top: 0; padding: 0.5em; opacity: 0.7; background-color: rgba(128, 128, 128, 0.5); border-radius: 0 0 0.5em 0.5em; height: 1em; z-index: 100;">unsaved</div>{{/if}}
-      <tabs pad flex style="height: 100%;">
+      <tabs pad flex style="height: 100%;" bind-selected="~/activeTab">
         <tab no-pad title="Edit">
           <div style="flex-grow: 1; display: flex; flex-direction: column;">
             {{>header, true as nosave}}
@@ -1310,6 +1354,7 @@
           </div>
         </tab>
       </tabs>
+      {{#if ~/activeTab === 1}}<button class="print flat" on-click="@.printMarkdown(_markdown, @event.ctrlKey || @event.shiftKey)" title="Print the rendered HTML. ctrl+click or shift+click to download the rendered HTML.">Print</button>{{/if}}
     {{elseif pad && 'text' in pad}}
       <div style="flex-grow: 1; display: flex; flex-direction: column;">
         {{>header}}
@@ -1416,10 +1461,10 @@
                 </div>
               </tab>
               <tab title="Reports" no-pad>
-                <div style="display: flex; height: 100%; margin-top: 2px;">
-                  <div style="flex-grow: 1;">
+                <div style="display: flex; height: 100%; width: 100%; padding-top: 2px; box-sizing: border-box;">
+                  <div style="flex-grow: 1; width: calc(100% - 15em);">
                     {{#if ~/queryreport}}
-                      <tabs style="overflow: hidden;" flex pad>
+                      <tabs style="overflow: hidden; height: 100%;" flex pad>
                         <tab title="Details">
                           <div style="display: flex; justify-content: space-between; align-items: center;"><span>{{~/queryreport.definition.name}}</span><button on-click="@.reportDesigner(~/queryreport, @event.altKey)" title="Open this report in the report designer. alt+click to open a new copy of this report in the report designer.">Report Designer</button></div>
                           <h3>Queries</h3>
@@ -1434,12 +1479,32 @@
                         <tab title="Run">
                           <div>
                             {{#each ~/queryreport.definition.parameters}}
-                              <label as-field>{{.label || .name}}<input value="{{~/params[.name]}}" /></label>
+                              <label as-field>
+                                {{#if .type === 'boolean'}}
+                                  <input type=checkbox checked="{{~/queryparams[.name]}}" /> {{.label || .name}}
+                                {{elseif .options}}
+                                  <select value="{{~/queryparams[.name]}}">
+                                    {{#each .options}}
+                                      <option value="{{.value || .name}}">{{.name || .value}}</option>
+                                    {{/each}}
+                                  </select>
+                                {{else}}
+                                  {{.label || .name}}<input {{#if .type === 'number'}}type=number{{/if}} value="{{~/queryparams[.name]}}" />
+                                {{/if}}
+                              </label>
                             {{/each}}
+                            {{#if ~/queryreport.definition.type !== 'delimited'}}
+                              <label as-field><input type=checkbox checked="{{~/queryrun.delimited}}" /> Run displayed report as delimited?</label>
+                              {{#if ~/queryrun.delimited}}
+                                <label as-field>Quote<input value="{{~/queryrun.quote}}" /></label>
+                                <label as-field>Field<input value="{{~/queryrun.field}}" placeholder="," /></label>
+                                <label as-field>Record<input value="{{~/queryrun.record}}" placeholder="\n" /></label>
+                              {{/if}}
+                            {{/if}}
                           </div>
                           <div>
-                            <button on-click="@.runSingleReport(queryreport, false, ~/params, false)">View Report</button>
-                            <button on-click="@.runSingleReport(queryreport, false, ~/params, true)">Download Report</button>
+                            <button on-click="@.runSingleReport(queryreport, false, ~/queryparams, false)">View Report</button>
+                            <button on-click="@.runSingleReport(queryreport, false, ~/queryparams, true)">Download Report</button>
                           </div>
                         </tab>
                         <tab button right hidden="{{!~/queryreport}}" on-click="@.swapReport('queryreport')">
@@ -1469,10 +1534,10 @@
       <tab title="Query All" no-pad>
         <tabs style="margin-top: 2px; overflow: hidden; height: 100%;" pad flex>
           <tab title="Reports" no-pad>
-            <div style="display: flex; height: 100%; margin-top: 2px;">
-              <div style="flex-grow: 1;">
+            <div style="display: flex; height: 100%; width: 100%; padding-top: 2px; box-sizing: border-box;">
+              <div style="flex-grow: 1; flex-shrink: 1; width: calc(100% - 15em);">
                 {{#if ~/allreport}}
-                  <tabs style="overflow: hidden;" flex pad>
+                  <tabs style="overflow: hidden; height: 100%;" flex pad>
                     <tab title="Details">
                       <div style="display: flex; justify-content: space-between; align-items: center;"><span>{{~/allreport.definition.name}}</span><button on-click="@.reportDesigner(~/allreport, @event.altKey)" title="Open this report in the report designer. alt+click to open a new copy of this report in the report designer.">Report Designer</button></div>
                       <h3>Queries</h3>
@@ -1488,8 +1553,28 @@
                       <div style="padding: 0.3em; display: flex;"><div style="flex-shrink: 1;">Reports will run against all visible databases in the Host Explorer tree.</div><label style="width: 9em; flex-shrink: 0;" as-field>Concurrency <tip>The number of concurrent connections to utilize on the server. This is used for all requested databases, so up to this number could be used on a single target server or down to 1/x of this number where x is the number of servers with visible databases.</tip><input type=number placeholder=10 value="{{~/concurrency}}" /></label></div>
                       <div>
                         {{#each ~/allreport.definition.parameters}}
-                          <label as-field>{{.label || .name}}<input value="{{~/params[.name]}}" /></label>
+                          <label as-field>
+                            {{#if .type === 'boolean'}}
+                              <input type=checkbox checked="{{~/allparams[.name]}}" /> {{.label || .name}}
+                            {{elseif .options}}
+                              <select value="{{~/allparams[.name]}}">
+                                {{#each .options}}
+                                  <option value="{{.value || .name}}">{{.name || .value}}</option>
+                                {{/each}}
+                              </select>
+                            {{else}}
+                              {{.label || .name}}<input {{#if .type === 'number'}}type=number{{/if}} value="{{~/allparams[.name]}}" />
+                            {{/if}}
+                          </label>
                         {{/each}}
+                        {{#if ~/allreport.definition.type !== 'delimited'}}
+                          <label as-field><input type=checkbox checked="{{~/allrun.delimited}}" /> Run displayed report as delimited?</label>
+                          {{#if ~/allrun.delimited}}
+                            <label as-field>Quote<input value="{{~/allrun.quote}}" /></label>
+                            <label as-field>Field<input value="{{~/allrun.field}}" placeholder="," /></label>
+                            <label as-field>Record<input value="{{~/allrun.record}}" placeholder="\n" /></label>
+                          {{/if}}
+                        {{/if}}
                       </div>
                       <div>
                         <button on-click="@.runReport(allreport, false, false)" {{#unless @.visibleDBs().length}}disabled title="At least one database must be visible in the list of databases to run this report."{{/unless}}>View Report</button>
@@ -1620,6 +1705,10 @@
         {{/each}}
       </div>
       {{#if .method === 'POST'}}<label as-field style="min-height: 15em;">Body<textarea>{{.body}}</textarea></label>{{/if}}
+      <label as-field>Condition <tip>Set a condition expression to avoid running a request that isn't necessary for how the report is being run. Parameters are available to the condition expression, and if it returns false, the request will not be made.</tip><textarea>{{.condition}}</textarea></label>
+      {{#if .condition}}
+      <label as-field>Alterante <tip>Set an alternate expression to provide a default value if the conditional expression returned false.</tip><textarea>{{.alternate}}</textarea></label>
+      {{/if}}
       {{/with}}
     {{elseif source.type === 'query-all'}}
       <label as-field>Result Name<input value="{{source.result}}" /></label>
@@ -1804,6 +1893,7 @@
 
   </head>
   <body>
+<iframe id=print style="position: absolute; left: -1000px; width: 800px;"></iframe>
 <div id=target />
 
 <script src="./index.js"></script>
@@ -1818,6 +1908,30 @@
     vim.map('jk', '<Esc>', 'insert');
     vim.map('kj', '<Esc>', 'insert');
     vim.defineEx('write', 'w', cm => cm.ace.execCommand('save'));
+  });
+  setTimeout(() => {
+    const frame = document.getElementById('print').contentDocument;
+    const link = frame.createElement('link');
+    link.setAttribute('rel', 'stylesheet');
+    link.setAttribute('href', './hljs@11.10.0/stackoverflow-light.css');
+    const css = frame.createElement('style');
+    css.textContent = `
+@page { margin: 5mm; }
+code, .mermaid-chart { border-radius: 0.5em; }
+code { white-space: pre-wrap; }
+table { margin: 1em 0; border-collapse: collapse; border: 1px sold rgba(128, 128, 128, 0.5); }
+td, th { padding: 0.25em 0.5em; border: 1px solid rgba(128, 128, 128, 0.5); }
+th { text-align: center; border-bottom: 1px solid; }
+tbody tr:nth-child(2n+1) td { background-color: rgba(128, 128, 128, 0.1); }
+h1, h2, h3 { padding: 0; margin: 0em 0 0.5em 0; }
+* ~ h1, * ~ h2, * ~ h3 { margin-top: 1em; }
+.mermaid-chart { display: flex; justify-content: center; margin: 1em 0; }
+html { font-family: sans-serif; margin: 0; padding: 0; }
+body { margin: 0; padding: 0; }
+`;
+    const head = frame.getElementsByTagName('head')[0];
+    head.appendChild(link);
+    head.appendChild(css);
   });
 </script>
 <script src="./marked@14.0.0.js"></script>

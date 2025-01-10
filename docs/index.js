@@ -1182,6 +1182,14 @@ Window.extendWith(ControlPanel, {
     newSegment(v) {
       if (v && v !== this.get('status.segment')) this.next(v);
     },
+    'store.settings.defaultPanel'(v) {
+      if (v && !this.get('activeTab')) {
+        setTimeout(() => {
+          const tab = { diffs: 1, monitor: 2, queries: 3, reports: 4, scratch: 5, settings: 6 }[v] || 0;
+          this.findComponent('tabs')?.select(tab);
+        });
+      }
+    },
   },
   computed: {
     connections() {
@@ -1531,7 +1539,7 @@ h2 { padding: 1em 0 0.5em 0; margin: 0; }
 .header h2 { flex-shrink: 1; user-select: none; }
 .header > .buttons, .wrapper > .buttons { opacity: 0; transition: opacity 0.3s ease; }
 .header:hover .buttons, .wrapper:hover > .buttons, .diff.whole:hover .buttons { opacity: 1; z-index: 20; }
-.wrapper > .buttons { position: absolute; right: 0.2em; top: 0.2em; }
+.header > .buttons, .wrapper > .buttons { position: absolute; right: 0.2em; top: 0.2em; }
 .rvlitem { position: relative; }
 .rvlitem .buttons { position: absolute; top: 0; right: 0; opacity: 0; transition: opacity 0.2s ease-in-out; }
 `
@@ -1770,12 +1778,27 @@ res
     if (this.event?.event?.ctrlKey || this.event?.event?.shiftKey || !this.source) notify({ action: 'clear' });
     else notify({ action: 'clear', source: this.source });
   }
+
+  collapseAll() {
+    const entries = this.get('allEntries') || [];
+    const res = {};
+    for (const e of entries) if (!res[e.segment]) res[e.segment] = true;
+    this.set('collapse', res);
+  }
+
+  scrollLock() {
+    this.scrolllock = true;
+    setTimeout(() => this.scrolllock = false, 500);
+  }
 }
 Window.extendWith(Entries, {
   template: '#entries',
   options: { flex: true, resizable: true, width: '50em', height: '40em' },
   use: [RauiPopover.default({ name: 'pop' })],
   css: EntryCSS,
+  data() {
+    return { collapse: {} };
+  },
   computed: {
     allEntries() {
       const source = this.get('@.source');
@@ -1796,8 +1819,20 @@ Window.extendWith(Entries, {
       let res = this.get('allEntries');
       const expr = this.get('expr');
       const showHidden = this.get('showHidden');
+      const collapse = this.get('collapse') || {};
       if (expr) res = evaluate({ list: res }, `filter(list =>(${expr}))`);
       if (!showHidden) res = res.filter(e => !e.hide);
+      if (Object.keys(collapse).length) {
+        const added = {};
+        res = res.reduce((a, c) => {
+          if (!collapse[c.segment]) a.push(c);
+          else if (!added[c.segment]) {
+            added[c.segment] = true;
+            a.push({ segment: c.segment, placeholder: true });
+          }
+          return a;
+        }, []);
+      }
       return res;
     },
     exprError() {
@@ -1828,7 +1863,7 @@ Window.extendWith(Entries, {
   },
   observe: {
     'entries.length'() {
-      if (this.scroller) {
+      if (this.scroller && !this.scrolllock) {
         const s = this.scroller;
         if (s.scrollTop + s.clientHeight >= s.scrollHeight - 10) setTimeout(() => {
           s.scrollTo({ top: s.scrollHeight, behavior: 'smooth', block: 'end' });
@@ -1842,7 +1877,7 @@ Window.extendWith(Entries, {
     'hideBlankFields hideDefaultFields'() {
       this._cache = {};
       this.update('@.details', { force: true });
-    }
+    },
   },
 });
 
@@ -1999,15 +2034,22 @@ Window.extendWith(Schema, {
     init() {
       this.link('compareSchema', 'compareSchema', { instance: app });
     },
-    async render() {
-      if (!this.config) return;
-      this.blocked = true;
-      try {
-        const msg = await request({ action: 'schema', client: this.config });
-        this.blocked = false;
-        this.set('schema', msg.schema);
-      } catch {
-        setTimeout(() => this.close(), 1000);
+    render() {
+      if (this.config) {
+        if (!this.refreshSchema) {
+          this.set('@.refreshSchema', async function refreshSchema() {
+            if (!this.config) return;
+            this.blocked = true;
+            try {
+              const msg = await request({ action: 'schema', client: this.config });
+              this.blocked = false;
+              this.set('schema', msg.schema);
+            } catch {
+              setTimeout(() => this.close(), 1000);
+            }
+          });
+        }
+        this.refreshSchema();
       }
     },
   },
@@ -2029,28 +2071,76 @@ Window.extendWith(SchemaCompare, {
 `,
 });
 
-let md;
-const checkLanguage = (function() {
-  const map = { bash: false, c: false, cpp: false, csharp: false, go: false, handlebars: false, javascript: false, lua: false, mermaid: false, pgsql: false, php: false, rust: false, sql: false, typescript: false, vbnet: false, xml: false };
-  const alias = { js: 'javascript', ts: 'typescript', ractive: 'handlebars', sh: 'bash', vb: 'vbnet', 'c#': 'csharp', golang: 'go', rs: 'rust', hbs: 'handlebars', chart: 'mermaid' };
-  const deps = { handlebars: ['xml'] };
-  const urls = {
-    mermaid: './mermaidjs@11.0.2.js',
-  };
-  return function(l) {
-    if (!(l in map) && alias[l]) l = alias[l];
-    if (map[l] === false) {
-      map[l] = true;
-      if (deps[l]) for (const d of deps[l]) checkLanguage(d);
-      const el = document.createElement('script');
-      el.setAttribute('src', urls[l] || `./hljs@11.10.0/languages/${l}.js`);
-      el.async = false;
-      document.head.appendChild(el);
-      checkLanguage.rerun = true;
-      if (l === 'mermaid') setTimeout(() => globalThis.mermaid.initialize({ securityLevel: 'loose' }), 100);
+const renderMD = (function() {
+  const checkLanguage = (function() {
+    const map = { bash: false, c: false, cpp: false, csharp: false, go: false, handlebars: false, javascript: false, lua: false, mermaid: false, pgsql: false, php: false, rust: false, sql: false, typescript: false, vbnet: false, xml: false };
+    const alias = { js: 'javascript', ts: 'typescript', ractive: 'handlebars', sh: 'bash', vb: 'vbnet', 'c#': 'csharp', golang: 'go', rs: 'rust', hbs: 'handlebars', chart: 'mermaid' };
+    const deps = { handlebars: ['xml'] };
+    const urls = {
+      mermaid: './mermaidjs@11.0.2.js',
+    };
+    return function(l) {
+      if (!(l in map) && alias[l]) l = alias[l];
+      if (map[l] === false) {
+        map[l] = true;
+        if (deps[l]) for (const d of deps[l]) checkLanguage(d);
+        const el = document.createElement('script');
+        el.setAttribute('src', urls[l] || `./hljs@11.10.0/languages/${l}.js`);
+        el.async = false;
+        document.head.appendChild(el);
+        checkLanguage.rerun = true;
+        if (l === 'mermaid') setTimeout(() => globalThis.mermaid.initialize({ securityLevel: 'loose' }), 100);
+      }
+      return l;
     }
-    return l;
-  }
+  })();
+
+  let md;
+  let theme;
+  let subs;
+  let id = 1;
+  return async function(str, opts = {}) {
+    theme = opts.theme || Ractive.styleGet('theme');
+    if (!md) {
+      md = marked.parse;
+      const renderer = new marked.Renderer();
+      renderer.code = ({ lang, text: code }) => {
+        const l = checkLanguage(lang);
+        if (lang === 'mermaid') {
+          if (typeof subs[code] === 'string') return subs[code];
+          else if (globalThis.mermaid) subs[code] = globalThis.mermaid.render(`graph${id++}`, `---\nconfig:\n  theme: ${theme === 'light' ? 'forest' : 'dark'}\n---\n${code}`).then(v => `<div class="mermaid-chart ${theme || 'light'}">${v.svg}</div>`);
+          return `<pre>${code}</pre>`;
+        } else if (lang === 'svg+inline') {
+          return code;
+        } else if (lang === 'png+base64') {
+          return `<img src="data:image/png;base64,${code}" />`;
+        } else if (lang === 'jpeg+base64') {
+          return `<img src="data:image/jpeg;base64,${code}" />`;
+        } else if (lang === 'raport+html') {
+          return evaluate(code);
+        } else if (lang === 'raport+text') {
+          return `<pre><code class="hljs text">${evaluate(code)}</code></pre>`;
+        } else {
+          const highlighted = l && hljs.getLanguage(l) ? hljs.highlight(code, { language: l, ignoreIllegals: true }).value : code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+          return `<pre><code class="hljs ${l}">${highlighted}</code></pre>`;
+        }
+      };
+      marked.setOptions({ renderer });
+    }
+    subs = {};
+    let html = marked.parse(str);
+    if (checkLanguage.rerun) {
+      checkLanguage.rerun = false;
+      await new Promise(ok => setTimeout(ok, 250));
+      html = await renderMD(str, opts);
+    }
+    if (Object.keys(subs).length) {
+      for (const k in subs) subs[k] = await subs[k];
+      html = marked.parse(str);
+    }
+    if (!opts.nochecks) html = html.replace(/\<input (checked="" )?disabled="" type="checkbox"/g, '<input $1type="checkbox"');
+    return html;
+  };
 })();
 
 class ScratchPad extends Window {
@@ -2120,7 +2210,7 @@ class ScratchPad extends Window {
     if (ok && 'cause' in ok) {
       this.set({
         evalresult: '',
-        evalerror: `Invalid expression: ${ok.message}\n\n${ok.marked}`,
+        evalerror: `Invelid expression: ${ok.message}\n\n${ok.marked}`,
       });
     } else {
       const opts = app.get('scratchroot') || {};
@@ -2173,40 +2263,69 @@ class ScratchPad extends Window {
       this.set('pad.text', txt);
     }
   }
-  renderMD() {
-    const v = this.get('pad.text');
-    if (v && this.get('pad.syntax') === 'markdown') {
-      if (!md) {
-        md = marked.parse;
-        const renderer = new marked.Renderer();
-        renderer.code = ({ lang, text: code }) => {
-          const l = checkLanguage(lang);
-          if (lang === 'mermaid') {
-            return `<pre class="mermaid">---\nconfig:\n  theme: ${Ractive.styleGet('theme') === 'light' ? 'forest' : 'dark'}\n---\n${code}</pre>`;
-          } else if (lang === 'svg+inline') {
-            return code;
-          } else if (lang === 'png+base64') {
-            return `<img src="data:image/png;base64,${code}" />`;
-          } else if (lang === 'jpeg+base64') {
-            return `<img src="data:image/jpeg;base64,${code}" />`;
-          } else {
-            const highlighted = l && hljs.getLanguage(l) ? hljs.highlight(code, { language: l, ignoreIllegals: true }).value : code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-            return `<pre><code class="hljs ${l}">${highlighted}</code></pre>`;
-          }
-        };
-        marked.setOptions({ renderer });
-      }
-      let html = marked.parse(v);
-      html = html.replace(/\<input (checked="" )?disabled="" type="checkbox"/g, '<input $1type="checkbox"');
-      this.set('_markdown', html);
-      if (globalThis.mermaid) setTimeout(() => mermaid.run(), 30);
-      if (checkLanguage.rerun) {
-        checkLanguage.rerun = false;
-        setTimeout(() => {
-          this.renderMD();
-        }, 200);
-      }
+  async printMarkdown(md, dl) {
+    if (dl) {
+      const name = ((this.get('pad.name') || 'untitled') + '.html').split('/').pop();
+      download(name, `<html><head><style>
+html {
+  font-family: sans-serif;
+}
+code, .mermaid-chart {
+  border-radius: 0.5em;
+  margin: 0.5em 0;
+}
+code {
+  white-space: pre-wrap;
+}
+table {
+  margin: 1em 0;
+  border-collapse: collapse;
+  border: 1px sold rgba(128, 128, 128, 0.5);
+}
+td, th {
+  padding: 0.25em 0.5em;
+  border: 1px solid rgba(128, 128, 128, 0.5);
+}
+th {
+  text-align: center;
+  border-bottom: 1px solid;
+}
+tbody tr:nth-child(2n+1) td {
+  background-color: rgba(128, 128, 128, 0.1);
+}
+tbody tr:hover td {
+  background-color: rgba(128, 128, 128, 0.25);
+}
+h1, h2, h3 {
+  padding: 0;
+  margin: 0em 0 0.5em 0;
+}
+* ~ h1, * ~ h2, * ~ h3 {
+  margin-top: 1em;
+}
+.mermaid-chart {
+  display: flex;
+  justify-content: center;
+  margin: 1em 0;
+}
+.mermaid-chart.light {
+  background-color: #f9f9f9;
+}
+.mermaid-chart.dark {
+  background-color: #222;
+}
+${await (await fetch('./hljs@11.10.0/stackoverflow-light.css')).text()}
+</style></head><body>
+${md}</body></html>`, 'text/html');
+    } else {
+      const frame = document.getElementById('print');
+      frame.contentDocument.body.innerHTML = await renderMD(this.get('pad.text'), { theme: 'light', nochecks: true });
+      frame.contentWindow.print();
     }
+  }
+  async renderMD() {
+    const v = this.get('pad.text');
+    if (v && this.get('pad.syntax') === 'markdown') this.set('_markdown', await renderMD(v));
   }
 }
 Window.extendWith(ScratchPad, {
@@ -2340,6 +2459,8 @@ class HostExplore extends Window {
   }
 
   async refreshSchema(selected) {
+    if (!selected) selected = this.get('selectedDB');
+    if (!selected) return;
     this.blocked = true;
 
     try {
@@ -2440,10 +2561,18 @@ class HostExplore extends Window {
       connections = this.visibleDBs(sample);
     }
 
+    if (source.condition) {
+      const root = new Root({}, { parameters: params });
+      const ok = evaluate(root, source.condition);
+      if (!ok) {
+        if (source.alternate) return { value: evaluate(root, source.alternate) };
+        else return  { value: [] };
+      }
+    }
+
     if (!connections.length) return { value: {} };
 
     if (source.type === 'query-all-sql') {
-
       let batch = +this.get('concurrency');
       if (batch > 0) ;
       else if (batch > 500) batch = 500;
@@ -2481,11 +2610,13 @@ class HostExplore extends Window {
   
   async runReport(report, sample, dl) {
     const list = this.visibleDBs();
+    const params = this.get('allparams');
+    const delimited = report.definition.type !== 'delimited' && this.get('allrun.delimited');
 
     if (!list.length) return;
     let file;
-    const name = template(new Root({}, { parameters: this.get('params') }), report.definition.name) || report.definition.name || 'Report';
-    const csv = report.definition.type === 'delimited';
+    const name = template(new Root({}, { parameters: params }), report.definition.name) || report.definition.name || 'Report';
+    const csv = report.definition.type === 'delimited' || delimited;
     if (dl) {
       file = await app.ask(`Please enter a file name:`, 'Report File Name', `${name}.${csv ? 'csv' : 'html'}`);
       if (!file) return;
@@ -2499,10 +2630,12 @@ class HostExplore extends Window {
       const data = {};
 
       for (const src of report.sources) {
-        data[src.name] = await this.reportData(list, src, sample, this.get('params'), report);
+        data[src.name] = await this.reportData(list, src, sample, params, report);
       }
 
-      let html = run(report.definition, data);
+      const extra = delimited ? Object.assign({}, this.get('allrun')) : {};
+      for (const k in extra) if (typeof extra[k] === 'string') extra[k] = evaluate(`"${extra[k].replaceAll('"', '\\"')}"`);
+      let html = run(report.definition, data, params, extra);
       if (dl) {
         download(file, html, csv ? 'text/csv' : 'text/html');
       } else {
@@ -2556,9 +2689,10 @@ class HostExplore extends Window {
   async runSingleReport(report, sample, params, dl) {
     const selected = this.get('selectedDB.connection.config');
     if (!selected) return;
+    const delimited = report.definition.type !== 'delimited' && this.get('queryrun.delimited');
 
-    const name = template(new Root({}, { parameters: this.get('params') }), report.definition.name) || report.definition.name || 'Report';
-    const csv = report.definition.type === 'delimited';
+    const name = template(new Root({}, { parameters: params }), report.definition.name) || report.definition.name || 'Report';
+    const csv = report.definition.type === 'delimited' || delimited;
     if (dl) {
       file = await app.ask(`Please enter a file name:`, 'Report File Name', `${name}.${csv ? 'csv' : 'html'}`);
       if (!file) return;
@@ -2572,12 +2706,25 @@ class HostExplore extends Window {
       const data = {};
 
       for (const src of report.sources) {
+        if (src.condition) {
+          const root = new Root({}, { parameters: params });
+          const ok = evaluate(root, src.condition);
+          if (!ok) {
+            if (src.alternate) data[src.name] = { value: evaluate(root, src.alternate) };
+            else data[src.name] = { value: [] };
+            continue;
+          }
+        }
         if (src.type === 'query') {
           data[src.name] = (await request({ action: 'query', query: [src.query], params: [queryParams(report.definition, src, params)], client })).result;
+        } else if (src.type === 'pg-fetch') {
+          data[src.name] = { value: await makeRequest(src, params) };
         }
       } // TODO: other sources?
 
-      let html = run(report.definition, data);
+      const extra = delimited ? Object.assign({}, this.get('queryrun')) : {};
+      for (const k in extra) if (typeof extra[k] === 'string') extra[k] = evaluate(`"${extra[k].replaceAll('"', '\\"')}"`);
+      let html = run(report.definition, data, params, extra);
       if (dl) {
         download(file, html, csv ? 'text/csv' : 'text/html');
       } else {
@@ -2684,8 +2831,13 @@ class HostExplore extends Window {
   async swapReport(path, report) {
     const cur = this.get(path);
     if (report) {
-      await store.acquire('report', report.id);
+      const rep = await store.acquire('report', report.id);
       this.link(`store.report.${report.id}`, path, { instance: app });
+      const params = {};
+      if (rep.definition?.parameters) {
+        for (const p of rep.definition.parameters) if (p.init) params[p.name] = evaluate(p.init);
+      }
+      this.set(path === 'queryreport' ? 'queryparams' : 'allparams', params);
     } else {
       this.unlink(path);
     }
@@ -2749,7 +2901,7 @@ dd { white-space: pre-wrap; }
     },
   },
   data() {
-    return { hosts: {}, schemas: {}, meta: {}, expanded: {}, schemaexpanded: { table: {} } };
+    return { hosts: {}, schemas: {}, meta: {}, expanded: {}, schemaexpanded: { table: {} }, params: {} };
   },
   observe: {
     'hosts filter'() {
@@ -2908,6 +3060,15 @@ class Report extends Window {
 
   async fetchSource(msg) {
     const src = msg.source;
+    if (src.condition) {
+      const root = new Root({}, { parameters: msg.params || {} });
+      const ok = evaluate(root, src.condition);
+      if (!ok) {
+        if (src.alternate) this.respond({ data: evaluate(root, src.alternate) }, msg);
+        else this.respond({ data: [] }, msg);
+        return;
+      }
+    }
     if (src.type === 'diff') {
       if (Object.keys(app.get('status.clients') || {}).length) {
         this.respond({ data: app.get('entries') }, msg);
@@ -2979,6 +3140,12 @@ class Report extends Window {
     report.type = 'report';
     report.definition = (await this.request({ action: 'get', get: 'report' })).get;
     report.sources = (await this.request({ action: 'get', get: 'sources' })).get;
+    for (const s of report.sources) {
+      if (['pg-fetch', 'query', 'query-all'].includes(s.type) && s.data) {
+        delete s.cached;
+        delete s.data;
+      }
+    }
     await store.save(report);
     if (!id) await this.load(report._id);
     this.lock = false;
@@ -3267,7 +3434,7 @@ Ractive.helpers.copyToClipboard = (function() {
 
 let unloadTm;
 function unload(ev) {
-  if (app.get('halted')) return;
+  if (app.get('halted') || !app.get('status.VERSION')) return;
   ev.preventDefault();
   ev.returnValue = '';
   app.set('unloading', true);

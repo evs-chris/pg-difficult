@@ -558,6 +558,8 @@
       }
 
       if (!window.id) { window.set('@.id', options.id || ("window" + (id++))); }
+      var cur = this.getWindow(window.id);
+      if (cur && cur !== window) { throw new Error('duplicate window id', window.id); }
       if (!this.get(("windows." + (escape(window.id))))) {
         this.set(("windows." + (escape(window.id))), Object.assign({ show: options.show !== false, autosize: true, id: window.id, blockers: [], close: true, minimize: true, maximize: true, minWidth: '5em', minHeight: '5em' }, options, { id: window.id }));
       }
@@ -627,15 +629,15 @@
 
     Host.prototype.changeWindowId = function changeWindowId (id, newId) {
       var wnd = this.getWindow(id);
-      if (!wnd) return;
+      if (!wnd) { return; }
       wnd.set('@.id', newId);
-      this.set('windows.' + escape(newId), this.get('windows.' + escape(id)));
-      wnd.link(`windows.${escape(newId)}`, 'control', { instance: this });
-      this.set('windows.' + escape(id), undefined);
+      this.set(("windows." + (escape(newId))), this.get(("windows." + (escape(id)))));
+      wnd.link(("windows." + (escape(newId))), 'control', { instance: this });
+      this.set(("windows." + (escape(id))), undefined);
       delete this.get('windows')[id];
-      this.set('windows.' + escape(newId) + '.id', newId);
-    }
-
+      this.set(("windows." + (escape(newId)) + ".id"), newId);
+      if (this.get('topLevel') === id) { this.set('topLevel', newId); }
+    };
 
     Host.prototype.getWindow = function getWindow (id) {
       return this.children.byName.window && this.children.byName.window.filter(function (w) { return w.instance.id === id; }).map(function (w) { return w.instance; })[0];

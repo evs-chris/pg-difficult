@@ -1,3 +1,25 @@
+## 1.13.2
+
+*unreleased*
+
+### Bugs
+
+* Report sources that load or cache data will now remove any stored data before saving the definition to avoid bloat. In more extreme cases, this could result in failure to save or sync the definition.
+* Newly opened windows will now have a correct title on mobile layouts without have to reselect them from the window list on the menu.
+* The client-only client will no longer offer to stop the server.
+
+### Features
+
+* There is now a setting to set the default control panel tab.
+* Markdown scratch pads will now render asynchronously and support having their rendered content printed or downloaded.
+* Diff segments can now be collapsed and expanded.
+* Markdown scratch pads can now have fenced raport+text code that is evaluated to a code block at render.
+* Host explorer reports have better support for parameters, including more appropiate inputs for different typed parameters.
+* Host explorer visual reports can now be run as delimited with configurable delimiters and quotes. This is utilizing underlying support in raport that renders the first repeater to text.
+* Report sources can now be conditional, meaning they can be skipped if they aren't necessary for the report to run based on the parameters it is given. If a source is elided, it can supply an alternate expression for its data or it will resolve to an empty array.
+* Schema explorers that have a connection to a database now have a button on the tab bar to refresh the schema.
+
+
 ## 1.13.1
 
 2024-11-24
