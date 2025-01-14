@@ -615,9 +615,14 @@
           {{#if !@global.clientOnly}}
             <label as-field class=inline><input type=checkbox bind-checked="~/store.settings.allowUndoSegment" /> Enable undoing diff segments by default?</label>
             <label as-field class=inline><input type=checkbox bind-checked="~/store.settings.allowUndoSingle" /> Enable undoing individual diff entries by default?</label>
+            {{#if ~/store.settings.allowUndoSegment || ~/store.settings.allowUndoSingle}}
+              <label as-field class=inline><input type=checkbox bind-checked="~/store.settings.skipUndoEmpty" /> Skip undo for diff entries with no changes (empty changesets)?</label>
+            {{/if}}
+            <br/>
           {{/if}}
           <label as-field class=inline><input type=checkbox bind-checked="~/store.settings.hideBlankFields" /> Hide empty string fields in diff records by default?</label>
           <label as-field class=inline><input type=checkbox bind-checked="~/store.settings.hideDefaultFields" /> Hide defaulted fields in diff records by default?</label>
+          <label as-field class=inline><input type=checkbox bind-checked="~/store.settings.hideEmptyEntries" /> Hide diff entries with no changes (empty changesets)?</label>
         </fieldset>
         {{#if !@global.clientOnly}}
           <fieldset style="margin-top: 1em;">
@@ -822,6 +827,9 @@
 
 <script type=text/ractive id=entries>
   <div class="content-wrapper">
+    <div style="position: absolute; top: 1em; right: 7em; font-size: 0.9em;">
+      {{~/entryCount}} of {{~/allEntries.length}}
+    </div>
     <div class="controls">
       {{#if @.source && !~/loaded}}
         <label as-field title="The segment name groups sets of changes together. The segment will automatically be updated when you stop typing, and any new changes will get the new segment name.">Segment<input value="{{~/newSegment}}" lazy=1500 /></label>
@@ -886,16 +894,20 @@
     </virtual-list>
   </div>
   <pop bind-popped="~/showSettings" where="below" align="end" tail>
-    <div style="width: 26em; display: flex; flex-direction: column;">
-      {{#if @.source && !~/loaded}}
-        <label class=inline as-field title="Check to enable undoing segments"><input type=checkbox bind-checked="~/allowUndoSegment" /> Undo segments?</label>
-        <label class=inline as-field title="Check to enable undoing individual entries"><input type=checkbox bind-checked="~/allowUndoSingle" /> Undo single?</label>
-      {{/if}}
+    <div style="width: 26em; columns: 2;">
       {{#if schemas}}
         <label class=inline as-field title="Check to hide empty string fields in entries"><input type=checkbox bind-checked="~/hideBlankFields" /> Hide blank?</label>
         <label class=inline as-field title="Check to hide fields with default values in entries"><input type=checkbox bind-checked="~/hideDefaultFields" /> Hide default?</label>
+        <label class=inline as-field title="Check to entries with no changes (empty changesets)"><input type=checkbox bind-checked="~/hideEmptyEntries" /> Hide empty?</label>
       {{/if}}
       <label class=inline as-field title="Check to show hidden segments in entries"><input type=checkbox bind-checked="~/showHidden" /> Show hidden?</label>
+      {{#if @.source && !~/loaded}}
+        <label class=inline as-field title="Check to enable undoing segments"><input type=checkbox bind-checked="~/allowUndoSegment" /> Undo segments?</label>
+        <label class=inline as-field title="Check to enable undoing individual entries"><input type=checkbox bind-checked="~/allowUndoSingle" /> Undo single?</label>
+        {{#if ~/allowUndoSegment || ~/allowUndoSingle}}
+          <label class=inline as-field title="Check to skip entries with no changes (empty changesets) when undoing"><input type=checkbox bind-checked="~/skipUndoEmpty" /> Skip empty undo?</label>
+        {{/if}}
+      {{/if}}
       {{#unless (@.source && !~/loaded) && schemas}}
         <div />
       {{/unless}}
