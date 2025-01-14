@@ -5151,12 +5151,12 @@
         const p = path.split('.').reduce((a, c) => fullnum.test(c) ? `${a}[]` : `${a}${a.length ? '.' : ''}${c}`, '');
         return map[`${p}[]`];
     }
-    function diff(v1, v2, equal) {
-        const type = equal && typeof equal === 'object' ? equal.type : equal;
+    function diff(v1, v2, opts) {
+        const type = (opts === null || opts === void 0 ? void 0 : opts.equal) && typeof opts.equal === 'object' ? opts.equal.type : opts === null || opts === void 0 ? void 0 : opts.equal;
         const eq = typeof type === 'function' ? type : type === 'strict' ? strictEqual : type === 'sql' ? sqlEqual : looseEqual;
-        return _diff(v1, v2, '', {}, eq, typeof equal === 'object' ? equal.identity : undefined);
+        return _diff(v1, v2, '', {}, eq, typeof (opts === null || opts === void 0 ? void 0 : opts.equal) === 'object' ? opts === null || opts === void 0 ? void 0 : opts.equal.identity : undefined, (opts === null || opts === void 0 ? void 0 : opts.keys) || 'all');
     }
-    function _diff(v1, v2, path, diff, equal, ident) {
+    function _diff(v1, v2, path, diff, equal, ident, keyMode) {
         if (typeof v1 !== 'object' || typeof v2 !== 'object') {
             if (v1 === v2)
                 return diff;
@@ -5192,10 +5192,18 @@
         else {
             const _v1 = v1 || {};
             const _v2 = v2 || {};
-            const ks = Object.keys(_v1);
-            for (const k of Object.keys(_v2))
-                if (!~ks.indexOf(k))
-                    ks.push(k);
+            const ks = [];
+            if (keyMode === 'common') {
+                for (const k of Object.keys(_v1))
+                    if (k in _v2)
+                        ks.push(k);
+            }
+            else {
+                ks.push.apply(ks, Object.keys(_v1));
+                for (const k of Object.keys(_v2))
+                    if (!~ks.indexOf(k))
+                        ks.push(k);
+            }
             for (const k of ks) {
                 const vv1 = _v1[k];
                 const vv2 = _v2[k];
@@ -6609,7 +6617,7 @@
             const eq = equal;
             equal = (l, r) => evalApply(ctx, eq, [l, r]);
         }
-        return diff(left, right, equal);
+        return diff(left, right, { equal, keys: opts === null || opts === void 0 ? void 0 : opts.keys });
     }), simple(['label-diff'], (_, [diff, label], opts) => {
         return labelDiff(diff, label, opts);
     }));
@@ -6789,8 +6797,12 @@
                 return `${op.apply('string', [src], undefined, ctx)}`.slice(start, end);
         }
     }), simple(['len', 'length'], (_name, [src]) => {
-        if (typeof src === 'string' || src && 'length' in src)
+        if (typeof src === 'string' || Array.isArray(src))
             return src.length;
+        else if (typeof src === 'object' && Object.keys(src).length === 1 && Array.isArray(src.value))
+            return src.value.length;
+        else if (typeof src === 'object')
+            return Object.keys(src).length;
         return 0;
     }), simple(['replace', 'replace-all'], (name, [str, find, rep, flags]) => {
         str = `${str}`;
