@@ -6620,6 +6620,39 @@
         return diff(left, right, { equal, keys: opts === null || opts === void 0 ? void 0 : opts.keys });
     }), simple(['label-diff'], (_, [diff, label], opts) => {
         return labelDiff(diff, label, opts);
+    }), simple(['patch'], (_, values, opts) => {
+        const dir = (opts === null || opts === void 0 ? void 0 : opts.dir) || 'forward';
+        const strict = opts === null || opts === void 0 ? void 0 : opts.strict;
+        const base = JSON.parse(JSON.stringify(values.shift() || {}));
+        const r = new Root(base);
+        if (dir === 'backward') {
+            const vals = values.slice().reverse();
+            if (strict) {
+                for (const v of vals)
+                    for (const path in v)
+                        if (safeGet(r, path) == v[path][1])
+                            safeSet(r, path, v[path][0]);
+            }
+            else {
+                for (const v of vals)
+                    for (const path in v)
+                        safeSet(r, path, v[path][0]);
+            }
+        }
+        else {
+            if (strict) {
+                for (const v of values)
+                    for (const path in v)
+                        if (safeGet(r, path) == v[path][0])
+                            safeSet(r, path, v[path][1]);
+            }
+            else {
+                for (const v of values)
+                    for (const path in v)
+                        safeSet(r, path, v[path][1]);
+            }
+        }
+        return base;
     }));
     // math
     registerOperator(simple(['+', 'add'], (_name, values, _opts, ctx) => {

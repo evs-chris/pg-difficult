@@ -1,5 +1,5 @@
 import postgres from 'https://deno.land/x/postgresjs@v3.4.4/mod.js';
-import { evaluate } from 'https://cdn.jsdelivr.net/npm/raport@0.24.8/lib/index.js';
+import { evaluate } from 'https://cdn.jsdelivr.net/npm/raport@0.26.0/lib/index.js';
 
 type Client = postgres.Sql<Record<string, unknown>>;
 

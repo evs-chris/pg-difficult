@@ -1481,23 +1481,30 @@ Window.extendWith(Query, {
   },
 });
 
-function reverseEntry(entry, schema) {
+function reverseEntry(entry, schema, skipEmpty) {
   if (entry.old && !entry.new) {
     return [`insert into "${entry.schema}"."${entry.table}" (${Object.keys(entry.old).map(k => `"${k}"`).join(', ')}) values (${Object.keys(entry.old).map((_k, i) => `$${i + 1}`).join(', ')})`, Object.values(entry.old)];
   } else if (entry.new && !entry.old) {
     const tbl = schema.tables.find(t => t.schema === entry.schema && t.name === entry.table);
-    if (!tbl) return;
+    if (!tbl) return 'error';
     const keys = tbl.columns.filter(c => c.pkey);
     if (keys.length) return [`delete from "${entry.schema}"."${entry.table}" where ${keys.map((k, i) => `"${k.name}" = $${i + 1}`).join(' and ')}`, keys.map(k => entry.new[k.name])];
     else return [`delete from "${entry.schema}"."${entry.table}" where ${tbl.columns.map((c, i) => `"${c.name}" = $${i + 1}`).join(' and ')}`, tbl.columns.map(c => entry.new[c.name])];
   } else {
     const tbl = schema.tables.find(t => t.schema === entry.schema && t.name === entry.table);
-    if (!tbl) return;
+    if (!tbl) return 'error';
     const keys = tbl.columns.filter(c => c.pkey);
-    // TODO: maybe diff this down to only the changed fields at some point
     let i = 1;
-    if (keys.length) return [`update "${entry.schema}"."${entry.table}" set ${Object.keys(entry.old).map(k => `"${k}" = $${i++}`).join(', ')} where ${keys.map(k => `"${k.name}" = $${i++}`).join(' and ')}`, Object.keys(entry.old).map(k => entry.old[k]).concat(keys.map(k => entry.old[k.name]))];
-    else return [`update "${entry.schema}"."${entry.table}" set ${Object.keys(entry.old).map(k => `"${k}" = $${i++}`).join(', ')} where ${Object.keys(entry.new).map(k => `"${k}" = $${i++}`).join(' and ')}`, Object.keys(entry.old).map(k => entry.old[k]).concat(Object.keys(entry.new).map(k => entry.new[k]))];
+    const cur = Object.assign({}, entry.old, entry.new);
+    if (skipEmpty) {
+      const diff = evaluate({ left: entry.old, right: cur }, 'diff(left right)');
+      if (!Object.keys(diff).length) return 'empty';
+      if (keys.length) return [`update "${entry.schema}"."${entry.table}" set ${Object.keys(diff).map(k => `"${k}" = $${i++}`).join(', ')} where ${keys.map(k => `"${k.name}" = $${i++}`).join(' and ')}`, Object.keys(diff).map(k => diff[k][0]).concat(keys.map(k => entry.old[k.name]))];
+      else return [`update "${entry.schema}"."${entry.table}" set ${Object.keys(diff).map(k => `"${k}" = $${i++}`).join(', ')} where ${Object.keys(cur).map(k => `"${k}" = $${i++}`).join(' and ')}`, Object.keys(diff).map(k => diff[k][0]).concat(Object.keys(cur).map(k => cur[k]))];
+    } else {
+      if (keys.length) return [`update "${entry.schema}"."${entry.table}" set ${Object.keys(entry.old).map(k => `"${k}" = $${i++}`).join(', ')} where ${keys.map(k => `"${k.name}" = $${i++}`).join(' and ')}`, Object.keys(entry.old).map(k => entry.old[k]).concat(keys.map(k => entry.old[k.name]))];
+      else return [`update "${entry.schema}"."${entry.table}" set ${Object.keys(entry.old).map(k => `"${k}" = $${i++}`).join(', ')} where ${Object.keys(cur).map(k => `"${k}" = $${i++}`).join(' and ')}`, Object.keys(entry.old).map(k => entry.old[k]).concat(Object.keys(cur).map(k => cur[k]))];
+    }
   }
 }
 
@@ -1520,7 +1527,7 @@ function adjacentEntries(entry, entries, by) {
 const EntryCSS = `
 .controls { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; }
 .controls > * { margin: 0 0.5em; }
-.controls .filter { flex-grow: 1; min-width: 5em; }
+.controls .filter { flex-grow: 1; min-width: 23em; }
 .controls button, .controls label.check { flex-shrink: 0; }
 .diff { padding: 0.3em; display: flex; flex-wrap: wrap; }
 .diff .left, .diff .right, .diff .value { white-space: pre-wrap; word-break: break-all; }
@@ -1561,7 +1568,7 @@ class Entries extends Window {
     const res = evaluate(ctx, `
 set res = { table:entry.table segment:entry.segment }
 if entry.old and entry.new {
- let d = sort(diff(filter(entry.old =>@key in ~entry.new) entry.new))
+ let d = sort(diff(entry.old entry.new keys::common))
  if keys(d).length {
    set res.status = :changed
    set res.changed = ^d
@@ -1651,9 +1658,13 @@ res
     if (!this.source) return;
     const schemas = this.get('schemas') || {};
     const schema = schemas[entry.source];
-    const reverse = reverseEntry(entry, schema);
-    if (reverse) request({ action: 'query', query: [reverse[0]], params: [reverse[1]], client: Object.values(app.get('status.clients') || {}).find(c => c.source === this.source).config });
-    else this.host.toast(`Undo is not supported for this table`, { type: 'error', timeout: 3000 });
+    const reverse = reverseEntry(entry, schema, this.get('skipUndoEmpty'));
+    if (typeof reverse === 'string') {
+      if (reverse === 'empty') this.host.toast('Entry is empty, and you have undoing empty changesets disabled.', { type: 'info', timeout: 3000 });
+      else this.host.toast(`Undo is not availanle for this entry`, { type: 'error', timeout: 3000 });
+    } else if (reverse) {
+      request({ action: 'query', query: [reverse[0]], params: [reverse[1]], client: Object.values(app.get('status.clients') || {}).find(c => c.source === this.source).config });
+    }
   }
   async undoSegment(entry) {
     if (!this.source) return;
@@ -1680,8 +1691,25 @@ res
 
     if (!entries.length) return this.host.toast('Nothing to undo', { type: 'info', timeout: 3000 });
 
-    const reverse = entries.map(e => reverseEntry(e, schema)).filter(e => e);
-    if (reverse.length !== entries.length) return this.host.toast(`Undo is not supported for this segment`, { type: 'error', timeout: 3000 });
+    const fmap = { error: 0, empty: 0 };
+    const reverse = entries.map(e => reverseEntry(e, schema, this.get('skipUndoEmpty'))).filter(e => {
+      if (e === 'error') {
+        fmap.error++;
+        return false;
+      } else if (e === 'empty') {
+        fmap.empty++;
+        return false;
+      } else if (e && Array.isArray(e)) {
+        return true;
+      } else {
+        return false;
+      }
+    });
+    if (fmap.error) {
+      return this.host.toast(`Undo is not supported for this segment`, { type: 'error', timeout: 3000 });
+    } else if (fmap.empty && !reverse.length) {
+      return this.host.toast(`All entries are empty, and you have undoing empty changesets disabled.`, { type: 'info', timeout: 3000 });
+    }
 
     if (!this.event?.event?.ctrlKey || this.event?.event?.shiftKey) await request({ action: 'segment', segment: `Undo ${entry.segment}` });
 
@@ -1820,8 +1848,11 @@ Window.extendWith(Entries, {
       const expr = this.get('expr');
       const showHidden = this.get('showHidden');
       const collapse = this.get('collapse') || {};
+      const hideEmpty = this.get('hideEmptyEntries');
       if (expr) res = evaluate({ list: res }, `filter(list =>(${expr}))`);
       if (!showHidden) res = res.filter(e => !e.hide);
+      if (hideEmpty) res = res.filter(e => !e.old || !e.new || evaluate({ left: e.old, right: e.new }, 'keys(diff(left right keys::common)).length > 0'));
+      this.set('entryCount', res.length);
       if (Object.keys(collapse).length) {
         const added = {};
         res = res.reduce((a, c) => {
@@ -1848,6 +1879,7 @@ Window.extendWith(Entries, {
       this.set({
         hideBlankFields: app.get('store.settings.hideBlankFields'),
         hideDefaultFields: app.get('store.settings.hideDefaultFields'),
+        hideEmptyEntries: app.get('store.settings.hideEmptyEntries'),
       });
       if (this.get('loaded')) {
         this.link('loaded.schemas', 'schemas');
@@ -1856,6 +1888,7 @@ Window.extendWith(Entries, {
         this.set({
           allowUndoSegment: app.get('store.settings.allowUndoSegment'),
           allowUndoSingle: app.get('store.settings.allowUndoSingle'),
+          skipUndoEmpty: app.get('store.settings.skipUndoEmpty'),
         });
       }
       this.scroller = this.find('.rvlist');

@@ -1,6 +1,6 @@
 ## 1.13.2
 
-*unreleased*
+2025-01-15
 
 ### Bugs
 
@@ -18,6 +18,8 @@
 * Host explorer visual reports can now be run as delimited with configurable delimiters and quotes. This is utilizing underlying support in raport that renders the first repeater to text.
 * Report sources can now be conditional, meaning they can be skipped if they aren't necessary for the report to run based on the parameters it is given. If a source is elided, it can supply an alternate expression for its data or it will resolve to an empty array.
 * Schema explorers that have a connection to a database now have a button on the tab bar to refresh the schema.
+* Diff entries with no changes (empty changesets) can now be hidden and can also be optionally skipped when running undo on them.
+* Diff viewers now show how many entries are currently visible of the entry total.
 
 
 ## 1.13.1

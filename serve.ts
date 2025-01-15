@@ -4,11 +4,11 @@ import * as diff from './diff.ts';
 import { decode } from 'https://deno.land/std@0.190.0/encoding/base64url.ts'
 import { open } from 'https://deno.land/x/deno_open@v0.0.6/index.ts';
 import { fs } from './client.ts';
-import { evaluate } from 'https://cdn.jsdelivr.net/npm/raport@0.24.8/lib/index.js';
+import { evaluate } from 'https://cdn.jsdelivr.net/npm/raport@0.26.0/lib/index.js';
 
 type JSONValue = postgres.JSONValue;
 
-const VERSION = '1.13.1';
+const VERSION = '1.13.2';
 
 interface DatabaseConfig {
   host: string;
