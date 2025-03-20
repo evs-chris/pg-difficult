@@ -2172,6 +2172,7 @@ const renderMD = (function() {
       html = marked.parse(str);
     }
     if (!opts.nochecks) html = html.replace(/\<input (checked="" )?disabled="" type="checkbox"/g, '<input $1type="checkbox"');
+    html = html.replace(/\<a (href="https?:\/\/)/g, '<a target="_blank" $1');
     return html;
   };
 })();
@@ -2285,10 +2286,10 @@ class ScratchPad extends Window {
     if (~idx) {
       let txt = this.get('pad.text');
       let i = 0;
-      txt = txt.replace(/\* \[.\]/g, v => {
+      txt = txt.replace(/(\*|[a-zA-Z0-9]+\.) \[[ xX]\]/g, (v, t) => {
         if (i++ === idx) {
-          if (v[3] === 'x') return '* [ ]';
-          else return '* [x]';
+          if (v[3] === 'x') return `${t} [ ]`;
+          else return `${t} [x]`;
         } else {
           return v;
         }
