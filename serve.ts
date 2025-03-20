@@ -1,9 +1,7 @@
 import * as oak from 'https://deno.land/x/oak@v12.5.0/mod.ts';
 import postgres from 'https://deno.land/x/postgresjs@v3.4.4/mod.js';
 import * as diff from './diff.ts';
-import { decode } from 'https://deno.land/std@0.190.0/encoding/base64url.ts'
 import { open } from 'https://deno.land/x/deno_open@v0.0.6/index.ts';
-import { fs } from './client.ts';
 import { evaluate } from 'https://cdn.jsdelivr.net/npm/raport@0.26.0/lib/index.js';
 
 type JSONValue = postgres.JSONValue;
@@ -254,34 +252,18 @@ try { dev = (await Deno.stat('./public')).isDirectory; } catch { /* sure */ }
 router.get('/:path*', async ctx => {
   const path: string = ctx.params.path || '';
 
-  if (dev) {
-    if (path.includes('..')) return ctx.throw(400);
-    try {
-      const f = await Deno.readFile(`./public/${path}`);
-      ctx.response.type = path.slice(path.lastIndexOf('.') + 1);
-      console.info(`serving ${path} from local public dir...`)
-      return ctx.response.body = f;
-    } catch {
-      if (!path || path[path.length - 1] === '/') {
-        try {
-          const f = await Deno.readFile(`./public/${path}index.html`);
-          ctx.response.type = 'html';
-          console.info(`serving ${path}index.html from local public dir...`)
-          return ctx.response.body = f;
-        } catch { /* sure */ }
-      }
-    }
-  }
-
-  if (path in fs) {
+  try {
+    const f = await Deno.readFile(`${import.meta.dirname}/public/${path}`);
     ctx.response.type = path.slice(path.lastIndexOf('.') + 1);
-    return ctx.response.body = decode(fs[path]);
-  }
-  if (!path || path[path.length - 1] === '/') {
-    const index = `${path}index.html`;
-    if (index in fs) ctx.response.body = decode(fs[index]);
-    ctx.response.type = 'html';
-    return;
+    return ctx.response.body = f;
+  } catch {
+    if (!path || path[path.length - 1] === '/') {
+      try {
+        const f = await Deno.readFile(`${import.meta.dirname}/public/${path}index.html`);
+        ctx.response.type = 'html';
+        return ctx.response.body = f;
+      } catch { /* sure */ }
+    }
   }
 
   ctx.response.status = 404;
