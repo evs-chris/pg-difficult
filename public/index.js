@@ -1,4 +1,4 @@
-const { evaluate, template, registerOperator, parse, parseTemplate, run, Root, stringify } = Raport;
+const { evaluate, template, registerOperator, parse, parseTemplate, parsePath, run, Root, stringify } = Raport;
 const { docs } = Raport.Design;
 const { Window } = RauiWindow;
 
@@ -1481,6 +1481,18 @@ Window.extendWith(Query, {
   },
 });
 
+function diffKeys(diff) {
+  const res = [];
+  for (const k of Object.keys(diff)) {
+    const p = parsePath(k);
+    if (!p) continue;
+    const first = p.k[0];
+    if (!first || res.includes(first)) continue;
+    res.push(first);
+  }
+  return res;
+}
+
 function reverseEntry(entry, schema, skipEmpty) {
   if (entry.old && !entry.new) {
     return [`insert into "${entry.schema}"."${entry.table}" (${Object.keys(entry.old).map(k => `"${k}"`).join(', ')}) values (${Object.keys(entry.old).map((_k, i) => `$${i + 1}`).join(', ')})`, Object.values(entry.old)];
@@ -1498,9 +1510,10 @@ function reverseEntry(entry, schema, skipEmpty) {
     const cur = Object.assign({}, entry.old, entry.new);
     if (skipEmpty) {
       const diff = evaluate({ left: entry.old, right: cur }, 'diff(left right)');
-      if (!Object.keys(diff).length) return 'empty';
-      if (keys.length) return [`update "${entry.schema}"."${entry.table}" set ${Object.keys(diff).map(k => `"${k}" = $${i++}`).join(', ')} where ${keys.map(k => `"${k.name}" = $${i++}`).join(' and ')}`, Object.keys(diff).map(k => diff[k][0]).concat(keys.map(k => entry.old[k.name]))];
-      else return [`update "${entry.schema}"."${entry.table}" set ${Object.keys(diff).map(k => `"${k}" = $${i++}`).join(', ')} where ${Object.keys(cur).map(k => `"${k}" = $${i++}`).join(' and ')}`, Object.keys(diff).map(k => diff[k][0]).concat(Object.keys(cur).map(k => cur[k]))];
+      const dkeys = diffKeys(diff);
+      if (!dkeys.length) return 'empty';
+      if (keys.length) return [`update "${entry.schema}"."${entry.table}" set ${dkeys.map(k => `"${k}" = $${i++}`).join(', ')} where ${keys.map(k => `"${k.name}" = $${i++}`).join(' and ')}`, dkeys.map(k => entry.old[k]).concat(keys.map(k => entry.old[k.name]))];
+      else return [`update "${entry.schema}"."${entry.table}" set ${dkeys.map(k => `"${k}" = $${i++}`).join(', ')} where ${Object.keys(cur).map(k => `"${k}" = $${i++}`).join(' and ')}`, dkeys.map(k => entry.old[k]).concat(Object.keys(cur).map(k => cur[k]))];
     } else {
       if (keys.length) return [`update "${entry.schema}"."${entry.table}" set ${Object.keys(entry.old).map(k => `"${k}" = $${i++}`).join(', ')} where ${keys.map(k => `"${k.name}" = $${i++}`).join(' and ')}`, Object.keys(entry.old).map(k => entry.old[k]).concat(keys.map(k => entry.old[k.name]))];
       else return [`update "${entry.schema}"."${entry.table}" set ${Object.keys(entry.old).map(k => `"${k}" = $${i++}`).join(', ')} where ${Object.keys(cur).map(k => `"${k}" = $${i++}`).join(' and ')}`, Object.keys(entry.old).map(k => entry.old[k]).concat(Object.keys(cur).map(k => cur[k]))];
