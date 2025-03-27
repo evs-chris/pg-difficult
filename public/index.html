@@ -320,20 +320,29 @@
   .markdown-container table {
     margin: 1em 0;
     border-collapse: collapse;
-    border: 1px sold rgba(128, 128, 128, 0.5);
+    border: 1px solid rgba(128, 128, 128, 0.5);
   }
   .markdown-container td, .markdown-container th {
     padding: 0.25em 0.5em;
     border: 1px solid rgba(128, 128, 128, 0.5);
   }
-  .markdown-container th {
+  .markdown-container thead th {
     text-align: center;
     border-bottom: 1px solid;
+  }
+  .markdown-container tbody th {
+    text-align: right;
+    border-bottom: inherit;
+    border-right: 1px solid;
+  }
+  .markdown-container th.index {
+    border-right: 2px solid;
   }
   .markdown-container tbody tr:nth-child(2n+1) td {
     background-color: rgba(128, 128, 128, 0.1);
   }
-  .markdown-container tbody tr:hover td {
+  .markdown-container tbody tr:hover td,
+  .markdown-container tbody tr:hover th {
     background-color: rgba(128, 128, 128, 0.25);
   }
   .markdown-container h1, .markdown-container h2, .markdown-container h3 {
@@ -1942,9 +1951,10 @@
 @page { margin: 5mm; }
 code, .mermaid-chart { border-radius: 0.5em; }
 code { white-space: pre-wrap; }
-table { margin: 1em 0; border-collapse: collapse; border: 1px sold rgba(128, 128, 128, 0.5); }
+table { margin: 1em 0; border-collapse: collapse; border: 1px solid rgba(128, 128, 128, 0.5); }
 td, th { padding: 0.25em 0.5em; border: 1px solid rgba(128, 128, 128, 0.5); }
-th { text-align: center; border-bottom: 1px solid; }
+thead th, th { text-align: center; border-bottom: 1px solid; }
+tbody th { text-align: right; border-bottom: inherit; border-right: 1px solid; }
 tbody tr:nth-child(2n+1) td { background-color: rgba(128, 128, 128, 0.1); }
 h1, h2, h3 { padding: 0; margin: 0em 0 0.5em 0; }
 * ~ h1, * ~ h2, * ~ h3 { margin-top: 1em; }
