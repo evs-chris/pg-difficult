@@ -1209,7 +1209,7 @@
 <script type=text/ractive id=scratch-pad>
   {{#partial header}}
     <div style="display: flex; flex-shrink: 0; margin-bottom: -0.4em;">
-      {{#if pad.syntax === 'raport'}}<label as-field class=inline><button class=flat on-click="@.evaluate(pad.text)" title="Evaluate expression (ctrl+enter). Highlight a portion of text and shift+click or ctrl+enter to evaluate only the highlighted text.">{{>play}}</button></label>{{/if}}
+      {{#if pad.syntax === 'raport'}}<label as-field class=inline><button class=flat on-click="@.evaluate(pad.text, pad.context)" title="Evaluate expression (ctrl+enter). Highlight a portion of text and shift+click or ctrl+enter to evaluate only the highlighted text.">{{>play}}</button></label>{{/if}}
       <label as-field class=inline title="Separating segments of a file name with / will result in the pad appearing in a sub-node of the scratch pad tree view."><input value="{{pad.name}}" placeholder="Name..." lazy=1000 /></label>
       <div style="flex-grow: 1; display: flex; justify-content: space-around;">
         {{#if ~/pad._id}}
@@ -1282,7 +1282,7 @@
       <split>
         <div style="height: 100%; display: flex; flex-direction: column;">
           {{>header}}
-          <div style="flex-grow: 1;" class="editor-el" as-tracked=`ace` as-ace="{ bind: 'pad.text', syntax: pad.syntax || 'plain_text', theme: @style.theme == 'dark' ? (~/editor.darkTheme || 'tomorrow_night_eighties') : (~/editor.lightTheme || 'tomorrow'), wrap: ~/editor.wrap, highlightActive: ~/editor.highlightActive, fontSize: '1em', font: 'monospace', printMargin: ~/editor.printMargin, keymode: ~/editor.keymode, lineNumbers: ~/editor.lineNumbers, relativeLineNumbers: ~/editor.relativeLineNumbers, highlightSelected: ~/editor.highlightSelected, softTabs: ~/editor.softTabs, tabSize: ~/editor.tabSize }" on-save="@.save()" on-keydown="@event.ctrlKey && @event.key === 'Enter' ? @.evaluate(pad.text) : true" />
+          <div style="flex-grow: 1;" class="editor-el" as-tracked=`ace` as-ace="{ bind: 'pad.text', syntax: pad.syntax || 'plain_text', theme: @style.theme == 'dark' ? (~/editor.darkTheme || 'tomorrow_night_eighties') : (~/editor.lightTheme || 'tomorrow'), wrap: ~/editor.wrap, highlightActive: ~/editor.highlightActive, fontSize: '1em', font: 'monospace', printMargin: ~/editor.printMargin, keymode: ~/editor.keymode, lineNumbers: ~/editor.lineNumbers, relativeLineNumbers: ~/editor.relativeLineNumbers, highlightSelected: ~/editor.highlightSelected, softTabs: ~/editor.softTabs, tabSize: ~/editor.tabSize }" on-save="@.save()" on-keydown="@event.ctrlKey && @event.key === 'Enter' ? @.evaluate(pad.text, pad.context) : true" />
         </div>
         <tabs pad flex size=0 style="height: 100%;">
           <tab>
@@ -1314,6 +1314,11 @@
               {{else}}
                 <div style="display: flex; justify-content: space-around; align-items: center; width: 100%; height: 100%; opacity: 0.5;">Values logged during expression evaluation using the log() operator will be aggregated here.</div>
               {{/each}}
+            </div>
+          </tab>
+          <tab title="Context" center no-pad>
+            <div style="height: 100%; display: flex; flex-direction: column;">
+              <div style="flex-grow: 1;" class="editor-el" as-ace="{ bind: 'pad.context', syntax: 'raport', theme: @style.theme == 'dark' ? (~/editor.darkTheme || 'tomorrow_night_eighties') : (~/editor.lightTheme || 'tomorrow'), wrap: ~/editor.wrap, highlightActive: ~/editor.highlightActive, fontSize: '1em', font: 'monospace', printMargin: ~/editor.printMargin, keymode: ~/editor.keymode, lineNumbers: ~/editor.lineNumbers, relativeLineNumbers: ~/editor.relativeLineNumbers, highlightSelected: ~/editor.highlightSelected, softTabs: ~/editor.softTabs, tabSize: ~/editor.tabSize }" on-save="@.save()" on-keydown="@event.ctrlKey && @event.key === 'Enter' ? @.evaluate(pad.text, pad.context) : true" />
             </div>
           </tab>
           <tab title="Language Reference" right no-pad>

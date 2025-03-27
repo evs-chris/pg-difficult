@@ -2248,35 +2248,45 @@ class ScratchPad extends Window {
       this.set(`_settings.${path}`, value);
     }
   }
-  evaluate(txt) {
+  evaluate(txt, context) {
     if (this.ace) {
       const sel = this.getContext(this.ace).decorators.ace.editor.getSelectedText();
       if (sel) txt = sel;
     }
     const ok = parse(txt, { consumeAll: true });
+    const ctxok = context ? parse(context, { consumeAll: true }) : { v: {} };
     if (ok && 'cause' in ok) {
       this.set({
         evalresult: '',
-        evalerror: `Invelid expression: ${ok.message}\n\n${ok.marked}`,
+        evalerror: `Invalid expression: ${ok.message}\n\n${ok.marked}`,
       });
     } else {
-      const opts = app.get('scratchroot') || {};
-      const root = new Root({}, opts);
-      root.sources = Object.assign({}, opts.sources);
-      root.log = this.log;
-      if (opts.all) {
-        for (const k in opts.all.apply || {}) if (opts.all.apply[k]) root.sources[k] = { value: opts.all.apply[k] };
-        for (const k in opts.all.provide || {}) if (opts.all.provide[k]) root.sources[k] = { value: opts.all.provide[k] };
+      if (ctxok && 'cause' in ctxok) {
+        this.set({
+          evalresult: '',
+          evalerror: `Invalid context expression: ${ctxok.message}\n\n${ctxok.marked}`,
+        });
+      } else {
+        const opts = app.get('scratchroot') || {};
+        const root = new Root({}, opts);
+        root.sources = Object.assign({}, opts.sources);
+        root.log = this.log;
+        if (opts.all) {
+          for (const k in opts.all.apply || {}) if (opts.all.apply[k]) root.sources[k] = { value: opts.all.apply[k] };
+          for (const k in opts.all.provide || {}) if (opts.all.provide[k]) root.sources[k] = { value: opts.all.provide[k] };
+        }
+        const ctx = evaluate(root, ctxok);
+        if (typeof ctx === 'object') root.value = ctx;
+        const res = evaluate(root, ok);
+        let evaltext = res === undefined ? 'undefined' : JSON.stringify(res);
+        if (evaltext.length > 100000) evaltext = `${evaltext.slice(0, 100000)}...`;
+        this.set({
+          evalresult: res,
+          evaltext,
+          treeresult: typeof res !== 'object' ? undefined : treeify(res),
+          evalerror: '',
+        });
       }
-      const res = evaluate(root, ok);
-      let evaltext = res === undefined ? 'undefined' : JSON.stringify(res);
-      if (evaltext.length > 100000) evaltext = `${evaltext.slice(0, 100000)}...`;
-      this.set({
-        evalresult: res,
-        evaltext,
-        treeresult: typeof res !== 'object' ? undefined : treeify(res),
-        evalerror: '',
-      });
     }
     const split = this.findComponent('split');
     if (split) {
