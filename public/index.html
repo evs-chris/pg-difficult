@@ -1222,7 +1222,7 @@
       <label as-field class=inline title="Separating segments of a file name with / will result in the pad appearing in a sub-node of the scratch pad tree view."><input value="{{pad.name}}" placeholder="Name..." lazy=1000 /></label>
       <div style="flex-grow: 1; display: flex; justify-content: space-around;">
         {{#if ~/pad._id}}
-          {{#if ~/unsaved && !nosave}}<div style="padding: 0.5em; opacity: 0.7; background-color: rgba(128, 128, 128, 0.5); border-radius: 0 0 0.5em 0.5em; height: 1em;">unsaved</div>{{/if}}
+          {{#if ~/unsaved && !nosave}}<div style="padding: 0.5em; opacity: 0.7; background-color: rgba(128, 128, 128, 0.5); border-radius: 0 0 0.5em 0.5em; height: 1em; cursor: pointer;" title="There are unsaved changes in this pad. The changes will automatically save after your autosave timeout, or you can click here to save now." on-click="@.save()">unsaved</div>{{/if}}
         {{else}}
           <label as-field class=inline><button style="align-self: center;" on-click="@.save()">Save</button></label>
         {{/if}}
@@ -1372,7 +1372,7 @@
         </tabs>
       </split>
     {{elseif pad.syntax === 'markdown'}}
-      {{#if ~/unsaved}}<div style="position: absolute; left: 50%; top: 0; padding: 0.5em; opacity: 0.7; background-color: rgba(128, 128, 128, 0.5); border-radius: 0 0 0.5em 0.5em; height: 1em; z-index: 100;">unsaved</div>{{/if}}
+      {{#if ~/unsaved}}<div style="position: absolute; left: 50%; top: 0; padding: 0.5em; opacity: 0.7; background-color: rgba(128, 128, 128, 0.5); border-radius: 0 0 0.5em 0.5em; height: 1em; z-index: 100; cursor: pointer;" title="There are unsaved changes in this pad. The changes will automatically save after your autosave timeout, or you can click here to save now." on-click="@.save()">unsaved</div>{{/if}}
       <tabs pad flex style="height: 100%;" bind-selected="~/activeTab">
         <tab no-pad title="Edit">
           <div style="flex-grow: 1; display: flex; flex-direction: column;">
@@ -1739,7 +1739,7 @@
       {{#if .method === 'POST'}}<label as-field style="min-height: 15em;">Body<textarea>{{.body}}</textarea></label>{{/if}}
       <label as-field>Condition <tip>Set a condition expression to avoid running a request that isn't necessary for how the report is being run. Parameters are available to the condition expression, and if it returns false, the request will not be made.</tip><textarea>{{.condition}}</textarea></label>
       {{#if .condition}}
-      <label as-field>Alterante <tip>Set an alternate expression to provide a default value if the conditional expression returned false.</tip><textarea>{{.alternate}}</textarea></label>
+      <label as-field>Alternate <tip>Set an alternate expression to provide a default value if the conditional expression returned false.</tip><textarea>{{.alternate}}</textarea></label>
       {{/if}}
       {{/with}}
     {{elseif source.type === 'query-all'}}
