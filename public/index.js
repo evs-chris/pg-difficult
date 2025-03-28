@@ -2282,7 +2282,7 @@ class ScratchPad extends Window {
           for (const k in opts.all.provide || {}) if (opts.all.provide[k]) root.sources[k] = { value: opts.all.provide[k] };
         }
         const ctx = evaluate(root, ctxok);
-        if (typeof ctx === 'object') root.value = ctx;
+        if (typeof ctx === 'object') root.value = Object.assign(root.value, ctx);
         const res = evaluate(root, ok);
         let evaltext = res === undefined ? 'undefined' : JSON.stringify(res);
         if (evaltext.length > 100000) evaltext = `${evaltext.slice(0, 100000)}...`;
