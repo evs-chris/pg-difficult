@@ -2445,12 +2445,23 @@ dd { margin: 0.5em 0 1em 2em; white-space: pre-wrap; }
     },
   },
   data() {
-    return { docs, ops: evaluate(docs.operators), expand: {}, pad: { name: '', syntax: 'markdown', text: '' } };
+    return { docs, ops: evaluate(docs.operators), fmts: evaluate(docs.formats), expand: {}, pad: { name: '', syntax: 'markdown', text: '' } };
   },
   computed: {
     operators() {
       const map = this.get('ops').reduce((a, c) => (Array.isArray(c.op) ? c.op.forEach(o => a.push([o, c])) : a.push([c.op, c]), a), []);
+      let fmts = this.get('fmts');
+      for (const f of fmts) {
+        const all = Array.isArray(f.name) ? f.name : [f.name];
+        all.forEach((n, i) => {
+          const op = `#${n}`;
+          const val = { op, sig: [{ fmt: 1, proto: op, desc: f.desc }], opts: f.opts };
+          if (i > 0) val.alias = true;
+          map.push([op, val]);
+        });
+      }
       let ops = evaluate({ map }, `sort(map =>if _.0[0] == '#' then 'zz[_.0]' elif _.0[0] == '|' then ' {_.0}' else _.0)`)
+
       const search = this.get('opsearch');
       if (search) {
         const re = new RegExp(search.replace(/([*.\\\/$^()[\]{}+])/g, '\\$1'), 'i');
