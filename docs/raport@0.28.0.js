@@ -1218,9 +1218,20 @@
     const pathesc = map(seq(str('\\'), chars(1)), ([, char]) => escmap[char] || char);
     const pathident = map(rep1(alt('ref-part', read1To(endRef, true), pathesc)), parts => parts.join(''), 'keypath-part');
     const dotpath = map(seq(str('.'), pathident), ([, part]) => part);
-    const bracketpath = bracket(seq(str('['), ws$2), value, seq(ws$2, str(']')));
+    const valueAnchor = map(seq(value, ws$2, opt(str('<')), ws$2, opt(seq(value, ws$2, opt(str('<'))))), ([v, , a, , s]) => {
+        if (a)
+            v.anchor = 'end';
+        if (s) {
+            const r = v;
+            r.slice = s[0];
+            if (s[2])
+                r.slice.anchor = 'end';
+        }
+        return v;
+    });
+    const bracketpath = bracket(seq(str('['), ws$2), valueAnchor, seq(ws$2, str(']')));
     const keypath = map(seq(alt('ref-sigil', str('!', '~', '*'), seq(read('^'), opt(str('@', '.')))), alt('keypath', pathident, bracketpath), rep(alt('keypath', dotpath, bracketpath))), ([prefix, init, parts]) => {
-        const res = { k: [init].concat(parts).map(p => typeof p === 'object' && 'v' in p && (typeof p.v === 'string' || typeof p.v === 'number') ? p.v : p) };
+        const res = { k: [init].concat(parts).map(p => typeof p === 'object' && 'v' in p && (typeof p.v === 'string' || typeof p.v === 'number') && !('anchor' in p) && !('slice' in p) ? p.v : p) };
         if (Array.isArray(prefix)) {
             if (prefix[0])
                 res.u = prefix[0].length;
@@ -1233,7 +1244,7 @@
         return res;
     }, 'keypath');
     const localpath = map(seq(read('^'), pathident, rep(alt('keypath', dotpath, bracketpath))), ([prefix, init, parts]) => {
-        const res = { k: [init].concat(parts).map(p => typeof p === 'object' && 'v' in p && (typeof p.v === 'string' || typeof p.v === 'number') ? p.v : p) };
+        const res = { k: [init].concat(parts).map(p => typeof p === 'object' && 'v' in p && (typeof p.v === 'string' || typeof p.v === 'number' && !('anchor' in p) && !('slice' in p)) ? p.v : p) };
         if (prefix)
             res.u = prefix.length;
         return res;
@@ -1246,7 +1257,7 @@
             err(`invalid reference name '${r.k[0]}'`);
         return { r };
     }, { primary: true, name: 'reference' });
-    function stringInterp(parts) {
+    function stringInterp(parts, q) {
         const res = parts.reduce((a, c) => {
             if (a.length) {
                 if ('v' in c && 'v' in a[a.length - 1] && typeof c.v === 'string' && typeof a[a.length - 1].v === 'string')
@@ -1265,7 +1276,7 @@
             return { v: '' };
         else if (res.length === 1)
             return res[0];
-        return { op: '+', args: res };
+        return { op: '+', args: res, meta: q ? { q } : undefined };
     }
     const timespan = map(rep1sep(seq(JNum, ws$2, istr('years', 'year', 'y', 'months', 'month', 'minutes', 'minute', 'milliseconds', 'millisecond', 'mm', 'ms', 'm', 'weeks', 'week', 'w', 'days', 'day', 'd', 'hours', 'hour', 'h', 'seconds', 'second', 's')), ws$2), parts => {
         const span = { y: 0, m: 0, d: 0, h: 0, mm: 0, s: 0, ms: 0 };
@@ -1418,7 +1429,7 @@
     const date$2 = bracket(str('#'), alt('date', dateexact, daterel, timespan), str('#'), { primary: true, name: 'date' });
     const typelit = map(seq(str('@['), ws$2, schema(), ws$2, str(']')), ([, , v]) => ({ v, s: 1 }), { name: 'typelit', primary: true });
     const parseDate = parser$1(map(seq(opt(str('#')), alt('date', dateexact, daterel, timespan), opt(str('#'))), ([, d,]) => d), { trim: true, consumeAll: true, undefinedOnError: true });
-    const string = alt({ primary: true, name: 'string' }, bracket(str('$$$'), inlineTemplate, str('$$$')), map(seq(str(':'), read1To(endSym, true)), v => ({ v: v[1] })), map(bracket(str('"""'), rep(alt('string-part', read1To('\\"'), JStringEscape, JStringUnicode, JStringHex, andNot(str('"'), str('""')))), str('"""')), a => ({ v: ''.concat(...a) })), map(bracket(str('"'), rep(alt('string-part', read1To('\\"'), JStringEscape, JStringUnicode, JStringHex)), str('"')), a => ({ v: ''.concat(...a) })), map(bracket(str(`'''`), rep(alt('string-part', map(read1To(`'\\$\{`, true), v => ({ v })), map(str('\\$', '$$'), () => ({ v: '$' })), bracket(str('${', '{'), value, str('}'), { primary: true, name: 'string-interpolation' }), map(str('$', '{'), v => ({ v })), map(JStringUnicode, v => ({ v })), map(JStringHex, v => ({ v })), map(JStringEscape, v => ({ v })), map(andNot(str(`'`), str(`''`)), v => ({ v })))), str(`'''`)), stringInterp), map(bracket(str(`'`), rep(alt('string-part', map(read1To(`'\\$\{`, true), v => ({ v })), map(str('\\$', '$$'), () => ({ v: '$' })), bracket(str('${', '{'), value, str('}'), { primary: true, name: 'string-interpolation' }), map(str('$', '{'), v => ({ v })), map(JStringUnicode, v => ({ v })), map(JStringHex, v => ({ v })), map(JStringEscape, v => ({ v })))), str(`'`)), stringInterp), map(bracket(str('```'), rep(alt('string-part', map(read1To('`\\${', true), v => ({ v })), map(str('\\$', '$$'), () => ({ v: '$' })), bracket(str('${'), value, str('}'), { primary: true, name: 'string-interpolation' }), map(str('$', '{'), v => ({ v })), map(JStringUnicode, v => ({ v })), map(JStringHex, v => ({ v })), map(JStringEscape, v => ({ v })), map(andNot(str('`'), str('``')), v => ({ v })))), str('```')), stringInterp), map(bracket(str('`'), rep(alt('string-part', map(read1To('`\\${', true), v => ({ v })), map(str('\\$', '$$'), () => ({ v: '$' })), bracket(str('${'), value, str('}'), { primary: true, name: 'string-interpolation' }), map(str('$', '{'), v => ({ v })), map(JStringUnicode, v => ({ v })), map(JStringHex, v => ({ v })), map(JStringEscape, v => ({ v })))), str('`')), stringInterp));
+    const string = alt({ primary: true, name: 'string' }, bracket(str('$$$'), inlineTemplate, str('$$$')), map(seq(str(':'), read1To(endSym, true)), v => ({ v: v[1] })), map(bracket(str('"""'), rep(alt('string-part', read1To('\\"'), JStringEscape, JStringUnicode, JStringHex, andNot(str('"'), str('""')))), str('"""')), a => ({ v: ''.concat(...a), q: '"""' })), map(bracket(str('"'), rep(alt('string-part', read1To('\\"'), JStringEscape, JStringUnicode, JStringHex)), str('"')), a => ({ v: ''.concat(...a) })), map(bracket(str(`'''`), rep(alt('string-part', map(read1To(`'\\$\{`, true), v => ({ v })), map(str('\\$', '$$'), () => ({ v: '$' })), bracket(str('${', '{'), value, str('}'), { primary: true, name: 'string-interpolation' }), map(str('$', '{'), v => ({ v })), map(JStringUnicode, v => ({ v })), map(JStringHex, v => ({ v })), map(JStringEscape, v => ({ v })), map(andNot(str(`'`), str(`''`)), v => ({ v })))), str(`'''`)), v => stringInterp(v, "'''")), map(bracket(str(`'`), rep(alt('string-part', map(read1To(`'\\$\{`, true), v => ({ v })), map(str('\\$', '$$'), () => ({ v: '$' })), bracket(str('${', '{'), value, str('}'), { primary: true, name: 'string-interpolation' }), map(str('$', '{'), v => ({ v })), map(JStringUnicode, v => ({ v })), map(JStringHex, v => ({ v })), map(JStringEscape, v => ({ v })))), str(`'`)), v => stringInterp(v)), map(bracket(str('```'), rep(alt('string-part', map(read1To('`\\${', true), v => ({ v })), map(str('\\$', '$$'), () => ({ v: '$' })), bracket(str('${'), value, str('}'), { primary: true, name: 'string-interpolation' }), map(str('$', '{'), v => ({ v })), map(JStringUnicode, v => ({ v })), map(JStringHex, v => ({ v })), map(JStringEscape, v => ({ v })), map(andNot(str('`'), str('``')), v => ({ v })))), str('```')), v => stringInterp(v, '```')), map(bracket(str('`'), rep(alt('string-part', map(read1To('`\\${', true), v => ({ v })), map(str('\\$', '$$'), () => ({ v: '$' })), bracket(str('${'), value, str('}'), { primary: true, name: 'string-interpolation' }), map(str('$', '{'), v => ({ v })), map(JStringUnicode, v => ({ v })), map(JStringHex, v => ({ v })), map(JStringEscape, v => ({ v })))), str('`')), v => stringInterp(v)));
     const literal = map(alt('literal', map(JNum, v => v, { primary: true, name: 'number' }), keywords, date$2), v => {
         if (v instanceof Date || v == null || typeof v !== 'object')
             return { v };
@@ -1557,7 +1568,15 @@
     block.parser = map(bracket(check(str('{'), ws$2), rep1sep(value, read1(space$2 + ';'), 'allow'), check(ws$2, str('}'))), args => ({ op: 'block', args }), { primary: true, name: 'block' });
     value.parser = unwrap(comment('c', operation));
     const namedArg = map(seq(ident, str(':'), ws$2, value), ([k, , , v]) => [{ v: k }, v], 'named-arg');
-    application.parser = map(seq(opt(bracket(check(str('|'), ws$2), rep1sep(opName, read1(space$2 + ','), 'allow'), seq(str('|'), ws$2))), str('=>', '=\\'), ws$2, value), ([names, , , value]) => (names ? { a: value, n: names } : { a: value }), { primary: true, name: 'application' });
+    application.parser = map(seq(opt(bracket(check(str('|'), ws$2), rep1sep(opName, read1(space$2 + ','), 'allow'), seq(str('|'), ws$2))), str('=>', '=\\'), ws$2, value), ([names, , , value]) => {
+        const res = { a: value };
+        if (names)
+            res.n = names;
+        if ('op' in value && value.op === 'block') {
+            value.opts = Object.assign({}, value.opts, { v: { implicit: 1 } });
+        }
+        return res;
+    }, { primary: true, name: 'application' });
     args.parser = map(repsep(alt('argument', namedArg, value), read1(space$2 + ','), 'allow'), (args) => {
         const [plain, obj] = args.reduce((a, c) => ((Array.isArray(c) ? a[1].push(c) : a[0].push(c)), a), [[], []]);
         if (obj.length)
@@ -1574,7 +1593,7 @@
     function schema() {
         const type = {};
         const conditions = opt(seq(ws$2, rep1sep(map(seq(name$1(str('?'), { name: 'condition', primary: true }), ws$2, application), ([, , a]) => a), rws, 'disallow')));
-        const value = map(seq(str('string[]', 'number[]', 'boolean[]', 'date[]', 'any', 'string', 'number', 'boolean', 'date'), not(read1To(endRef))), ([s]) => ({ type: s }), { name: 'type', primary: true });
+        const value = map(seq(str('any[]', 'string[]', 'number[]', 'boolean[]', 'date[]', 'any', 'string', 'number', 'boolean', 'date'), not(read1To(endRef))), ([s]) => ({ type: s === 'any[]' ? 'array' : s }), { name: 'type', primary: true });
         const typedef = comment('c', map(seq(str('type'), ws$2, name$1(ident, { name: 'type', primary: true }), ws$2, str('='), ws$2, type), ([, , name, , , , type]) => ({ name, type })));
         const typedefs = map(rep1sep(typedef, read1(' \t\n;'), 'allow'), defs => defs.reduce((a, c) => (c.type.desc = c.c, a[c.name] = c.type, a), {}));
         const ref = map(seq(ident, opt(str('[]'))), ([ref, arr]) => ({ type: arr ? 'array' : 'any', ref }), { name: 'type', primary: true });
@@ -1593,7 +1612,7 @@
         const rest = map(seq(str('...'), ws$2, str(':'), ws$2, type), ([, , , , type]) => {
             return Object.assign({ name: '...' }, type);
         });
-        const object = map(seq(str('{'), ws$2, repsep(comment('desc', alt(key, rest)), read1(' \t\n,;'), 'allow'), ws$2, str('}'), opt(str('[]'))), ([, , keys, , , arr], fail) => {
+        const object = map(seq(str('{'), ws$2, repsep(comment('desc', alt('interface parts', key, rest)), read1(' \t\n,;'), 'allow'), ws$2, str('}'), opt(str('[]'))), ([, , keys, , , arr], fail) => {
             const rests = keys.filter(k => k.name === '...');
             if (rests.length > 1)
                 fail('only one object rest can be specified');
@@ -1613,7 +1632,9 @@
         const tuple = map(seq(str('['), ws$2, repsep(type, read1(' \t\r\n,'), 'allow'), ws$2, str(']'), opt(str('[]'))), ([, , types, , , arr]) => {
             return { type: arr ? 'tuple[]' : 'tuple', types };
         });
-        const maybe_union = map(rep1sep(seq(alt(value, object, tuple, literal, ref), conditions), seq(ws$2, str('|'), ws$2), 'disallow'), list => {
+        const maybe_union = {};
+        const union_array = {};
+        maybe_union.parser = map(rep1sep(seq(alt('union', value, object, tuple, literal, union_array, ref), conditions), seq(ws$2, str('|'), ws$2), 'disallow'), list => {
             const types = list.map(([t, c]) => {
                 if (c && c[1] && c[1].length)
                     t.checks = c[1];
@@ -1624,21 +1645,21 @@
             else
                 return { type: 'union', types: types };
         });
-        const union_array = alt(map(seq(str('Array<'), ws$2, maybe_union, ws$2, str('>')), ([, , union], fail) => {
+        union_array.parser = alt('union array', map(seq(str('Array<'), ws$2, maybe_union, ws$2, str('>')), ([, , union], fail) => {
             if (union.type === 'union')
                 return { type: 'union[]', types: union.types };
             else if (union.type === 'literal')
                 fail('literal types cannot be array types');
             else if (union.type === 'array' || ~union.type.indexOf('[]'))
-                fail('array types cannot be array types');
+                return { type: 'union[]', types: [union] };
             else if (union.type === 'any')
-                fail('any cannot be an array type');
+                return { type: 'array' };
             else {
                 union.type += '[]';
                 return union;
             }
-        }), map(seq(str('('), ws$2, maybe_union, ws$2, str(')')), ([, , union]) => union), maybe_union);
-        type.parser = map(seq(union_array, conditions), ([type, checks]) => {
+        }), map(seq(str('('), ws$2, maybe_union, ws$2, str(')')), ([, , union]) => union));
+        type.parser = map(seq(maybe_union, conditions), ([type, checks]) => {
             if (checks && checks[1] && checks[1].length)
                 type.checks = checks[1];
             return type;
@@ -1724,7 +1745,7 @@
     function concat(values) {
         if (values.length === 1)
             return values[0];
-        return { op: 'cat', args: values, meta: '$' };
+        return { op: 'cat', args: values, meta: { q: '$$$' } };
     }
     const _parse$1 = parser$1(alt(map(rep1(content$1), args => concat(args)), map(ws$2, () => ({ v: '' }))), { trim: true });
     _parse$1.namespace = 'template';
@@ -1808,7 +1829,9 @@
                 }
             }
             else {
-                const first = parts[0];
+                let first = parts[0];
+                if (typeof first === 'object' && 'v' in first)
+                    first = first.v;
                 if (first === '_') {
                     if (ctx.special && ctx.special.pipe)
                         o = ctx.special.pipe;
@@ -1827,8 +1850,39 @@
             for (let i = idx; i < parts.length; i++) {
                 const part = parts[i];
                 const v = typeof part !== 'object' ? part : evalValue(root, part);
-                if (Array.isArray(o) && typeof v === 'number' && v < 0)
-                    o = o[o.length + v];
+                if (o != null && typeof v === 'number' && typeof part === 'object' && typeof o.length === 'number') {
+                    if ('slice' in part && part.slice && typeof part.slice === 'object') {
+                        let start = 'anchor' in part && part.anchor === 'end' ? o.length - 1 - v : v;
+                        if (start < 0)
+                            start = 0;
+                        if (start > o.length - 1)
+                            start = o.length - 1;
+                        const e = typeof part.slice !== 'object' ? part : evalValue(root, part.slice);
+                        let end = 'anchor' in part.slice && part.slice.anchor === 'end' ? o.length - 1 - e : e;
+                        if (end < 0)
+                            end = 0;
+                        if (end > o.length - 1)
+                            end = o.length - 1;
+                        const dir = start > end ? -1 : 1;
+                        let res = typeof o === 'string' ? '' : [];
+                        for (let i = start; i !== end + dir; i += dir)
+                            typeof res === 'string' ? res = res + o[i] : res.push(o[i]);
+                        o = res;
+                    }
+                    else if ('anchor' in part && part.anchor === 'end') {
+                        o = o[o.length - 1 - v];
+                    }
+                    else {
+                        o = o[v];
+                    }
+                }
+                else if (Array.isArray(v) && o && typeof o === 'object') {
+                    const r = {};
+                    for (const f of v)
+                        if (f in o)
+                            r[f] = o[f];
+                    o = r;
+                }
                 else
                     o = o && o[v];
                 if (o === null || o === undefined)
@@ -1875,15 +1929,22 @@
             for (let i = 0; i < last; i++) {
                 if (typeof o !== 'object' && typeof o !== 'function' || !o)
                     return;
-                const key = keys[i];
+                let key = keys[i];
+                const part = parts[i];
+                if (o != null && typeof key === 'number' && typeof part === 'object' && 'anchor' in part && part.anchor === 'end' && typeof o.length === 'number')
+                    key = o.length - key;
                 const next = keys[i + 1];
                 if (!(key in o) || o[key] == null)
                     o[key] = typeof next === 'number' ? [] : {};
                 o = o[key];
             }
             if (o) {
-                const cur = o[keys[last]];
-                o[keys[last]] = value;
+                const part = parts[last];
+                let k = keys[last];
+                if (o != null && typeof k === 'number' && typeof part === 'object' && 'anchor' in part && part.anchor === 'end' && typeof o.length === 'number')
+                    k = o.length - 1 - k;
+                const cur = o[k];
+                o[k] = value;
                 return cur;
             }
         }
@@ -2281,7 +2342,7 @@
     }
     function extend$1(context, opts) {
         return {
-            parent: opts.fork ? (context.parent || context.root) : context,
+            parent: opts.fork && (!opts.value || opts.value === context.value) ? (context.parent || context.root) : context,
             root: context.root,
             path: opts.path || '',
             value: 'value' in opts ? opts.value : context.value,
@@ -3176,20 +3237,25 @@
                 [source.value];
         let fields = report.fields;
         let headers = report.headers;
-        if (!fields || !fields.length && values.length) {
+        if ((!fields || !fields.length) && values.length && typeof values[0] === 'object' && values[0]) {
             fields = Object.keys(values[0]);
-            if (!headers || !headers.length)
+            if (Array.isArray(values[0]))
+                fields = fields.map(i => `_.${i}`);
+            else if (!headers || !headers.length)
                 headers = Object.keys(values[0]);
         }
+        if (!fields)
+            fields = [];
         let res = '';
         if (headers) {
             const ctx = extend$1(context, { parser: parse$2 });
             if (options === null || options === void 0 ? void 0 : options.table)
-                res += `<tr class=header><th style="border-right: 2px solid;"></th>${headers.map(h => `<th>${evaluate(ctx, h)}</th>`).join('')}</tr>`;
+                res += `<thead><tr><th class=index></th>${headers.map(h => `<th>${evaluate(ctx, h)}</th>`).join('')}</tr></thead>`;
             else
                 res += headers.map(h => `${report.quote || ''}${evaluate(ctx, h)}${report.quote || ''}`).join(report.field || ',') + (report.record || '\n');
         }
         if (options === null || options === void 0 ? void 0 : options.table) {
+            res += '<tbody>';
             let idx = 1;
             for (const value of values) {
                 const c = extend$1(context, { value, special: { index: idx - 1 } });
@@ -3200,7 +3266,7 @@
                     if (v)
                         c.value = v;
                 }
-                res += `<tr class=row><th>${idx}</th>${fields.map(f => {
+                res += `<tr><th class=index>${idx}</th>${fields.map(f => {
                 let val = f ? evaluate(c, f) : '';
                 if (val === undefined)
                     val = '';
@@ -3214,6 +3280,7 @@
             }).join('')}</tr>`;
                 idx++;
             }
+            res += '</tbody>';
             res = `<table>${res}</table>`;
         }
         else {
@@ -4368,8 +4435,10 @@
                     return `${i ? '' : '_'}[${_stringify({ v: p })}]`;
                 else if (typeof p === 'string' || typeof p === 'number')
                     return `${i ? '.' : ''}${p}`;
-                else
-                    return `[${_stringify(p)}]`;
+                else {
+                    const v = p;
+                    return `[${_stringify(p)}${v.anchor === 'end' ? '<' : ''}${v.slice ? ` ${_stringify(v.slice)}${v.slice.anchor === 'end' ? '<' : ''}` : ''}]`;
+                }
             }).join('')}`;
             }
         }
@@ -4441,6 +4510,7 @@
         return agg;
     }
     function stringifyOp(value) {
+        var _a, _b;
         let op = value.op;
         if ((_tplmode && _html !== false) || _html) {
             if (op === '>')
@@ -4475,14 +4545,19 @@
         }
         else if (op === '+' && value.args && value.args.length > 1 && findNestedStringOpL(op, value)) {
             const args = flattenNestedBinopsL(op, value);
-            return `'${args.map(a => typeof a !== 'string' && 'v' in a && typeof a.v === 'string' ? a.v.replace(/[{']/g, v => `\\${v}`).replace(/\$$/, '\\$') : `{${_stringify(a)}}`).join('')}'`;
+            if (value.meta && value.meta.q) {
+                const re = new RegExp(`(\\{|${value.meta.q})`, 'g');
+                return `${value.meta.q}${args.map(a => typeof a !== 'string' && 'v' in a && typeof a.v === 'string' ? a.v.replace(re, v => `\\$1`).replace(/\$$/, '\\$') : `{${_stringify(a)}}`).join('')}${value.meta.q}`;
+            }
+            else
+                return `'${args.map(a => typeof a !== 'string' && 'v' in a && typeof a.v === 'string' ? a.v.replace(/[{']/g, v => `\\${v}`).replace(/\$$/, '\\$') : `{${_stringify(a)}}`).join('')}'`;
         }
         else if ((op === 'fmt' || op === 'format') && value.args && typeof value.args[1] === 'object' && 'v' in value.args[1] && typeof value.args[1].v === 'string') {
             const val = value.args[0];
             let vs = _stringify(val);
             if (typeof val !== 'string' && 'op' in val && (binops.includes(val.op) || unops.includes(val.op)))
                 vs = `(${vs})`;
-            if (value.opts)
+            if (value.opts || ((_a = value.args) === null || _a === void 0 ? void 0 : _a.length) > 3)
                 return `${vs}#${[value.args[1].v]}${wrapArgs('(', value.args.slice(2), value.opts, ')')}`;
             else
                 return `${vs}#${[value.args[1].v].concat(value.args.slice(2).map(a => _stringify(a))).join(',')}`;
@@ -4531,6 +4606,9 @@
         else if (op === 'get' && value.args.length === 2 && typeof value.args[1] === 'object' && 'v' in value.args[1] && typeof value.args[1].v === 'object' && 'k' in value.args[1].v) {
             return `${_stringify(value.args[0])}${_stringify({ r: { k: ['r'].concat(value.args[1].v.k) } }).substr(1)}`;
         }
+        else if (op === 'cat' && ((_b = value.meta) === null || _b === void 0 ? void 0 : _b.q) === '$$$') {
+            return `$$$${stringifyTemplate(value.args)}$$$`;
+        }
         else if (call_op.test(op)) {
             return wrapArgs(`${op}(`, value.args || [], value.opts, ')', 0);
         }
@@ -4562,6 +4640,8 @@
                 return value.v.replace(/\\(.)/g, '\\\\$1').replace(/{{/g, '\\{{');
             if ((_key || !_noSym) && !checkIdent.test(value.v) && value.v.length)
                 return `${_key ? '' : ':'}${value.v}`;
+            else if (value.q)
+                return `${value.q}${value.v.replace(new RegExp(value.q, 'g'), `\\${value.q}`)}${value.q}`;
             else if (!~value.v.indexOf("'"))
                 return `'${value.v.replace(/[{']/g, v => `\\${v}`).replace(/\${/g, '\\${')}'`;
             else if (!~value.v.indexOf('`'))
@@ -4933,6 +5013,13 @@
         if (!block && _level)
             str += `${split}end`;
         return str;
+    }
+    function stringifyTemplate(parts) {
+        const start = _tpl;
+        _tpl = true;
+        const res = parts.map(p => _stringify(p)).join('');
+        _tpl = start;
+        return res;
     }
     function stringifyTemplateBlock(op) {
         _tpl = false;
@@ -5406,7 +5493,7 @@
         let { checks } = _schema;
         const { type, fields, rest, types, literal } = _schema;
         if (!checkType(value, schema.type === 'array' ? 'array' : type, literal, required))
-            return [{ error: `type mismatch for${required ? ' required' : ''} '${type}'`, actual: stringifySchema(inspect(value)), value, path, expected: stringifySchema(_schema, true) }];
+            return [{ error: `type mismatch for${required ? ' required' : ''} ${type}`, actual: stringifySchema(inspect(value)), value, path, expected: stringifySchema(_schema, true), literal: type === 'literal' }];
         if (_schema !== schema && schema.checks) {
             if (!checks)
                 checks = schema.checks;
@@ -5451,10 +5538,15 @@
                         break;
                     }
                     else if (miss && tmp.find(e => e.type === 'missing') || tmp.find(e => e.type === 'check')) {
-                        legit = tmp.filter(e => miss && e.type === 'missing' || e.type === 'check');
+                        tmp.filter(e => miss && e.type === 'missing' || e.type === 'check');
                     }
                     else if (tmp.find(e => e.path !== p)) {
-                        legit = tmp;
+                        if (!legit)
+                            legit = tmp;
+                        else if (tmp.length < legit.length)
+                            legit = tmp;
+                        else if (legit.filter(e => e.literal).length > tmp.filter(e => e.literal).length)
+                            legit = tmp;
                     }
                 }
                 if (!ok && !legit)
@@ -5476,7 +5568,7 @@
                 if (fields) {
                     for (const f of fields) {
                         if (f.required && !(f.name in v))
-                            errs.push({ error: `requried field ${f.name} is missing`, path: join(p, f.name) });
+                            errs.push({ error: `required field '${f.name}' is missing`, path: join(p, f.name), expected: f.type });
                         else if (v && f.name in v && (tmp = _validate(v[f.name], f, mode, join(p, f.name), extend$1(ctx, { value: v[f.name], path: join(p, f.name) }), f.required)) !== true)
                             errs.push.apply(errs, tmp);
                     }
@@ -5492,7 +5584,7 @@
                 else if (mode === 'strict' && v) {
                     for (const k in v)
                         if (v[k] != null && !fields || !fields.find(f => f.name === k))
-                            errs.push({ error: `unknown field ${k}`, path: p, type: 'strict', value: v[k] });
+                            errs.push({ error: `unknown field '${k}'`, path: p, type: 'strict', value: v[k] });
                 }
             }
         }
@@ -5547,18 +5639,21 @@
         const unquotedField = readTo(opts.record + opts.field, true);
         const field = alt(quotedField, unquotedField);
         const record = verify(rep1sep(field, seq(ws, str(opts.field), ws)), s => s.length > 1 || s[0].length > 0 || 'empty record');
-        const csv = repsep(record, str(opts.record), 'allow');
+        const csv = map(seq(skip(' \r\n\t'), repsep(record, str(opts.record), 'allow'), skip(' \r\n\t')), ([, csv]) => csv);
         const _parse = parser$1(csv, { consumeAll: true });
         return function parse(input, options) {
             const res = _parse(input, options);
             if (Array.isArray(res) && res.length > 0) {
-                if (opts.header) {
-                    const header = res.shift().map((k, i) => [k, i]);
-                    header.sort((a, b) => a < b ? -1 : a > b ? 1 : 0);
-                    for (let i = 0; i < res.length; i++) {
-                        for (let j = 0; j < header.length; j++)
-                            res[i][header[j][0]] = res[i][header[j][1]];
-                    }
+                let header = undefined;
+                if (Array.isArray(opts.header))
+                    header = opts.header.map((k, i) => [k, i]);
+                else if (typeof opts.header === 'object')
+                    header = res.shift().map((k, i) => { var _a; return [(_a = opts.header[k]) !== null && _a !== void 0 ? _a : k, i]; }).filter(o => o[0]);
+                else if (!!opts.header)
+                    header = res.shift().map((k, i) => [k, i]);
+                if (header) {
+                    header.sort((a, b) => `${a}`.toLowerCase() < `${b}`.toLowerCase() ? -1 : `${a}`.toLowerCase() > `${b}`.toLowerCase() ? 1 : 0);
+                    return res.map(v => header.reduce((a, c) => (a[c[0]] = v[c[1]], a), {}));
                 }
             }
             return res;
@@ -5616,7 +5711,7 @@
         return opts && 'table' in opts && opts.table === 1;
     }
     function parse$1(data, options) {
-        var _a, _b, _c;
+        var _a, _b;
         let values;
         if (isTableOpts(options)) {
             values = table(options)(data);
@@ -5633,14 +5728,21 @@
             values = values.filter(v => v.length >= min);
         }
         if (options.header && values.length) {
-            const header = values.shift().map((k, i) => [k, i]);
-            if ((_c = options.order) !== null && _c !== void 0 ? _c : true)
-                header.sort((a, b) => {
-                    const l = `${a}`.toLowerCase();
-                    const r = `${b}`.toLowerCase();
-                    return l < r ? -1 : l > r ? 1 : 0;
-                });
-            return values.map(v => header.reduce((a, c) => (a[c[0]] = v[c[1]], a), {}));
+            let header = undefined;
+            if (Array.isArray(options.header)) {
+                header = options.header.map((k, i) => [k, i]);
+                if (isTableOpts(options))
+                    values.shift();
+            }
+            else if (typeof options.header === 'object') {
+                header = values.shift().map((k, i) => { var _a; return [(_a = options.header[k]) !== null && _a !== void 0 ? _a : k, i]; }).filter(o => o[0]);
+            }
+            else if (!!options.header)
+                header = values.shift().map((k, i) => [k, i]);
+            if (header) {
+                header.sort((a, b) => `${a}`.toLowerCase() < `${b}`.toLowerCase() ? -1 : `${a}`.toLowerCase() > `${b}`.toLowerCase() ? 1 : 0);
+                return values.map(v => header.reduce((a, c) => (a[c[0]] = v[c[1]], a), {}));
+            }
         }
         return values;
     }
@@ -6307,6 +6409,8 @@
         return values;
     }), simple(['object'], (_name, values) => {
         const res = {};
+        if (values.length === 1 && Array.isArray(values[0]))
+            values = values[0];
         for (let i = 0; i < values.length; i += 2) {
             res[values[i]] = values[i + 1];
         }
@@ -6536,6 +6640,8 @@
                 return JSON.stringify(value);
             if (opts.schema)
                 return stringifySchema(value);
+            if (opts.base64)
+                return btoa(value);
             else if (opts.raport) {
                 let v = stringify(value, opts);
                 if (v === undefined)
@@ -6620,6 +6726,39 @@
         return diff(left, right, { equal, keys: opts === null || opts === void 0 ? void 0 : opts.keys });
     }), simple(['label-diff'], (_, [diff, label], opts) => {
         return labelDiff(diff, label, opts);
+    }), simple(['patch'], (_, values, opts) => {
+        const dir = (opts === null || opts === void 0 ? void 0 : opts.dir) || 'forward';
+        const strict = opts === null || opts === void 0 ? void 0 : opts.strict;
+        const base = JSON.parse(JSON.stringify(values.shift() || {}));
+        const r = new Root(base);
+        if (dir === 'backward') {
+            const vals = values.slice().reverse();
+            if (strict) {
+                for (const v of vals)
+                    for (const path in v)
+                        if (safeGet(r, path) == v[path][1])
+                            safeSet(r, path, v[path][0]);
+            }
+            else {
+                for (const v of vals)
+                    for (const path in v)
+                        safeSet(r, path, v[path][0]);
+            }
+        }
+        else {
+            if (strict) {
+                for (const v of values)
+                    for (const path in v)
+                        if (safeGet(r, path) == v[path][0])
+                            safeSet(r, path, v[path][1]);
+            }
+            else {
+                for (const v of values)
+                    for (const path in v)
+                        safeSet(r, path, v[path][1]);
+            }
+        }
+        return base;
     }));
     // math
     registerOperator(simple(['+', 'add'], (_name, values, _opts, ctx) => {
@@ -6731,18 +6870,32 @@
         return Math.floor(values[0]);
     }), simple(['ceil'], (_name, values) => {
         return Math.ceil(values[0]);
-    }), simple(['rand', 'random'], (_name, [min, max, dec]) => {
-        let res;
-        if (min == null)
-            return Math.random();
-        else if (typeof max !== 'number')
-            res = Math.random() * min;
-        else if (typeof max === 'number')
-            res = Math.random() * (max - min) + min;
-        if (max === true || dec === true)
+    }), simple(['rand', 'random'], (_name, args) => {
+        if (!args.length || typeof args[0] === 'number') {
+            const [min, max, dec] = args;
+            let res;
+            if (min == null)
+                return Math.random();
+            else if (typeof max !== 'number')
+                res = Math.random() * min;
+            else if (typeof max === 'number')
+                res = Math.random() * (max - min) + min;
+            if (max === true || dec === true)
+                return res;
+            else
+                return Math.round(res);
+        }
+        else if (Array.isArray(args[0])) {
+            const arr = args[0];
+            return arr[Math.floor(Math.random() * arr.length)];
+        }
+        else if (typeof args[0] === 'string' && typeof args[1] === 'number') {
+            let res = '';
+            const [str, count] = args;
+            for (let i = 0; i < count; i++)
+                res += str[Math.floor(Math.random() * str.length)];
             return res;
-        else
-            return Math.round(res);
+        }
     }));
     // string
     function pad(where, str, count, pad) {
@@ -6980,22 +7133,15 @@
         let [v, fmt, ...s] = args;
         const op = formats[fmt];
         if (!op) {
-            const op = getOperator(fmt);
+            let op = getOperator(fmt);
+            if (!op) {
+                const o = safeGet(ctx, fmt) || safeGet(ctx.root, fmt);
+                if (isApplication(o))
+                    op = o;
+            }
             if (op) {
                 const args = [v, ...s];
-                if (op.type === 'aggregate')
-                    return op.apply(fmt, Array.isArray(v) ? v : [v], s.map(v => ({ v })), (opts || virtualFormats[fmt]), ctx);
-                if (op.type === 'checked') {
-                    for (let i = 0; i < args.length; i++) {
-                        const res = op.checkArg(fmt, i, args.length - 1, args[i], (opts || virtualFormats[fmt]), ctx, { v: args[i] });
-                        if (typeof res !== 'object' || !('result' in res))
-                            continue;
-                        else
-                            return res.result;
-                    }
-                    return op.apply(fmt, args, (opts || virtualFormats[fmt]), ctx);
-                }
-                return op.apply(fmt, args, (opts || virtualFormats[fmt]), ctx);
+                return applyOperator(ctx, { op: fmt, args: args.map(v => isApplication(v) ? v : ({ v })), opts: { v: opts || virtualFormats[fmt] } });
             }
             else
                 return `${v}`;
@@ -7039,6 +7185,8 @@
             return parseTime(v, opts);
         else if (opts.expr)
             return parseExpr(v, opts);
+        else if (opts.json)
+            return JSON.parse(v);
         else if (opts.schema)
             return parseSchema(v);
         else if (opts.range)
@@ -7155,13 +7303,13 @@
         apply(_name, [value, body], opts, ctx) {
             if (Array.isArray(value)) {
                 const last = value.length - 1;
-                return value.map((v, i) => evalApply(extend$1(ctx, { value: v, special: { last, index: i, key: i, 'last-key': last } }), body, [v, i])).join((opts === null || opts === void 0 ? void 0 : opts.join) || '');
+                return value.map((v, i) => evalApply(ctx, body, [v, i], { last, index: i, key: i, 'last-key': last })).join((opts === null || opts === void 0 ? void 0 : opts.join) || '');
             }
             else if (typeof value === 'object' && value) {
                 const entries = Object.entries(value);
                 const lastKey = entries[entries.length - 1][0];
                 const last = entries.length - 1;
-                return Object.entries(value).map(([k, v], i) => evalApply(extend$1(ctx, { value: v, special: { last, 'last-key': lastKey, index: i, key: k } }), body, [v, k])).join('');
+                return Object.entries(value).map(([k, v], i) => evalApply(ctx, body, [v, k], { last, 'last-key': lastKey, index: i, key: k })).join('');
             }
             else {
                 return '';
@@ -7187,7 +7335,7 @@
                 return { result: value };
         },
         apply(_name, [value, body], _opts, ctx) {
-            return evalApply(extend$1(ctx, { value }), body, [value]);
+            return evalApply(ctx, body, [value]);
         }
     }, {
         type: 'checked',
@@ -7226,8 +7374,38 @@
     }, {
         type: 'aggregate',
         names: ['count'],
-        apply(_name, arr, args, _opts, ctx) {
-            if (args.length)
+        apply(_name, arr, args, opts, ctx) {
+            if ((opts === null || opts === void 0 ? void 0 : opts.partition) && isApplication(opts.partition)) {
+                return arr.reduce((a, e, i) => {
+                    const key = evalApply(ctx, opts.partition, [e, i]);
+                    if (key in a)
+                        a[key]++;
+                    else
+                        a[key] = 1;
+                    return a;
+                }, {});
+            }
+            else if ((opts === null || opts === void 0 ? void 0 : opts.sub) && typeof opts.sub === 'object' && !Object.values(opts.sub).find(o => !isApplication(o))) {
+                return arr.reduce((a, e, i) => {
+                    for (const k in opts.sub) {
+                        let res = evalApply(ctx, opts.sub[k], [e, i]);
+                        if (!res)
+                            continue;
+                        if (typeof res === 'string')
+                            res = [res];
+                        else if (!Array.isArray(res))
+                            res = [k];
+                        for (const k of res) {
+                            if (k in a)
+                                a[k]++;
+                            else
+                                a[k] = 1;
+                        }
+                    }
+                    return a;
+                }, {});
+            }
+            else if (args.length)
                 return arr.filter((e, i) => evalApply(ctx, args[0], [e, i])).length;
             else
                 return arr.length;
@@ -7396,7 +7574,7 @@
             const last = args.length - 1;
             if (last < 0)
                 return;
-            const c = extend$1(ctx, { locals: opts && opts.implicit ? ctx.locals || {} : {}, fork: !ctx.locals });
+            const c = (opts === null || opts === void 0 ? void 0 : opts.implicit) ? ctx : extend$1(ctx, { locals: {}, fork: !ctx.locals });
             for (let i = 0; i < last; i++)
                 evalParse(c, args[i]);
             const res = evalParse(c, args[last]);

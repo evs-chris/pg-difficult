@@ -1,4 +1,4 @@
-const { evaluate, template, registerOperator, parse, parseTemplate, run, Root, stringify } = Raport;
+const { evaluate, template, registerOperator, parse, parseTemplate, parsePath, run, Root, stringify } = Raport;
 const { docs } = Raport.Design;
 const { Window } = RauiWindow;
 
@@ -717,6 +717,7 @@ const app = globalThis.app = new App({
         'raui.menu.primary.fg': light,
         'raui.window.title.bg': dark,
       });
+      setIcon(dark);
     },
     'store.settings.title'(v) {
       if (v) document.title = `${v} - pg-difficult`;
@@ -1481,6 +1482,18 @@ Window.extendWith(Query, {
   },
 });
 
+function diffKeys(diff) {
+  const res = [];
+  for (const k of Object.keys(diff)) {
+    const p = parsePath(k);
+    if (!p) continue;
+    const first = p.k[0];
+    if (!first || res.includes(first)) continue;
+    res.push(first);
+  }
+  return res;
+}
+
 function reverseEntry(entry, schema, skipEmpty) {
   if (entry.old && !entry.new) {
     return [`insert into "${entry.schema}"."${entry.table}" (${Object.keys(entry.old).map(k => `"${k}"`).join(', ')}) values (${Object.keys(entry.old).map((_k, i) => `$${i + 1}`).join(', ')})`, Object.values(entry.old)];
@@ -1498,9 +1511,10 @@ function reverseEntry(entry, schema, skipEmpty) {
     const cur = Object.assign({}, entry.old, entry.new);
     if (skipEmpty) {
       const diff = evaluate({ left: entry.old, right: cur }, 'diff(left right)');
-      if (!Object.keys(diff).length) return 'empty';
-      if (keys.length) return [`update "${entry.schema}"."${entry.table}" set ${Object.keys(diff).map(k => `"${k}" = $${i++}`).join(', ')} where ${keys.map(k => `"${k.name}" = $${i++}`).join(' and ')}`, Object.keys(diff).map(k => diff[k][0]).concat(keys.map(k => entry.old[k.name]))];
-      else return [`update "${entry.schema}"."${entry.table}" set ${Object.keys(diff).map(k => `"${k}" = $${i++}`).join(', ')} where ${Object.keys(cur).map(k => `"${k}" = $${i++}`).join(' and ')}`, Object.keys(diff).map(k => diff[k][0]).concat(Object.keys(cur).map(k => cur[k]))];
+      const dkeys = diffKeys(diff);
+      if (!dkeys.length) return 'empty';
+      if (keys.length) return [`update "${entry.schema}"."${entry.table}" set ${dkeys.map(k => `"${k}" = $${i++}`).join(', ')} where ${keys.map(k => `"${k.name}" = $${i++}`).join(' and ')}`, dkeys.map(k => entry.old[k]).concat(keys.map(k => entry.old[k.name]))];
+      else return [`update "${entry.schema}"."${entry.table}" set ${dkeys.map(k => `"${k}" = $${i++}`).join(', ')} where ${Object.keys(cur).map(k => `"${k}" = $${i++}`).join(' and ')}`, dkeys.map(k => entry.old[k]).concat(Object.keys(cur).map(k => cur[k]))];
     } else {
       if (keys.length) return [`update "${entry.schema}"."${entry.table}" set ${Object.keys(entry.old).map(k => `"${k}" = $${i++}`).join(', ')} where ${keys.map(k => `"${k.name}" = $${i++}`).join(' and ')}`, Object.keys(entry.old).map(k => entry.old[k]).concat(keys.map(k => entry.old[k.name]))];
       else return [`update "${entry.schema}"."${entry.table}" set ${Object.keys(entry.old).map(k => `"${k}" = $${i++}`).join(', ')} where ${Object.keys(cur).map(k => `"${k}" = $${i++}`).join(' and ')}`, Object.keys(entry.old).map(k => entry.old[k]).concat(Object.keys(cur).map(k => cur[k]))];
@@ -2153,6 +2167,12 @@ const renderMD = (function() {
           return evaluate(code);
         } else if (lang === 'raport+text') {
           return `<pre><code class="hljs text">${evaluate(code)}</code></pre>`;
+        } else if (lang.startsWith('csv+table')) {
+          const data = evaluate({ code }, `parse(code csv:1 header:${lang.includes('nohead') ? false : true})`);
+          return run({ type: 'delimited', source: 'data', sources: [{ source: 'data' }] }, { data: { value: data } }, {}, { table: 1 });
+        } else if (lang.startsWith('raport+table')) {
+          const data = evaluate(code);
+          return run({ type: 'delimited', source: 'data', sources: [{ source: 'data' }] }, { data: { value: data } }, {}, { table: 1 });
         } else {
           const highlighted = l && hljs.getLanguage(l) ? hljs.highlight(code, { language: l, ignoreIllegals: true }).value : code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
           return `<pre><code class="hljs ${l}">${highlighted}</code></pre>`;
@@ -2172,6 +2192,7 @@ const renderMD = (function() {
       html = marked.parse(str);
     }
     if (!opts.nochecks) html = html.replace(/\<input (checked="" )?disabled="" type="checkbox"/g, '<input $1type="checkbox"');
+    html = html.replace(/\<a (href="https?:\/\/)/g, '<a target="_blank" $1');
     return html;
   };
 })();
@@ -2234,35 +2255,45 @@ class ScratchPad extends Window {
       this.set(`_settings.${path}`, value);
     }
   }
-  evaluate(txt) {
+  evaluate(txt, context) {
     if (this.ace) {
       const sel = this.getContext(this.ace).decorators.ace.editor.getSelectedText();
       if (sel) txt = sel;
     }
     const ok = parse(txt, { consumeAll: true });
+    const ctxok = context ? parse(context, { consumeAll: true }) : { v: {} };
     if (ok && 'cause' in ok) {
       this.set({
         evalresult: '',
-        evalerror: `Invelid expression: ${ok.message}\n\n${ok.marked}`,
+        evalerror: `Invalid expression: ${ok.message}\n\n${ok.marked}`,
       });
     } else {
-      const opts = app.get('scratchroot') || {};
-      const root = new Root({}, opts);
-      root.sources = Object.assign({}, opts.sources);
-      root.log = this.log;
-      if (opts.all) {
-        for (const k in opts.all.apply || {}) if (opts.all.apply[k]) root.sources[k] = { value: opts.all.apply[k] };
-        for (const k in opts.all.provide || {}) if (opts.all.provide[k]) root.sources[k] = { value: opts.all.provide[k] };
+      if (ctxok && 'cause' in ctxok) {
+        this.set({
+          evalresult: '',
+          evalerror: `Invalid context expression: ${ctxok.message}\n\n${ctxok.marked}`,
+        });
+      } else {
+        const opts = app.get('scratchroot') || {};
+        const root = new Root({}, opts);
+        root.sources = Object.assign({}, opts.sources);
+        root.log = this.log;
+        if (opts.all) {
+          for (const k in opts.all.apply || {}) if (opts.all.apply[k]) root.sources[k] = { value: opts.all.apply[k] };
+          for (const k in opts.all.provide || {}) if (opts.all.provide[k]) root.sources[k] = { value: opts.all.provide[k] };
+        }
+        const ctx = evaluate(root, ctxok);
+        if (typeof ctx === 'object') root.value = Object.assign(root.value, ctx);
+        const res = evaluate(root, ok);
+        let evaltext = res === undefined ? 'undefined' : JSON.stringify(res);
+        if (evaltext.length > 100000) evaltext = `${evaltext.slice(0, 100000)}...`;
+        this.set({
+          evalresult: res,
+          evaltext,
+          treeresult: typeof res !== 'object' ? undefined : treeify(res),
+          evalerror: '',
+        });
       }
-      const res = evaluate(root, ok);
-      let evaltext = res === undefined ? 'undefined' : JSON.stringify(res);
-      if (evaltext.length > 100000) evaltext = `${evaltext.slice(0, 100000)}...`;
-      this.set({
-        evalresult: res,
-        evaltext,
-        treeresult: typeof res !== 'object' ? undefined : treeify(res),
-        evalerror: '',
-      });
     }
     const split = this.findComponent('split');
     if (split) {
@@ -2285,10 +2316,10 @@ class ScratchPad extends Window {
     if (~idx) {
       let txt = this.get('pad.text');
       let i = 0;
-      txt = txt.replace(/\* \[.\]/g, v => {
+      txt = txt.replace(/(\*|[a-zA-Z0-9]+\.) \[[ xX]\]/g, (v, t) => {
         if (i++ === idx) {
-          if (v[3] === 'x') return '* [ ]';
-          else return '* [x]';
+          if (v[3] === 'x') return `${t} [ ]`;
+          else return `${t} [x]`;
         } else {
           return v;
         }
@@ -2415,12 +2446,23 @@ dd { margin: 0.5em 0 1em 2em; white-space: pre-wrap; }
     },
   },
   data() {
-    return { docs, ops: evaluate(docs.operators), expand: {}, pad: { name: '', syntax: 'markdown', text: '' } };
+    return { docs, ops: evaluate(docs.operators), fmts: evaluate(docs.formats), expand: {}, pad: { name: '', syntax: 'markdown', text: '' } };
   },
   computed: {
     operators() {
       const map = this.get('ops').reduce((a, c) => (Array.isArray(c.op) ? c.op.forEach(o => a.push([o, c])) : a.push([c.op, c]), a), []);
+      let fmts = this.get('fmts');
+      for (const f of fmts) {
+        const all = Array.isArray(f.name) ? f.name : [f.name];
+        all.forEach((n, i) => {
+          const op = `#${n}`;
+          const val = { op, sig: [{ fmt: 1, proto: op, desc: f.desc }], opts: f.opts };
+          if (i > 0) val.alias = true;
+          map.push([op, val]);
+        });
+      }
       let ops = evaluate({ map }, `sort(map =>if _.0[0] == '#' then 'zz[_.0]' elif _.0[0] == '|' then ' {_.0}' else _.0)`)
+
       const search = this.get('opsearch');
       if (search) {
         const re = new RegExp(search.replace(/([*.\\\/$^()[\]{}+])/g, '\\$1'), 'i');
@@ -3692,3 +3734,14 @@ Object.defineProperty(globalThis, 'R', {
   }),
 });
 
+const icon = `data:image/svg+xml,%3Csvg%20width%3D'20'%20height%3D'20'%20viewBox%3D'85%20114%2060%2061'%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%3E%3Cpath%20style%3D'fill%3A%23787878%3Bfill-opacity%3A1%3Bstroke%3A%23000%3Bstroke-width%3A1.32292%3Bstroke-dasharray%3Anone'%20d%3D'M120.956%20121.59c0%203.514-7.857%206.363-17.55%206.363-9.692%200-17.549-2.849-17.549-6.363s7.857-6.364%2017.55-6.364c9.692%200%2017.549%202.85%2017.549%206.364'%2F%3E%3Cpath%20style%3D'fill%3A__FILL__%3Bfill-opacity%3A1%3Bstroke%3A%23000%3Bstroke-width%3A1.32292%3Bstroke-dasharray%3Anone'%20d%3D'M126.415%20127.381c9.247.18%2016.592%202.957%2016.592%206.355%200%203.514-7.857%206.363-17.55%206.363-3.388%200-6.552-.348-9.235-.951l.71-2.087z'%2F%3E%3Cpath%20style%3D'fill%3A%23787878%3Bfill-opacity%3A.5%3Bstroke%3A%23000%3Bstroke-width%3A1.32292%3Bstroke-dasharray%3Anone%3Bstroke-opacity%3A1'%20d%3D'm116.854%20137.113-4.338%2014.17-12.726%2010.932c-7.956-.602-13.92-3.15-13.919-6.096l.001-34.302c2.57%208.399%2033.886%207.802%2035.046%200v11.16z'%2F%3E%3Cpath%20style%3D'fill%3A__FILL__%3Bfill-opacity%3A.5%3Bstroke%3A%23000%3Bstroke-width%3A1.32292%3Bstroke-dasharray%3Anone%3Bstroke-opacity%3A1'%20d%3D'M107.923%20168.386v-13.157l4.593-3.945%203.796-12.297c7.727%202.127%2024.138%201.49%2026.657-5.023v34.422m-.007-.254c0%203.514-7.847%206.363-17.527%206.363s-17.527-2.849-17.527-6.363'%2F%3E%3Cpath%20style%3D'fill%3A%23fff%3Bfill-opacity%3A0%3Bstroke%3A%23010207%3Bstroke-width%3A1.32292%3Bstroke-dasharray%3Anone%3Bstroke-opacity%3A1'%20d%3D'm90.465%20170.226%2022.051-18.942%204.338-14.17%2016.484-16.774'%20fill%3D'none'%2F%3E%3C%2Fsvg%3E`;
+
+function setIcon(color = '#325932') {
+  const head = document.getElementsByTagName('head')[0];
+  const prev = head.querySelector('link[rel="shortcut icon"]');
+  const next = document.createElement('link');
+  next.rel = 'shortcut icon';
+  next.href = icon.replace(/__FILL__/g, encodeURIComponent(color));
+  prev.remove();
+  head.appendChild(next);
+}

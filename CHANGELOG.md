@@ -1,3 +1,26 @@
+## 1.14.0
+
+2025-03-29
+
+### Bugs
+
+* Diff entries with only nested JSON changes will no longer break undo when skip empty changesets is enabled.
+* The raport scratch pad operator docs now correctly includes formats.
+
+### Features
+
+* Links in rendered markdown scratch pads now render legibly and will open with a blank target.
+* Markdown checkboxes are now supported with ordered lists in rendered markdown scratch pads. 
+* Raport scratch pads can now have an addition context expression provided.
+* Markdown scratch pads now support csv+table and raport+table code fences for rendering embedded data as a table. The csv version is much more convenient than building a markdown table, and the raport version allows computation to build a table, possibly based on tabular or csv input.
+* Clicking the unsaved banner on a scratch pad will now trigger a save.
+* The favicon will now update to match the select color scheme on browsers that support svg favicons.
+
+### Not Really Bugs and Not Really Features
+
+* The project now requires deno2 to build and uses the deno2 file embedding support rather than a pre-assembled module of base64 file contents.
+
+
 ## 1.13.2
 
 2025-01-15
