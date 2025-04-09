@@ -2328,9 +2328,7 @@ class ScratchPad extends Window {
     }
   }
   async printMarkdown(md, dl) {
-    if (dl) {
-      const name = ((this.get('pad.name') || 'untitled') + '.html').split('/').pop();
-      download(name, `<html><head><style>
+    const html = `<html><head><style>
 html {
   font-family: sans-serif;
 }
@@ -2380,10 +2378,13 @@ h1, h2, h3 {
 }
 ${await (await fetch('./hljs@11.10.0/stackoverflow-light.css')).text()}
 </style></head><body>
-${md}</body></html>`, 'text/html');
+${md}</body></html>`
+    if (dl) {
+      const name = ((this.get('pad.name') || 'untitled') + '.html').split('/').pop();
+      download(name, html, 'text/html');
     } else {
       const frame = document.getElementById('print');
-      frame.contentDocument.body.innerHTML = await renderMD(this.get('pad.text'), { theme: 'light', nochecks: true });
+      frame.contentDocument.body.innerHTML = html;
       frame.contentWindow.print();
     }
   }
