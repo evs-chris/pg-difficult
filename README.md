@@ -80,12 +80,11 @@ For local development environments, these concerns aren't usually a terrible ris
 
 To build pg-difficult:
 
-1. Assemble the client files into a module with the included script: `deno run -A ./build-client.ts`
-2. Run the serve script with `deno run -A --unsafely-ignore-certificate-errors ./serve.ts`. You could also compile instead of run, and specify a target to cross-compile for other platforms.
-3. ???
-4. Profit!
+1. Run the serve script with `deno run -A --unsafely-ignore-certificate-errors ./serve.ts`. You could also compile instead of run, and specify a target to cross-compile for other platforms.
+2. ???
+3. Profit!
 
-Since Deno compile does not have a way to embed a filesystem, the public directory is stringified and served directly out of a generated module. The sources for the embeded filesystem module live in the public directory and are vendored in this repository, but the output is excluded. If the server detects the public folder in its working directory, it will serve files directly out of it rather than the built module, which makes iterating during development quite a bit simpler. Also be aware that if you happen to have your executable or serve.ts file in a directory with a public directory, the server _will_ try to serve files from that directory, even if they don't exist.
+Since version 2.something, deno supports embedding files when building a binary. There used to be a step 1 that was: assemble the client files into a module with the included script: `deno run -A ./build-client.ts`, but that's no longer necessary. The old build script would have the public directory stringified and served directly out of a generated module. The sources for the embeded filesystem module live in the public directory and are vendored in this repository, but the output is excluded. If the server detects the public folder in its working directory, it will serve files directly out of it. Be aware that if you happen to have your executable or serve.ts file in a directory with a public directory, the server _will_ try to serve files from that directory, even if they don't exist.
 
 ## Design
 
