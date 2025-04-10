@@ -2120,7 +2120,7 @@ Window.extendWith(SchemaCompare, {
 
 const renderMD = (function() {
   const checkLanguage = (function() {
-    const map = { bash: false, c: false, cpp: false, csharp: false, go: false, handlebars: false, javascript: false, lua: false, mermaid: false, pgsql: false, php: false, rust: false, sql: false, typescript: false, vbnet: false, xml: false };
+    const map = { bash: false, c: false, cpp: false, csharp: false, go: false, handlebars: false, javascript: false, lua: false, mermaid: false, pgsql: false, php: false, raport: false, rust: false, sql: false, typescript: false, vbnet: false, xml: false };
     const alias = { js: 'javascript', ts: 'typescript', ractive: 'handlebars', sh: 'bash', vb: 'vbnet', 'c#': 'csharp', golang: 'go', rs: 'rust', hbs: 'handlebars', chart: 'mermaid' };
     const deps = { handlebars: ['xml'] };
     const urls = {
