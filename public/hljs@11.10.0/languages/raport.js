@@ -47,23 +47,9 @@ function def(hljs) {
   		hljs.C_LINE_COMMENT_MODE,
   	],
   };
-  const ARRAY = {
-    className: 'variable.constant',
-    begin: /\[/,
-    end: /\]/,
-    contains: [],
-  };
-  const OBJECT = {
-    className: 'variable.constant',
-    begin: /\{/,
-    end: /\}/,
-    relevance: 0,
-    contains: [{
-      className: 'symbol',
-      match: IDENT + '\\s*:',
-    }],
-  };
-  const REFERENCE = { // include prefixes
+  const OBJECT_KEY = {
+    className: 'symbol',
+    match: IDENT + '\\s*:',
   };
   const SCHEMA = {
     className: 'meta',
@@ -168,8 +154,7 @@ function def(hljs) {
       SINGLE_STRING,
       TEMPLATE,
       SCHEMA,
-      OBJECT,
-      ARRAY,
+      OBJECT_KEY,
       APPLICATION_ARGS,
       COMMENT,
     ]
@@ -179,10 +164,6 @@ function def(hljs) {
   STRING_INTERP.keywords = hl.keywords;
   TPL_INTERP.contains.push.apply(TPL_INTERP.contains, hl.contains);
   TPL_INTERP.keywords = hl.keywords;
-  ARRAY.contains.push.apply(ARRAY.contains, hl.contains);
-  ARRAY.keywords = hl.keywords;
-  OBJECT.contains.push.apply(OBJECT.contains, hl.contains);
-  OBJECT.keywords = hl.keywords;
 
   return hl;
 }
