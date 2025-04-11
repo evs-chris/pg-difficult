@@ -2261,7 +2261,7 @@ class ScratchPad extends Window {
       if (sel) txt = sel;
     }
     const ok = parse(txt, { consumeAll: true });
-    const ctxok = context.trim() ? parse(context, { consumeAll: true }) : { v: {} };
+    const ctxok = context && context.trim() ? parse(context, { consumeAll: true }) : { v: {} };
     if (ok && 'cause' in ok) {
       this.set({
         evalresult: '',
