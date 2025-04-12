@@ -2120,9 +2120,9 @@ Window.extendWith(SchemaCompare, {
 
 const renderMD = (function() {
   const checkLanguage = (function() {
-    const map = { bash: false, c: false, cpp: false, csharp: false, ejs: false, go: false, handlebars: false, javascript: false, lua: false, mermaid: false, pgsql: false, php: false, raport: false, rust: false, sql: false, typescript: false, vbnet: false, xml: false };
-    const alias = { js: 'javascript', ts: 'typescript', ractive: 'handlebars', sh: 'bash', vb: 'vbnet', 'c#': 'csharp', golang: 'go', rs: 'rust', hbs: 'handlebars', chart: 'mermaid', underscore: 'ejs', lodash: 'ejs' };
-    const deps = { ejs: ['javascript'], handlebars: ['xml'] };
+    const map = { bash: false, c: false, cpp: false, csharp: false, ejs: false, go: false, handlebars: false, javascript: false, lua: false, mermaid: false, pgsql: false, php: false, raport: false, 'raport-tpl': false, rust: false, sql: false, typescript: false, vbnet: false, xml: false };
+    const alias = { js: 'javascript', ts: 'typescript', ractive: 'handlebars', sh: 'bash', vb: 'vbnet', 'c#': 'csharp', golang: 'go', rs: 'rust', hbs: 'handlebars', chart: 'mermaid', underscore: 'ejs', lodash: 'ejs', 'raport-template': 'raport-tpl', rptpl: 'raport-tpl' };
+    const deps = { ejs: ['javascript'], handlebars: ['xml'], 'raport-tpl': ['raport'] };
     const urls = {
       mermaid: './mermaidjs@11.0.2.js',
     };
