@@ -2338,6 +2338,7 @@ code, .mermaid-chart {
 }
 code {
   white-space: pre-wrap;
+  word-break: break-all;
 }
 table {
   margin: 1em 0;
