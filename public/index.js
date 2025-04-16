@@ -2168,7 +2168,7 @@ const renderMD = (function() {
         } else if (lang === 'raport+text') {
           return `<pre><code class="hljs text">${evaluate(code)}</code></pre>`;
         } else if (lang.startsWith('csv+table')) {
-          const data = evaluate({ code }, `parse(code csv:1 header:${lang.includes('nohead') ? false : true})`);
+          const data = evaluate({ code }, `parse(code csv:1 header:${lang.includes('nohead') ? false : true} order:${lang.includes('noorder') ? false : true})`);
           return run({ type: 'delimited', source: 'data', sources: [{ source: 'data' }] }, { data: { value: data } }, {}, { table: 1 });
         } else if (lang.startsWith('raport+table')) {
           const data = evaluate(code);

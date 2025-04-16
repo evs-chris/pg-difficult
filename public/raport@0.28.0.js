@@ -1494,21 +1494,15 @@
     const binop_and = map(seq(binop_eq, rep(alt(seq(nop, name$1(str('&&'), 'and-op'), nop, binop_eq), seq(rws, name$1(str('and', '&&'), 'and-op'), rws, binop_eq)))), ([arg1, more]) => more.length ? more.reduce(leftassoc, arg1) : arg1, 'and-op');
     const binop_or = map(seq(binop_and, rep(alt(seq(nop, name$1(str('||', '??'), 'or-op'), nop, binop_and), seq(rws, name$1(str('or', '||', '??'), 'or-op'), rws, binop_and)))), ([arg1, more]) => more.length ? more.reduce(leftassoc, arg1) : arg1, 'or-op');
     binop.parser = map(binop_or, v => v, { primary: true, name: 'binary-op' });
-    if_op$1.parser = alt({ primary: true, name: 'conditional' }, map(seq(str('if'), rws, value, rws, block, rep(seq(ws$2, str('else if', 'elseif', 'elsif', 'elif'), rws, value, rws, block)), opt(seq(ws$2, str('else'), rws, block))), ([, , cond1, , block1, elifs, el]) => {
-        const op = { op: 'if', args: [cond1, block1] };
-        for (const [, , , cond, , block] of elifs)
-            op.args.push(cond, block);
+    const branch_body = alt(map(seq(str('then'), rws, value), ([, , v]) => v), block);
+    if_op$1.parser = alt({ primary: true, name: 'conditional' }, map(seq(str('if'), rws, value, rws, branch_body, rep(seq(rws, not(str('end', 'fi')), str('else if ', 'elseif', 'elsif', 'elif'), rws, value, rws, branch_body)), opt(seq(ws$2, str('else'), rws, value)), opt(seq(ws$2, str('end', 'fi')))), ([, , cond1, , body1, elifs, el]) => {
+        const op = { op: 'if', args: [cond1, body1] };
+        for (const [, , , , cond, , body] of elifs)
+            op.args.push(cond, body);
         if (el)
             op.args.push(el[3]);
         return op;
-    }, 'if-block'), map(seq(str('if'), rws, value, rws, str('then'), rws, value, rep(seq(rws, not(str('end', 'fi')), str('else if', 'elseif', 'elsif', 'elif'), rws, value, rws, str('then'), rws, value)), opt(seq(rws, str('else'), rws, value)), opt(seq(rws, str('end', 'fi')))), ([, , cond1, , , , val1, elifs, el]) => {
-        const op = { op: 'if', args: [cond1, val1] };
-        for (const [, , , , cond, , , , val] of elifs)
-            op.args.push(cond, val);
-        if (el)
-            op.args.push(el[3]);
-        return op;
-    }, 'if'), map(seq(str('unless'), rws, value, rws, str('then'), rws, value, opt(seq(rws, str('else'), rws, value)), opt(seq(rws, str('end')))), ([, , cond, , , , hit, miss]) => {
+    }, 'if'), map(seq(str('unless'), rws, value, rws, branch_body, opt(seq(rws, str('else'), rws, value)), opt(seq(rws, str('end')))), ([, , cond, , hit, miss]) => {
         const op = { op: 'unless', args: [cond, hit] };
         if (miss)
             op.args.push(miss[3]);
@@ -5652,7 +5646,8 @@
                 else if (!!opts.header)
                     header = res.shift().map((k, i) => [k, i]);
                 if (header) {
-                    header.sort((a, b) => `${a}`.toLowerCase() < `${b}`.toLowerCase() ? -1 : `${a}`.toLowerCase() > `${b}`.toLowerCase() ? 1 : 0);
+                    if (opts.order !== false)
+                        header.sort((a, b) => `${a}`.toLowerCase() < `${b}`.toLowerCase() ? -1 : `${a}`.toLowerCase() > `${b}`.toLowerCase() ? 1 : 0);
                     return res.map(v => header.reduce((a, c) => (a[c[0]] = v[c[1]], a), {}));
                 }
             }
@@ -5740,7 +5735,8 @@
             else if (!!options.header)
                 header = values.shift().map((k, i) => [k, i]);
             if (header) {
-                header.sort((a, b) => `${a}`.toLowerCase() < `${b}`.toLowerCase() ? -1 : `${a}`.toLowerCase() > `${b}`.toLowerCase() ? 1 : 0);
+                if ((options === null || options === void 0 ? void 0 : options.order) !== false)
+                    header.sort((a, b) => `${a}`.toLowerCase() < `${b}`.toLowerCase() ? -1 : `${a}`.toLowerCase() > `${b}`.toLowerCase() ? 1 : 0);
                 return values.map(v => header.reduce((a, c) => (a[c[0]] = v[c[1]], a), {}));
             }
         }
