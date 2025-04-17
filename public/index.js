@@ -640,6 +640,7 @@ Ractive.extendWith(App, {
   css(data) {
     return `
       html { color: ${data('raui.primary.fg') || '#222'}; background-color: ${data('raui.primary.bg') || '#fff'}; font-size: ${data('scale') || 100}%; }
+      .tree-filter { color: ${data('raui.primary.fg') || '#222'}; }
       .query-text textarea {
         color: ${data('raui.primary.fg') || data('raui.fg') || '#222'};
         background-color: ${data('raui.primary.bg') || data('raui.bg') || '#fff'};
@@ -1191,6 +1192,21 @@ Window.extendWith(ControlPanel, {
         });
       }
     },
+    async 'filter.scratch'(v) {
+      if (!(v || '').trim()) return this.set('filter._scratch', undefined);
+      let flt = parse(v);
+      if (flt && (('op' in flt && flt.op === 'block') || 'r' in flt || ('v' in flt && typeof flt.v === 'string'))) {
+        // just use the text
+        v = `[name text context] ilike ${JSON.stringify(`%${v}%`)}`;
+      }
+      const list = await store.list('scratch');
+      const res = [];
+      for (const e of list) {
+        const i = await store.get(e.id);
+        if (evaluate(i, v)) res.push(e.id);
+      }
+      this.set('filter._scratch', res);
+    },
   },
   computed: {
     connections() {
@@ -1198,9 +1214,13 @@ Window.extendWith(ControlPanel, {
       return all.filter(c => !c.use || c.use === 'diff');
     },
     scratchPadTree() {
-      const old = this.get('_scratchPadTree');
-      const tree = dirify(this.get('store.scratch.list'), old);
+      const filter = this.get('filter._scratch');
+      const all = this.get('store.scratch.list');
+      const list = filter ? all.filter(i => filter.includes(i.id)) : all;
+      const old = this.get('_scratchPadTreeOld');
+      const tree = dirify(list, old);
       this.set('_scratchPadTree', tree);
+      if (!filter) this.set('_scratchPadTreeOld', tree);
       return tree;
     },
     queryTree() {

@@ -282,6 +282,19 @@
     }
   }
 
+  .tree-filter {
+    margin-left: 0.5em;
+    background-color: transparent;
+    border: 1px solid;
+    border-width: 0 0 1px 0;
+    outline: none;
+    opacity: 0.5;
+    transition: opacity 0.5s ease;
+  }
+  .tree-filter:focus {
+    opacity: 1;
+  }
+
   .tree-line { height: 1.5em; line-height: 1.5em; }
   .tree-children .back-dots { position: absolute; left: 0; height: 0.6em; width: 0.75em; border-bottom: 1px dotted; }
   .tree-children .back-line { position: absolute; left: -2px; height: calc(100% - 0.8em); top: 0; border-left: 1px dotted; }
@@ -579,14 +592,14 @@
     </tab>
     <tab title="Scratch Pads">
       <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.3em;">
-        <div style="padding: 0.3em;">Scratch pads are a place to write bits of text that are automatically saved to browser local storage when they are edited.</div>
+        <div style="padding: 0.3em;"><input type=search class=tree-filter lazy=500 value="{{~/filter.scratch}}" placeholder="filter / search" style="width: 20em;" /><tip>Scratch pads are a place to write bits of text that are automatically saved to browser local storage when they are edited.</tip><label style="margin-left: 1em;"><input type=checkbox checked="{{~/expand.scratch}}" /> Expand all?</label></div>
         <div style="flex-shrink: 0;"><button title="Open a new scratch pad." on-click="@.open({ type: 'scratch' })">New Scratch Pad</button></div>
       </div>
       <div style="overflow: auto;">
         {{#partial leaf}}
           <div class=back-dots /><div class=tree-leaf><span class=name as-marquee title="Open scratch pad. ctrl or shift click to download. alt+click to open a new copy of this scratch pad." on-click="@event.ctrlKey || @event.shiftKey ? download(.name, @.scratchText(.value.id)) : @.open(.value)">{{.name}}</span> <span style="line-height: 1.5em;">{{.value.syntax}} <span class=remove-button title="Remove this scrath pad." on-click="@.remove(.value)">&times;</span></span></div>
         {{/partial}}
-        {{>node ~/scratchPadTree}}
+        {{>node ~/scratchPadTree, ~/expand.scratch as expandAll, ~/filter.scratch as filter}}
       </div>
     </tab>
     <tab title="Settings">
@@ -731,8 +744,8 @@
 </script>
 
 <script type=text/ractive id=tree>
-  <div class=tree-line>{{#if .name}}<div class=back-dots /><span class=expander on-click="@context.toggle('.expand')">{{.expand ? '-' : '+'}}</span> <span class=name as-marquee on-click="@context.toggle('.expand')"> {{.name}}/</span>{{else}}<span style="margin-left: 0.5em;" class=name as-marquee>{{.name}}/</span>{{/if}}</div>
-  {{#if .expand}}
+  <div class=tree-line>{{#if .name}}<div class=back-dots /><span class=expander on-click="@context.toggle('.expand')">{{.expand ? '-' : (filter || expandAll) ? ' ' : '+'}}</span> <span class=name as-marquee on-click="@context.toggle('.expand')"> {{.name}}/</span>{{else}}<span style="margin-left: 0.5em;" class=name as-marquee>{{.name}}/ </span>{{/if}}</div>
+  {{#if .expand || filter || expandAll}}
     <div class=tree-children>
       <div class=back-line />
       {{#each .nodes}}{{>.type}}{{/each}}
