@@ -707,7 +707,7 @@
               <label as-field>Port<input type="number" value="{{.port}}" on-change="@context.set('valid', false)" /></label>
               <label as-field>Database<input value="{{.db}}" on-change="@context.set('valid', false)" /></label>
               <label as-field>Username<input value="{{.user}}" on-change="@context.set('valid', false)" /></label>
-              <label as-field>Password<input type="password" value="{{.password}}" on-change="@context.set('valid', false)" /></label>
+              <label as-field style="position: relative;">{{#with @local as l}}Password<input type="{{l.view ? 'text' : 'password'}}" value="{{.password}}" style="padding-right: 1.5em;" on-change="@context.set('valid', false)" /><div style="position: absolute; width: 1em; height: 1em; bottom: 1.5em; right: 0.5em; cursor: pointer;" on-click="@context.toggle('l.view'), false">{{#if l.view}}{{>eye-no}}{{else}}{{>eye}}{{/if}}</div>{{/with}}</label>
               <label as-field title="Should this server be actively used for syncing?"><input type=checkbox twoway=false checked="{{!.inactive}}" on-change="@context.set('.inactive', !@node.checked)" /> Active?</label>
               <fieldset>
                 <legend>Sync Categories</legend>
@@ -816,6 +816,19 @@
 <script type=text/ractive id="times">
   <svg viewBox="0 0 16 16">
     <path d="m 3.081157,3.2367593 a 0.39687499,0.39687499 0 0 0 -0.28125,0.1171875 0.39687499,0.39687499 0 0 0 0,0.5605469 L 7.3038132,8.4184 2.799907,12.920353 a 0.39687499,0.39687499 0 0 0 0,0.560547 0.39687499,0.39687499 0 0 0 0.5625,0 L 7.8643601,8.9789468 12.368266,13.4809 a 0.39687499,0.39687499 0 0 0 0.560547,0 0.39687499,0.39687499 0 0 0 0,-0.560547 L 8.424907,8.4184 12.928813,3.9144937 a 0.39687499,0.39687499 0 0 0 0,-0.5605469 0.39687499,0.39687499 0 0 0 -0.560547,0 L 7.8643601,7.8558999 3.362407,3.3539468 A 0.39687499,0.39687499 0 0 0 3.081157,3.2367593 Z" />
+  </svg>
+</script>
+<script type=text/ractive id=eye>
+  <svg viewBox="0 0 500 500" class=icon>
+    <path style="fill: none; stroke-width: 10%;" d="M 33.909 245.63 C 33.909 245.63 231.209 -38.053 460.749 245.63 C 261.724 519.345 33.909 247.086 33.909 245.63 Z"></path>
+    <ellipse style="fill: none; stroke-width: 8%;" cx="253.32" cy="244.294" rx="109.261" ry="109.261"></ellipse>
+  </svg>
+</script>
+<script type=text/ractive id=eye-no>
+  <svg viewBox="0 0 500 500" class=icon>
+    <path style="fill: none; stroke-width: 10%;" d="M 33.909 245.63 C 33.909 245.63 231.209 -38.053 460.749 245.63 C 261.724 519.345 33.909 247.086 33.909 245.63 Z"></path>
+    <ellipse style="fill: none; stroke-width: 8%;" cx="253.32" cy="244.294" rx="109.261" ry="109.261"></ellipse>
+    <path style="stroke-width: 10%;" d="M 421.7 52.445 L 95.922 422.148"></path>
   </svg>
 </script>
 
@@ -1708,7 +1721,7 @@
             <option value="{{false}}">None</option>
           </select></label>
           <label as-field>User<input value="{{source.config.username}}" /></label>
-          <label as-field>Password<input type=password value="{{source.config.password}}" /></label>
+          <label as-field style="position: relative;">{{#with @local as l}}Password<input type="{{l.view ? 'text' : 'password'}}" value="{{source.config.password}}" style="padding-right: 1.5em;" on-change="@context.set('valid', false)" /><div style="position: absolute; width: 1em; height: 1em; bottom: 1.5em; right: 0.5em; cursor: pointer;" on-click="@context.toggle('l.view'), false">{{#if l.view}}{{>eye-no}}{{else}}{{>eye}}{{/if}}</div>{{/with}}</label>
           <label as-field>Database<input value="{{source.config.database}}" /></label>
         </div>
       {{/if}}
@@ -1778,7 +1791,7 @@
     <label as-field as-autofocus>Host<input value="{{~/config.host}}" /></label>
     <label as-field>Port<input type=number value="{{~/config.port}}" /></label>
     <label as-field>User<input value="{{~/config.username}}" /></label>
-    <label as-field>Password<input type=password value="{{~/config.password}}" /></label>
+    <label as-field style="position: relative;">{{#with @local as l}}Password<input type="{{l.view ? 'text' : 'password'}}" value="{{~/config.password}}" style="padding-right: 1.5em;" on-change="@context.set('valid', false)" /><div style="position: absolute; width: 1em; height: 1em; bottom: 1.5em; right: 0.5em; cursor: pointer;" on-click="@context.toggle('l.view'), false">{{#if l.view}}{{>eye-no}}{{else}}{{>eye}}{{/if}}</div>{{/with}}</label>
     <label as-field>Database<input value="{{~/config.database}}" /></label>
     <label as-field>SSL<select value="{{~/config.ssl}}">
       <option value="{{undefined}}">Default</option>
