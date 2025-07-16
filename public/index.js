@@ -653,6 +653,7 @@ Ractive.extendWith(App, {
       svg.icon { fill: none; stroke: ${data('raui.primary.fg') || '#222'}; }
       label.field svg.icon { opacity: 0.8; transition: opacity 0.2s ease; }
       label.field svg.icon:hover { opacity: 1; }
+      label.field select:focus { background-color: ${data('raui.primary.bg') || '#fff'}; }
       .mermaid { background-color: ${data('theme') === 'dark' ? '#191919' : '#f7f7f7'}; }
     `;
   },
