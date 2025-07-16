@@ -888,7 +888,7 @@
         {{#with . as record, @.details(.) as entry}}
           {{#if entry.status}}
             {{#if entry.changed}}
-              <div class="wrapper striped-{{index % 2 == 0 ? 'even' : 'odd'}}" on-click="@event.shiftKey ? copyToClipboard(record.old || {}, 'Copied old record JSON to clipboard.') : copyToClipboard(Object.keys(record.new).length !== Object.keys(record.old).length ? Object.assign({}, record.old, record.new) : record.new || {}, 'Copied new record JSON to clipboard.'), false">
+              <div class="wrapper striped-{{index % 2 == 0 ? 'even' : 'odd'}}" on-click="@event.shiftKey ? copyToClipboard(record.old || {}, 'Copied old record JSON to clipboard.') : copyToClipboard(Object.keys(record.new).length !== Object.keys(record.old).length ? Object.assign({}, record.old, record.new) : record.new || {}, 'Copied new record JSON to clipboard.'), false" title="{{.stamp + '\n\n'}}Click to copy new value to clipboard. Shift+click to copy old value to clipboard.">
                 <div class=name><span>{{record.table}} {{entry.id || ''}} {{entry.status}}</span><span class=src>({{record.source}})</span></div>
                 {{#each entry.changed}}
                   <div class="diff">
@@ -904,7 +904,7 @@
                 </div>
               </div>
             {{else}}
-              <div class="diff whole striped-{{index % 2 == 0 ? 'even' : 'odd'}}" on-click="@event.shiftKey ? copyToClipboard(record.old || {}, 'Copied old record JSON to clipboard.') : copyToClipboard(record.new || {}, 'Copied new record JSON to clipboard.'), false">
+              <div class="diff whole striped-{{index % 2 == 0 ? 'even' : 'odd'}}" on-click="@event.shiftKey ? copyToClipboard(record.old || {}, 'Copied old record JSON to clipboard.') : copyToClipboard(record.new || {}, 'Copied new record JSON to clipboard.'), false" title="{{.stamp + '\n\n'}}Click to copy new value to clipboard. Shift+click to copy old value to clipboard.">
                 <div class=name><span>{{record.table}} {{entry.id || ''}} {{entry.status}}</span><span class=src>({{record.source}})</span></div>
                 {{#each entry.record}}
                   <div class="entry"><div class="key">{{this.0}}</div><div class="value" on-click="copyToClipboard(this.1, 'Copied value to clipboard.'), false">{{typeof this.1 === 'object' ? JSON.stringify(this.1) : this.1}}</div></div>
@@ -917,7 +917,7 @@
               </div>
             {{/if}}
           {{else}}
-            <div class="wrapper striped-{{index % 2 == 0 ? 'even' : 'odd'}}" on-click="@event.shiftKey ? copyToClipboard(record.old || {}, 'Copied old record JSON to clipboard.') : copyToClipboard(record.new || {}, 'Copied new record JSON to clipboard.'), false">
+            <div class="wrapper striped-{{index % 2 == 0 ? 'even' : 'odd'}}" on-click="@event.shiftKey ? copyToClipboard(record.old || {}, 'Copied old record JSON to clipboard.') : copyToClipboard(record.new || {}, 'Copied new record JSON to clipboard.'), false" title="{{.stamp + '\n\n'}}Click to copy new value to clipboard. Shift+click to copy old value to clipboard.">
               <div class=name><span>{{record.table}} {{entry.id || ''}} {{entry.status || '(empty changeset)'}}</span><span class=src>({{record.source}})</span></div>
               <div class=buttons>
                 <button class=split-up title="Split this entry and all entries above it up to the previous segment into a new segment" on-click="@.renameSegment(record, 'above'), false">&#9650;</button> <button class=split-down title="Split this entry and all entries below it down to the next segment into a new segment" on-click="@.renameSegment(record, 'below'), false">&#9660;</button>
