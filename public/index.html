@@ -394,6 +394,10 @@
   button.print:hover {
     opacity: 1;
   }
+
+  .query-parameters > * {
+    flex-shrink: 0;
+  }
 </style>
 <!-- HEAD -->
 <script type=text/ractive id=template>
@@ -835,12 +839,13 @@
 <script type=text/ractive id=query>
   <div style="border-bottom: 1px solid; display: flex; justify-content: space-between; align-items: center;">
     <button on-click="@.runQuery(~/loaded ? ~/loaded.sql : ~/query)" title="Execute this query and return the result. (ctrl+Enter){{'\n\n'}}Highlight text to execute only the highlighted portion as a query.">Run</button>
-    <label as-field class=inline><input type=checkbox bind-checked="~/settings.queryOrderColumns" /> Order query result columns alphabetically?</label>
+    <label as-field class=inline><input type=checkbox bind-checked="~/settings.queryOrderColumns" /> Reorder columns? <tip>Place the result columns in alphabetical order rather than resultset order.</tip></label>
+    <label as-field class=inline><input type=checkbox bind-checked="processParams" /> Process parameters? <tip>Process the query string for parameters e.g. $1 in the query will allow supplying a separate value outside of the query text.</tip></label>
     {{#if ~/loadedQuery}}
-      <button on-click="@.loadQuery(~/loadedQuery)" title="Load the selected saved query in this window.">Load Query</button>
+      <button on-click="@.loadQuery(~/loadedQuery, @context)" title="Load the selected saved query in this window.">Load Query</button>
     {{else}}
       <div style="display: flex; align-items: center;">
-        {{#if ~/loaded.sql || ~/query}}<button on-click="@.saveQuery()" title="Save this query to the control panel Saved Queries.">Save</button>{{/if}}
+        {{#if ~/loaded.sql || ~/query}}<button on-click="@.saveQuery(@context)" title="Save this query to the control panel Saved Queries.">Save</button>{{/if}}
         {{#if ~/loaded.name}}<button on-click="@.loadQuery()" title="This query is currently saved as {{~/loaded.name}}. Click here to disconnect this query from that named query. When the query is disconnected, it may be saved with a different name.">Unload</button>{{/if}}
       </div>
     {{/if}}
@@ -850,7 +855,14 @@
   </div>
   <div class="query" style="position: relative;">
     <split>
-      <div size=20 class="query-text" as-tracked=`ace` as-ace="{ bind: ~/loaded ? '~/loaded.sql' : '~/query', syntax: 'pgsql', theme: @style.theme == 'dark' ? (~/editor.darkTheme || 'tomorrow_night_eighties') : (~/editor.lightTheme || 'tomorrow'), wrap: ~/editor.wrap, highlightActive: ~/editor.highlightActive, fontSize: '1em', font: 'monospace', printMargin: ~/editor.printMargin, keymode: ~/editor.keymode, lineNumbers: ~/editor.lineNumbers, relativeLineNumbers: ~/editor.relativeLineNumbers, highlightSelected: ~/editor.highlightSelected, softTabs: ~/editor.softTabs, tabSize: ~/editor.tabSize }" on-keydown="@event.ctrlKey && @event.key === 'Enter' ? @.runQuery(~/loaded ? ~/loaded/sql : ~/query) : true" />
+      <div size=30 style="display: flex; flex-direction: column; height: 100%;">
+        <div style="min-height: 1.5em;" class="query-text" as-tracked=`ace` as-ace="{ bind: ~/loaded ? '~/loaded.sql' : '~/query', syntax: 'pgsql', theme: @style.theme == 'dark' ? (~/editor.darkTheme || 'tomorrow_night_eighties') : (~/editor.lightTheme || 'tomorrow'), wrap: ~/editor.wrap, highlightActive: ~/editor.highlightActive, fontSize: '1em', font: 'monospace', printMargin: ~/editor.printMargin, keymode: ~/editor.keymode, lineNumbers: ~/editor.lineNumbers, relativeLineNumbers: ~/editor.relativeLineNumbers, highlightSelected: ~/editor.highlightSelected, softTabs: ~/editor.softTabs, tabSize: ~/editor.tabSize }" on-keydown="@event.ctrlKey && @event.key === 'Enter' ? @.runQuery(~/loaded ? ~/loaded/sql : ~/query) : true" />
+        {{#if parameters}}
+          <div class="query-parameters" style="display: flex; overflow-x: auto; flex-shrink: 0;">
+          {{#each parameters}}<label as-field>{{(parametersLabels || {})[@index] || `Parameter ${@index + 1}`}}<input value="{{.}}" on-keydown="@event.key === 'Enter' && (@event.ctrlKey || @event.cmdKey) ? @.runQuery(~/loaded ? ~/loaded.sql : ~/query) : true" /></label>{{/each}}
+          </div>
+        {{/if}}
+      </div>
       <div class="result">
         <data-table auto-titles no-wrap fixed-header allow-select=false on-init="@.set('@.table', $1)" items="{{~/result}}">
           <bottom>
@@ -1467,7 +1479,7 @@
               <div style="display: flex; padding: 0.2em; justify-content: space-between; color: darkred;"><span>{{~/hosts[.constr].error}}</span></div>
             {{elseif ~/hosts && Array.isArray(~/hosts[.constr])}}
               {{#each ~/_entries[.constr] as entry}}
-                <div style="display: flex; padding: 0.2em; justify-content: space-between;" on-click="@.set('selectedDB', { connection: con, entry: entry })" class-selected="~/selectedDB.connection.constr === con.constr && ~/selectedDB.entry.database === .database"><span>{{.database}}</span></div>
+                <div style="display: flex; padding: 0.2em; justify-content: space-between; cursor: pointer;" on-click="@.set('selectedDB', { connection: con, entry: entry })" class-selected="~/selectedDB.connection.constr === con.constr && ~/selectedDB.entry.database === .database"><span>{{.database}}</span></div>
               {{/each}}
             {{else}}
               <div style="padding: 0.5em;">[[@.refreshHost(.) && 'Loading...']]</div>
@@ -1515,7 +1527,7 @@
               </tab>
               <tab title="Query" no-pad>
                 <div style="position: relative; height: 100%; flex-grow: 1; display: flex; flex-direction: column;">
-                  {{>query}}
+                  {{>query, ~/queryParams as parameters, ~/processQueryParams as processParams, ~/loaded.labels as parameterLabels}}
                 </div>
               </tab>
               <tab title="Reports" no-pad>
@@ -1729,7 +1741,7 @@
       {{#if ~/error}}<div style="color: red;">{{~/error}}</div>{{/if}}
       <div>
         {{#each ~/paramArray}}
-          <label as-field>Parameter ${{@index + 1}}<input value="{{source.parameters[@index]}}" /></label>
+          <label as-field>Parameter {{@index + 1}}<input value="{{source.parameters[@index]}}" /></label>
         {{/each}}
       </div>
     {{elseif source.type === 'json'}}

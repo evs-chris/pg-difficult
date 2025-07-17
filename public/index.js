@@ -1414,7 +1414,7 @@ class Query extends Window {
     }
     this.blocked = true;
     try {
-      const res = await request({ action: 'query', query: [query], client: this.config });
+      const res = await request({ action: 'query', query: [query], params: processQueryParams(this.get('parameters')), client: this.config });
       this.set('result', res.result);
       this.set('runtime', res.time);
       this.set('affected', res.affected);
@@ -1426,25 +1426,31 @@ class Query extends Window {
     }
     this.blocked = false;
   }
-  async saveQuery() {
+  async saveQuery(ctx) {
     const loaded = this.get('loaded');
     const name = await app.ask(`Enter a query name:`, 'Query Name', loaded?.name || '');
+    const process = ctx.get('processParams');
+    const params = ctx.get('parameters');
     if (name) {
       if (loaded) {
         loaded.name = name;
+        loaded.processParams = !!process;
+        loaded.params = process ? params : undefined;
         await store.save(loaded);
       } else {
-        const res = await store.save({ name, type: 'query', sql: this.get('query') });
+        const res = await store.save({ name, type: 'query', sql: this.get('query'), processParams: process ? process : undefined, params: process ? params : undefined });
         await store.acquire('query', res._id);
         this.link(`store.query.${res._id}`, 'loaded', { instance: app });
       }
     }
   }
-  async loadQuery(q) {
+  async loadQuery(q, ctx) {
     const cur = this.get('loaded');
     if (q) {
       await store.acquire('query', q);
       this.link(`store.query.${q}`, 'loaded', { instance: app });
+      ctx.set('processParams', !!this.get('loaded.processParams'));
+      ctx.set('parameters', this.get('loaded.params') || []);
     } else if (cur) {
       this.set('query', cur.sql);
       this.unlink('loaded');
@@ -1476,6 +1482,7 @@ Window.extendWith(Query, {
       this.set('settings', Object.assign({}, app.get('store.settings')));
       this.link('store.settings.editor', 'editor', { instance: app });
       this.link('loadedQuery', 'loadedQuery', { instance: app });
+      this.link('loaded.labels', 'parameterLabels');
     },
     raise() {
       const txt = this.getContext('.query-text');
@@ -1502,7 +1509,13 @@ Window.extendWith(Query, {
         }
       },
       init: false,
-    }
+    },
+    'query loaded.sql processParams': {
+      handler: debounce(function() {
+        const v = this.get('loaded.sql') || this.get('query') || '';
+        this.set('parameters', this.get('processParams') ? extractQueryParams(v, this.get('parameters')) : undefined);
+      }, 500),
+    },
   },
 });
 
@@ -2848,7 +2861,7 @@ class HostExplore extends Window {
     }
     this.blocked = true;
     try {
-      const res = await request({ action: 'query', query: [query], client });
+      const res = await request({ action: 'query', query: [query], params: processQueryParams(this.get('queryParams')), client });
       this.set('result', res.result);
       this.set('runtime', res.time);
       this.set('affected', res.affected);
@@ -2860,25 +2873,31 @@ class HostExplore extends Window {
     }
     this.blocked = false;
   }
-  async saveQuery() {
+  async saveQuery(ctx) {
     const loaded = this.get('loaded');
     const name = await app.ask(`Enter a query name:`, 'Query Name', loaded?.name || '');
+    const process = ctx.get('processParams');
+    const params = process ? ctx.get('parameters') : undefined;
     if (name) {
       if (loaded) {
         loaded.name = name;
+        loaded.processParams = !!process;
+        loaded.params = process ? params : undefined;
         await store.save(loaded);
       } else {
-        const res = await store.save({ name, type: 'query', sql: this.get('query') });
+        const res = await store.save({ name, type: 'query', sql: this.get('query'), processParams: process ? process : undefined, params: process ? params : undefined });
         await store.acquire('query', res._id);
         this.link(`store.query.${res._id}`, 'loaded', { instance: app });
       }
     }
   }
-  async loadQuery(q) {
+  async loadQuery(q, ctx) {
     const cur = this.get('loaded');
     if (q) {
       await store.acquire('query', q);
       this.link(`store.query.${q}`, 'loaded', { instance: app });
+      ctx.set('processParams', !!this.get('loaded.processParams'));
+      ctx.set('parameters', this.get('loaded.params') || []);
     } else if (cur) {
       this.set('query', cur.sql);
       this.unlink('loaded');
@@ -3050,6 +3069,12 @@ filter(list |entry| => {
         }
       },
       init: false,
+    },
+    'query loaded.sql processQueryParams': {
+      handler: debounce(function() {
+        const v = this.get('loaded.sql') || this.get('query') || '';
+        this.set('queryParams', this.get('processQueryParams') ? extractQueryParams(v, this.get('queryParams')) : undefined);
+      }, 500),
     }
   },
 });
@@ -3319,19 +3344,7 @@ Window.extendWith(SourceEdit, {
   },
   observe: {
     'source.query'(q) {
-      if (q) {
-        let list = [];
-        q.replaceAll(/\$([0-9])+/g, (_, n) => { list.push(+n); return _; });
-        list = Raport.evaluate({ list }, 'sort(unique(list))');
-        for (let i = 0; i < list.length; i++) {
-          if (list[i] !== i + 1) {
-            this.set('error', `Parameter $${i + 1} expected, but found $${list[i]}`);
-            return;
-          }
-        }
-        this.set('error', undefined);
-        this.set('paramArray', list.map(p => ''));
-      }
+      if (q) this.set('paramArray', extractQueryParams(q))
     },
   },
 });
@@ -3576,8 +3589,9 @@ function debounce(fn, timeout = 1000, opts) {
       tm = null;
     }
   };
-  const callback = () => {
-    fn.apply(opts.target, lastArgs);
+  let target;
+  const callback = function() {
+    fn.apply(target, lastArgs);
     tm = null;
   };
   let res;
@@ -3587,6 +3601,7 @@ function debounce(fn, timeout = 1000, opts) {
     if (res.timeout < 0) return;
     if (res.timeout < 200 || isNaN(res.timeout)) res.timeout = 1000;
     lastArgs = args;
+    target = opts.target || this;
     tm = setTimeout(callback, res.timeout);
   });
   res.timeout = timeout;
@@ -3638,6 +3653,27 @@ function dirify(v, oldtree) {
     }
   }
   return tree;
+}
+
+function extractQueryParams(query, cur = []) {
+  // TODO: handle quotes and whatnot
+  let list = [];
+  query.replaceAll(/--.*$/g, '').replaceAll(/\$([0-9]+)+/g, (_, n) => { list.push(+n); return _; });
+  list = Raport.evaluate({ list }, 'sort(unique(list))');
+  for (let i = 0; i < list.length; i++) if (i + 1 !== list[i]) return undefined;
+  return list.map(i => cur[i - 1] || '');
+}
+
+function processQueryParams(params) {
+  if (Array.isArray(params) && !params.length) params = undefined;
+  if (params) {
+    params = params.map(p => {
+      const r = evaluate(p);
+      if (r === undefined) return p;
+      return r;
+    });
+  }
+  return params ? [params] : undefined;
 }
 
 function csvToHtml(text) {
