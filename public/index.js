@@ -2378,6 +2378,7 @@ class ScratchPad extends Window {
     }
     const tabs = this.findComponent('tabs');
     if (tabs && tabs.selection > 1) tabs.select(0);
+    this.set('visited.table', 0);
   }
   string(v) {
     return v === undefined ? 'undefined' : JSON.stringify(v);
@@ -2468,7 +2469,7 @@ ${md}</body></html>`
 }
 Window.extendWith(ScratchPad, {
   template: '#scratch-pad',
-  css: `
+  css(data) { return `
 h3 { text-align: left; }
 dt { margin-top: 1rem; font-family: monospace; }
 dd { margin: 0.5em 0 1em 2em; white-space: pre-wrap; }
@@ -2479,7 +2480,15 @@ dd { margin: 0.5em 0 1em 2em; white-space: pre-wrap; }
 .log-entry .time:hover { opacity: 1; }
 .clear-logs { transition: opacity 0.2s ease; opacity: 0.2; }
 .clear-logs:hover { opacity: 1; }
-`,
+table { margin: 0; border-collapse: collapse; border: 1px sold rgba(128, 128, 128, 0.5); }
+td, th { padding: 0.25em 0.5em; border: 1px solid rgba(128, 128, 128, 0.5); }
+th { text-align: center; border-bottom: 1px solid; position: sticky; }
+th { background-color: ${data('raui.primary.bg') || '#fff'}; }
+thead th { top: 0; }
+tbody th { left: 0; }
+tbody tr:nth-child(2n+1) td { background-color: rgba(128, 128, 128, 0.1); }
+tbody tr:hover td { background-color: rgba(128, 128, 128, 0.25); }
+`; },
   use: [RauiPopover.default({ name: 'pop' })],
   options: { flex: true, resizable: true, minimize: false, width: '50em', height: '35em' },
   partials: {
@@ -2520,7 +2529,7 @@ dd { margin: 0.5em 0 1em 2em; white-space: pre-wrap; }
     },
   },
   data() {
-    return { docs, ops: evaluate(docs.operators), fmts: evaluate(docs.formats), expand: {}, pad: { name: '', syntax: 'markdown', text: '' } };
+    return { docs, ops: evaluate(docs.operators), fmts: evaluate(docs.formats), expand: {}, pad: { name: '', syntax: 'markdown', text: '' }, visited: { table: 0 } };
   },
   computed: {
     operators() {
@@ -2548,7 +2557,15 @@ dd { margin: 0.5em 0 1em 2em; white-space: pre-wrap; }
       const base = this.get('_editor');
       const local = this.get('_settings');
       return Object.assign({}, base, local);
-    }
+    },
+    resultCanTable() {
+      const data = this.get('evalresult');
+      return evaluate({ data }, 'data is @[Array<object|array>]');
+    },
+    resultTable() {
+      const data = this.get('evalresult');
+      return run({ type: 'delimited', source: 'data', sources: [{ source: 'data' }] }, { data: { value: data } }, {}, { table: 1 });
+    },
   },
   observe: {
     'pad.name'(n) {
