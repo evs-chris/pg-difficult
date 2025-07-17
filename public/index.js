@@ -108,6 +108,18 @@ setInterval(() => {
   Ractive.sharedSet('now', new Date());
 }, 5000);
 
+const icon = `data:image/svg+xml,%3Csvg%20width%3D'20'%20height%3D'20'%20viewBox%3D'85%20114%2060%2061'%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%3E%3Cpath%20style%3D'fill%3A%23787878%3Bfill-opacity%3A1%3Bstroke%3A%23000%3Bstroke-width%3A1.32292%3Bstroke-dasharray%3Anone'%20d%3D'M120.956%20121.59c0%203.514-7.857%206.363-17.55%206.363-9.692%200-17.549-2.849-17.549-6.363s7.857-6.364%2017.55-6.364c9.692%200%2017.549%202.85%2017.549%206.364'%2F%3E%3Cpath%20style%3D'fill%3A__FILL__%3Bfill-opacity%3A1%3Bstroke%3A%23000%3Bstroke-width%3A1.32292%3Bstroke-dasharray%3Anone'%20d%3D'M126.415%20127.381c9.247.18%2016.592%202.957%2016.592%206.355%200%203.514-7.857%206.363-17.55%206.363-3.388%200-6.552-.348-9.235-.951l.71-2.087z'%2F%3E%3Cpath%20style%3D'fill%3A%23787878%3Bfill-opacity%3A.5%3Bstroke%3A%23000%3Bstroke-width%3A1.32292%3Bstroke-dasharray%3Anone%3Bstroke-opacity%3A1'%20d%3D'm116.854%20137.113-4.338%2014.17-12.726%2010.932c-7.956-.602-13.92-3.15-13.919-6.096l.001-34.302c2.57%208.399%2033.886%207.802%2035.046%200v11.16z'%2F%3E%3Cpath%20style%3D'fill%3A__FILL__%3Bfill-opacity%3A.5%3Bstroke%3A%23000%3Bstroke-width%3A1.32292%3Bstroke-dasharray%3Anone%3Bstroke-opacity%3A1'%20d%3D'M107.923%20168.386v-13.157l4.593-3.945%203.796-12.297c7.727%202.127%2024.138%201.49%2026.657-5.023v34.422m-.007-.254c0%203.514-7.847%206.363-17.527%206.363s-17.527-2.849-17.527-6.363'%2F%3E%3Cpath%20style%3D'fill%3A%23fff%3Bfill-opacity%3A0%3Bstroke%3A%23010207%3Bstroke-width%3A1.32292%3Bstroke-dasharray%3Anone%3Bstroke-opacity%3A1'%20d%3D'm90.465%20170.226%2022.051-18.942%204.338-14.17%2016.484-16.774'%20fill%3D'none'%2F%3E%3C%2Fsvg%3E`;
+
+function setIcon(color = '#325932') {
+  const head = document.getElementsByTagName('head')[0];
+  const prev = head.querySelector('link[rel="shortcut icon"]');
+  const next = document.createElement('link');
+  next.rel = 'shortcut icon';
+  next.href = icon.replace(/__FILL__/g, encodeURIComponent(color));
+  prev.remove();
+  head.appendChild(next);
+}
+
 let syncLock;
 function readSync() {
   if (syncLock) return;
@@ -3818,15 +3830,3 @@ Object.defineProperty(globalThis, 'R', {
     },
   }),
 });
-
-const icon = `data:image/svg+xml,%3Csvg%20width%3D'20'%20height%3D'20'%20viewBox%3D'85%20114%2060%2061'%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%3E%3Cpath%20style%3D'fill%3A%23787878%3Bfill-opacity%3A1%3Bstroke%3A%23000%3Bstroke-width%3A1.32292%3Bstroke-dasharray%3Anone'%20d%3D'M120.956%20121.59c0%203.514-7.857%206.363-17.55%206.363-9.692%200-17.549-2.849-17.549-6.363s7.857-6.364%2017.55-6.364c9.692%200%2017.549%202.85%2017.549%206.364'%2F%3E%3Cpath%20style%3D'fill%3A__FILL__%3Bfill-opacity%3A1%3Bstroke%3A%23000%3Bstroke-width%3A1.32292%3Bstroke-dasharray%3Anone'%20d%3D'M126.415%20127.381c9.247.18%2016.592%202.957%2016.592%206.355%200%203.514-7.857%206.363-17.55%206.363-3.388%200-6.552-.348-9.235-.951l.71-2.087z'%2F%3E%3Cpath%20style%3D'fill%3A%23787878%3Bfill-opacity%3A.5%3Bstroke%3A%23000%3Bstroke-width%3A1.32292%3Bstroke-dasharray%3Anone%3Bstroke-opacity%3A1'%20d%3D'm116.854%20137.113-4.338%2014.17-12.726%2010.932c-7.956-.602-13.92-3.15-13.919-6.096l.001-34.302c2.57%208.399%2033.886%207.802%2035.046%200v11.16z'%2F%3E%3Cpath%20style%3D'fill%3A__FILL__%3Bfill-opacity%3A.5%3Bstroke%3A%23000%3Bstroke-width%3A1.32292%3Bstroke-dasharray%3Anone%3Bstroke-opacity%3A1'%20d%3D'M107.923%20168.386v-13.157l4.593-3.945%203.796-12.297c7.727%202.127%2024.138%201.49%2026.657-5.023v34.422m-.007-.254c0%203.514-7.847%206.363-17.527%206.363s-17.527-2.849-17.527-6.363'%2F%3E%3Cpath%20style%3D'fill%3A%23fff%3Bfill-opacity%3A0%3Bstroke%3A%23010207%3Bstroke-width%3A1.32292%3Bstroke-dasharray%3Anone%3Bstroke-opacity%3A1'%20d%3D'm90.465%20170.226%2022.051-18.942%204.338-14.17%2016.484-16.774'%20fill%3D'none'%2F%3E%3C%2Fsvg%3E`;
-
-function setIcon(color = '#325932') {
-  const head = document.getElementsByTagName('head')[0];
-  const prev = head.querySelector('link[rel="shortcut icon"]');
-  const next = document.createElement('link');
-  next.rel = 'shortcut icon';
-  next.href = icon.replace(/__FILL__/g, encodeURIComponent(color));
-  prev.remove();
-  head.appendChild(next);
-}
