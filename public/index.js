@@ -28,7 +28,7 @@ Ractive.helpers.age = function(ts) {
   return evaluate({ d }, `d#date,'HH:mm EEE'`);
 }
 Ractive.helpers.escapeKey = Ractive.escapeKey;
-Ractive.helpers.evaluate = Raport.evaluate;
+Ractive.helpers.evaluate = evaluate;
 Ractive.helpers.download = download;
 Ractive.helpers.basename = basename;
 
@@ -574,6 +574,8 @@ function expandSchema(schema) {
 
 let reportId = 0;
 let localDiffId = 0;
+let contextScratch;
+let globalContext = {};
 
 class App extends Ractive {
   constructor(opts) { super(opts); }
@@ -807,6 +809,27 @@ const app = globalThis.app = new App({
             fg: 'rgba(255, 255, 255, 0.4)',
           },
         });
+      }
+    },
+    'store.scratch.list'(v) {
+      if (v) {
+        const ctx = v.find(s => s.name === 'pg-difficult/context' && s.syntax === 'raport');
+        if (ctx) {
+          if (contextScratch) {
+            contextScratch.cancel();
+            store.release('scratch', contextScratch._id);
+          }
+          contextScratch = this.observe(`store.scratch.${ctx.id}`, v => {
+            if (v) {
+              const ctx = new Root({});
+              if (v.context) evaluate(ctx, v.context);
+              evaluate(ctx, v.text);
+              globalContext = ctx.value;
+            }
+          });
+          contextScratch._id = ctx.id;
+          store.acquire('scratch', ctx.id);
+        }
       }
     },
     sync: {
@@ -2201,14 +2224,14 @@ const renderMD = (function() {
         } else if (lang === 'jpeg+base64') {
           return `<img src="data:image/jpeg;base64,${code}" />`;
         } else if (lang === 'raport+html') {
-          return evaluate(code);
+          return evaluate(globalContext, code);
         } else if (lang === 'raport+text') {
-          return `<pre><code class="hljs text">${evaluate(code)}</code></pre>`;
+          return `<pre><code class="hljs text">${evaluate(globalContext, code)}</code></pre>`;
         } else if (lang.startsWith('csv+table')) {
           const data = evaluate({ code }, `parse(code csv:1 header:${lang.includes('nohead') ? false : true} order:${lang.includes('noorder') ? false : true})`);
           return run({ type: 'delimited', source: 'data', sources: [{ source: 'data' }] }, { data: { value: data } }, {}, { table: 1 });
         } else if (lang.startsWith('raport+table')) {
-          const data = evaluate(code);
+          const data = evaluate(globalContext, code);
           return run({ type: 'delimited', source: 'data', sources: [{ source: 'data' }] }, { data: { value: data } }, {}, { table: 1 });
         } else {
           const highlighted = l && hljs.getLanguage(l) ? hljs.highlight(code, { language: l, ignoreIllegals: true }).value : code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -2312,7 +2335,7 @@ class ScratchPad extends Window {
         });
       } else {
         const opts = app.get('scratchroot') || {};
-        const root = new Root({}, opts);
+        const root = new Root(Object.assign({}, globalContext), opts);
         root.sources = Object.assign({}, opts.sources);
         root.log = this.log;
         if (opts.all) {
@@ -2676,7 +2699,7 @@ class HostExplore extends Window {
     }
 
     if (source.condition) {
-      const root = new Root({}, { parameters: params });
+      const root = new Root(Object.assign({}, globalContext), { parameters: params });
       const ok = evaluate(root, source.condition);
       if (!ok) {
         if (source.alternate) return { value: evaluate(root, source.alternate) };
@@ -2821,7 +2844,7 @@ class HostExplore extends Window {
 
       for (const src of report.sources) {
         if (src.condition) {
-          const root = new Root({}, { parameters: params });
+          const root = new Root(Object.assign({}, globalContext), { parameters: params });
           const ok = evaluate(root, src.condition);
           if (!ok) {
             if (src.alternate) data[src.name] = { value: evaluate(root, src.alternate) };
@@ -3039,7 +3062,7 @@ dd { white-space: pre-wrap; }
         const con = cons.find(c => c.constr === constr);
         if (!con) continue;
         const list = hosts[constr];
-        res[constr] = Raport.evaluate({ list, con, filter, apply, last, results: provided }, `let flt = parse('=>{filter}' raport:1);
+        res[constr] = evaluate(Object.assign({}, globalContext, { list, con, filter, apply, last, results: provided }), `let flt = parse('=>{filter}' raport:1);
 let connection = con.config;
 let constr = con.constr;
 filter(list |entry| => {
@@ -3187,7 +3210,7 @@ class Report extends Window {
   async fetchSource(msg) {
     const src = msg.source;
     if (src.condition) {
-      const root = new Root({}, { parameters: msg.params || {} });
+      const root = new Root(Object.assign({}, globalContext), { parameters: msg.params || {} });
       const ok = evaluate(root, src.condition);
       if (!ok) {
         if (src.alternate) this.respond({ data: evaluate(root, src.alternate) }, msg);
@@ -3488,17 +3511,17 @@ function cloneDeep(any) {
 
 function queryParams(definition, source, params) {
   if (source.query) {
-    const ctx = new Raport.Root(definition.context ? cloneDeep(definition.context) : {});
+    const ctx = new Raport.Root(Object.assign({}, globalContext, definition.context ? cloneDeep(definition.context) : {}));
     ctx.parameters = params;
-    if (definition.extraContext) Raport.evaluate(definition.extraContext)
+    if (definition.extraContext) evaluate(ctx, definition.extraContext)
     params = params || {};
     if (definition.parameters) {
       for (const p of definition.parameters) {
-        if (!(p.name in params) && p.init) params[p.name] = Raport.evaluate(ctx, p.init);
+        if (!(p.name in params) && p.init) params[p.name] = evaluate(ctx, p.init);
       }
     }
     if (source.parameters) {
-      return source.parameters.map(p => Raport.evaluate(ctx, p));
+      return source.parameters.map(p => evaluate(ctx, p));
     } else return [];
   }
 }
@@ -3659,7 +3682,7 @@ function extractQueryParams(query, cur = []) {
   // TODO: handle quotes and whatnot
   let list = [];
   query.replaceAll(/--.*$/g, '').replaceAll(/\$([0-9]+)+/g, (_, n) => { list.push(+n); return _; });
-  list = Raport.evaluate({ list }, 'sort(unique(list))');
+  list = evaluate({ list }, 'sort(unique(list))');
   for (let i = 0; i < list.length; i++) if (i + 1 !== list[i]) return undefined;
   return list.map(i => cur[i - 1] || '');
 }
@@ -3716,7 +3739,7 @@ async function makeRequest(config, params) {
     const entry = requestCache[key];
     if (entry) return entry.cache;
   }
-  const root = new Root({}, { parser: parseTemplate, parameters: params });
+  const root = new Root(globalContext, { parser: parseTemplate, parameters: params });
   const req = { url: evaluate(root, config.url) };
   if (Array.isArray(config.headers)) {
     req.headers = {};
@@ -3729,7 +3752,7 @@ async function makeRequest(config, params) {
     if (config.server) res = (await request(Object.assign({ action: 'fetch' }, req))).result;
     else res = await (await fetch(req.url, req)).text();
     if (!config.eval || config.eval === 'json') res = JSON.parse(res);
-    else if (config.eval === 'raport') res = evaluate({}, res);
+    else if (config.eval === 'raport') res = evaluate(globalContext, res);
     else if (config.eval === 'try') {
       let val = res;
       if (val[0] === '<') return evaluate({ val }, 'parse(val xml:1)');
