@@ -1486,7 +1486,8 @@
         }, first);
         return { op, args: [left, right] };
     }
-    const binop_e = map(seq(operand, rep(alt(seq(nop, name$1(str('**'), 'exp op'), nop, operand), seq(rws, name$1(str('**'), 'exp op'), rws, operand)))), ([arg1, more]) => more.length ? rightassoc(arg1, more) : arg1, 'exp-op');
+    const binop_pipe = map(seq(operand, rep(alt(seq(nop, name$1(str('|'), 'pipe op'), nop, operand), seq(rws, name$1(str('|'), 'pipe op'), rws, operand)))), ([arg1, more]) => more.length ? ({ op: 'pipe', args: [arg1].concat((more || []).map(a => a[3])), meta: { op: 1 } }) : arg1, 'pipe-op');
+    const binop_e = map(seq(binop_pipe, rep(alt(seq(nop, name$1(str('**'), 'exp op'), nop, binop_pipe), seq(rws, name$1(str('**'), 'exp op'), rws, binop_pipe)))), ([arg1, more]) => more.length ? rightassoc(arg1, more) : arg1, 'exp-op');
     const binop_md = map(seq(binop_e, rep(alt(seq(nop, name$1(str('*', '/%', '/', '%'), 'muldiv-op'), nop, binop_e), seq(rws, name$1(str('*', '/%', '/', '%'), 'muldiv-op'), rws, binop_e)))), ([arg1, more]) => more.length ? more.reduce(leftassoc, arg1) : arg1, 'muldiv-op');
     const binop_as = map(seq(binop_md, rep(alt(seq(nop, name$1(str('+', '-'), 'addsub-op'), nop, binop_md), seq(rws, name$1(str('+', '-'), 'addsub-op'), rws, binop_md)))), ([arg1, more]) => more.length ? more.reduce(leftassoc, arg1) : arg1, 'addsub-op');
     const binop_cmp = map(seq(binop_as, rep(alt(seq(nop, name$1(str('>=', '>', '<=', '<'), 'cmp-op'), nop, binop_as), seq(rws, name$1(str('>=', '>', '<=', '<', 'gte', 'gt', 'lte', 'lt', 'in', 'like', 'ilike', 'not-in', 'not-like', 'not-ilike', 'contains', 'does-not-contain'), 'cmp-op'), rws, binop_as)))), ([arg1, more]) => more.length ? more.reduce(leftassoc, arg1) : arg1, 'cmp-op');
@@ -1587,7 +1588,7 @@
     function schema() {
         const type = {};
         const conditions = opt(seq(ws$2, rep1sep(map(seq(name$1(str('?'), { name: 'condition', primary: true }), ws$2, application), ([, , a]) => a), rws, 'disallow')));
-        const value = map(seq(str('any[]', 'string[]', 'number[]', 'boolean[]', 'date[]', 'any', 'string', 'number', 'boolean', 'date'), not(read1To(endRef))), ([s]) => ({ type: s === 'any[]' ? 'array' : s }), { name: 'type', primary: true });
+        const value = map(seq(str('any[]', 'string[]', 'number[]', 'boolean[]', 'date[]', 'object[]', 'value[]', 'any', 'string', 'number', 'boolean', 'date', 'object', 'value'), not(read1To(endRef))), ([s]) => ({ type: s === 'any[]' ? 'array' : s }), { name: 'type', primary: true });
         const typedef = comment('c', map(seq(str('type'), ws$2, name$1(ident, { name: 'type', primary: true }), ws$2, str('='), ws$2, type), ([, , name, , , , type]) => ({ name, type })));
         const typedefs = map(rep1sep(typedef, read1(' \t\n;'), 'allow'), defs => defs.reduce((a, c) => (c.type.desc = c.c, a[c.name] = c.type, a), {}));
         const ref = map(seq(ident, opt(str('[]'))), ([ref, arr]) => ({ type: arr ? 'array' : 'any', ref }), { name: 'type', primary: true });
@@ -1647,7 +1648,7 @@
             else if (union.type === 'array' || ~union.type.indexOf('[]'))
                 return { type: 'union[]', types: [union] };
             else if (union.type === 'any')
-                return { type: 'array' };
+                return { type: 'array', ref: union.ref };
             else {
                 union.type += '[]';
                 return union;
@@ -4322,22 +4323,24 @@
     let _tpl = false;
     let _tplmode = false;
     let _noindent = false;
-    let _listwrap = { array: 60, union: 60, args: 60, keys: 60 };
+    let _listwrap = { array: 60, union: 60, args: 60, keys: 60, ops: 30, opchain: 60 };
     let _html = false;
     let _nochecks = false;
+    let _pipes;
     let _level = 0;
     let _first = false;
     const deepops = ['===', '!==', 'deep-is', 'deep-is-not'];
-    const binops = deepops.concat(['**', '*', '/%', '/', '%', '+', '-', '>=', 'gte', '>', 'gt', '<=', 'lte', '<', 'lt', 'in', 'like', 'ilike', 'not-in', 'not-like', 'not-ilike', 'contains', 'does-not-contain', 'is', 'is-not', '==', '!=', 'strict-is', 'strict-is-not', 'and', '&&', 'or', '||', '??']);
+    const binops = deepops.concat(['|', '**', '*', '/%', '/', '%', '+', '-', '>=', 'gte', '>', 'gt', '<=', 'lte', '<', 'lt', 'in', 'like', 'ilike', 'not-in', 'not-like', 'not-ilike', 'contains', 'does-not-contain', 'is', 'is-not', '==', '!=', 'strict-is', 'strict-is-not', 'and', '&&', 'or', '||', '??']);
     const unops = ['+', 'not'];
     const precedence = {
-        '**': 1,
-        '*': 2, '/%': 2, '/': 2, '%': 2,
-        '+': 3, '-': 3,
-        '>=': 4, '>': 4, '<=': 4, '<': 4, in: 4, like: 4, ilike: 4, 'not-in': 4, 'not-like': 4, 'not-ilike': 4, 'contains': 4, 'does-not-contain': 4, gt: 4, gte: 4, lt: 4, lte: 4,
-        'is': 5, 'is-not': 5, '==': 5, '!=': 5, 'strict-is': 5, 'strict-is-not': 5, 'deep-is': 5, 'deep-is-not': 5, '===': 5, '!==': 5,
-        'and': 6, '&&': 6,
-        'or': 7, '||': 7, '??': 7,
+        '|': 1,
+        '**': 2,
+        '*': 3, '/%': 3, '/': 3, '%': 3,
+        '+': 4, '-': 4,
+        '>=': 5, '>': 5, '<=': 5, '<': 5, in: 5, like: 5, ilike: 5, 'not-in': 5, 'not-like': 5, 'not-ilike': 5, 'contains': 5, 'does-not-contain': 5, gt: 5, gte: 5, lt: 5, lte: 5,
+        'is': 6, 'is-not': 6, '==': 6, '!=': 6, 'strict-is': 6, 'strict-is-not': 6, 'deep-is': 6, 'deep-is-not': 6, '===': 6, '!==': 6,
+        'and': 7, '&&': 7,
+        'or': 8, '||': 8, '??': 8,
     };
     const call_op = /^[-a-zA-Z_$0-9]/;
     function stringify(value, opts) {
@@ -4355,18 +4358,19 @@
         if ('listWrap' in opts) {
             const o = opts.listWrap;
             if (typeof o === 'boolean')
-                _listwrap = !o ? { array: 0, union: 0, args: 0, keys: 0 } : { array: 1, union: 1, args: 1, keys: 1 };
+                _listwrap = !o ? { array: 0, union: 0, args: 0, keys: 0, ops: 0, opchain: 0 } : { array: 1, union: 1, args: 1, keys: 1, ops: 30, opchain: 1 };
             else if (typeof o === 'number')
-                _listwrap = { array: o, union: o, args: o, keys: o };
+                _listwrap = { array: o, union: o, args: o, keys: o, ops: 30, opchain: o };
             else {
                 const b = !o.base ? 0 : o.base === true ? 1 : o.base;
                 _listwrap = Object.keys(_listwrap).reduce((a, c) => (a[c] = c in o && o[c] != null ? (!o[c] ? 0 : o[c] === true ? 1 : o[c]) : b, a), {});
             }
         }
         else
-            _listwrap = { array: 60, union: 60, args: 60, keys: 60 };
+            _listwrap = { array: 60, union: 60, args: 60, keys: 60, ops: 30, opchain: 60 };
         _html = opts.htmlSafe;
         _nochecks = opts.noChecks;
+        _pipes = opts.pipes;
         if (!_sexprops && typeof value === 'object' && value && 'op' in value && value.op === 'block')
             return stringifyRootBlock(value);
         else
@@ -4504,7 +4508,7 @@
         return agg;
     }
     function stringifyOp(value) {
-        var _a, _b;
+        var _a, _b, _c, _d;
         let op = value.op;
         if ((_tplmode && _html !== false) || _html) {
             if (op === '>')
@@ -4558,7 +4562,7 @@
         }
         else if (binops.includes(op) && value.args && value.args.length > 1 && !value.opts && (!deepops.includes(op) || value.args.length === 2)) {
             let parts = value.args.map((a, i) => stringifyBinopArg(op, a, i === 0 ? 1 : 2));
-            const long = parts.find(p => p.length > 30 || ~p.indexOf('\n')) || parts.reduce((a, c) => a + c.length, 0) && parts.length > 2;
+            const long = parts.find(p => p.length > _listwrap.ops || ~p.indexOf('\n')) || parts.reduce((a, c) => a + c.length, 0) > _listwrap.opchain && parts.length > 2;
             const split = _noindent ? ' ' : long ? `\n${padl('', '  ', _level + 1)}` : ' ';
             if (split.length > 1 || (!_noindent && long))
                 parts = [parts[0]].concat(parts.slice(1).map(p => indentAll('  ', p)));
@@ -4602,6 +4606,14 @@
         }
         else if (op === 'cat' && ((_b = value.meta) === null || _b === void 0 ? void 0 : _b.q) === '$$$') {
             return `$$$${stringifyTemplate(value.args)}$$$`;
+        }
+        else if (op === 'pipe' && (_pipes === 'op' || !_pipes && ((_c = value.meta) === null || _c === void 0 ? void 0 : _c.op)) && ((_d = value.args) === null || _d === void 0 ? void 0 : _d.length) > 1) {
+            let parts = value.args.map((a, i) => stringifyBinopArg('|', a, i === 0 ? 1 : 2));
+            const long = parts.find(p => p.length > _listwrap.ops || ~p.indexOf('\n')) || parts.reduce((a, c) => a + c.length, 0) > _listwrap.opchain && parts.length > 2;
+            const split = _noindent ? ' ' : long ? `\n${padl('', '  ', _level + 1)}` : ' ';
+            if (split.length > 1 || (!_noindent && long))
+                parts = [parts[0]].concat(parts.slice(1).map(p => indentAll('  ', p)));
+            return `${parts[0]} |${split}${parts.slice(1).join(` |${split.length > 1 ? `${split}` : split}`)}`;
         }
         else if (call_op.test(op)) {
             return wrapArgs(`${op}(`, value.args || [], value.opts, ')', 0);
@@ -4921,7 +4933,7 @@
         _level++;
         const parts = op.args.map((a, i) => _stringify(block && (i % 2 === 1 || i === last) && !isBlock(a) ? { op: 'block', args: [a] } : a));
         _level--;
-        const long = parts.find(p => p.length > 30 || ~p.indexOf('\n')) || '';
+        const long = parts.find(p => p.length > _listwrap.ops || ~p.indexOf('\n')) || '';
         let split = _noindent ? '' : parts.length > 3 || long ? `\n${padl('', '  ', _level)}` : '';
         const cindent = long && `${split}  ` || ' ';
         split = split || ' ';
@@ -4977,7 +4989,7 @@
             return res;
         });
         _level--;
-        const long = parts.find(p => p.length > 30 || ~p.indexOf('\n')) || '';
+        const long = parts.find(p => p.length > _listwrap.ops || ~p.indexOf('\n')) || '';
         let split = _noindent ? '' : parts.length > 3 || long ? `\n${padl('', '  ', _level)}` : '';
         const wsplit = split ? `${split}  ` : ' ';
         const cindent = long && `${wsplit}  ` || ' ';
@@ -5600,6 +5612,7 @@
             case 'union':
                 return true;
             case 'value': return !Array.isArray(value) && !!~values.indexOf(typeof value) && (typeof value !== 'object' || isDate(value));
+            case 'value[]': return Array.isArray(value) && value.reduce((a, c) => a && !Array.isArray(c) && !!~values.indexOf(typeof c) && (typeof c !== 'object' || isDate(c)), true);
             case 'array':
             case 'tuple':
             case 'union[]':
@@ -5629,9 +5642,9 @@
         const opts = Object.assign({}, DEFAULTS, options);
         const ws = skip(' \t\r\n'.replace(opts.field, '').replace(opts.record, '').replace(opts.quote, ''));
         const quote = str(opts.quote || '"');
-        const quotedField = bracket(seq(ws, quote), map(rep(alt(readTo(opts.quote), map(seq(quote, quote), () => ''))), r => concat$1(r)), seq(quote, ws));
+        const quotedField = bracket(seq(ws, quote), map(rep(alt(readTo(opts.quote || '"'), map(seq(quote, quote), () => ''))), r => concat$1(r)), seq(quote, ws));
         const unquotedField = readTo(opts.record + opts.field, true);
-        const field = alt(quotedField, unquotedField);
+        const field = opts.quote ? alt(quotedField, unquotedField) : unquotedField;
         const record = verify(rep1sep(field, seq(ws, str(opts.field), ws)), s => s.length > 1 || s[0].length > 0 || 'empty record');
         const csv = map(seq(skip(' \r\n\t'), repsep(record, str(opts.record), 'allow'), skip(' \r\n\t')), ([, csv]) => csv);
         const _parse = parser$1(csv, { consumeAll: true });
@@ -6649,6 +6662,8 @@
             else if (value == null)
                 return '';
         }
+        if (isDateRel(value))
+            return fmtDate(value, 'yyyy-MM-dd HH:mm:ssz');
         if (Array.isArray(value))
             return value.join(', ');
         let res = `${value}`;
@@ -6812,6 +6827,12 @@
             if (values.length === 1 && isNum(values[0]) && +values[0] > 0) {
                 if (typeof first === 'string') {
                     return stringTimes(first, +values[0]);
+                }
+                else if (isApplication(first) && +values[0] < 10000) {
+                    const res = [];
+                    for (let i = 0; i < +values[0]; i++)
+                        res.push(evalApply(ctx, first, [i]));
+                    return res;
                 }
                 else if (Array.isArray(first) && +values[0] < 10000 && first.length < 1000) {
                     const res = [];
@@ -7190,7 +7211,7 @@
         else if (opts.xml)
             return parse(v, opts.strict);
         else if (opts.csv || opts.delimited) {
-            if (opts.detect || (!opts.field && !opts.separator && !opts.record && !opts.quote))
+            if (opts.detect || !opts.field || !opts.record)
                 opts = Object.assign(detect(v, opts.context), opts);
             return parse$1(v, opts);
         }

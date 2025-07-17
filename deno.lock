@@ -1,5 +1,5 @@
 {
-  "version": "4",
+  "version": "5",
   "redirects": {
     "https://deno.land/x/is_docker/mod.ts": "https://deno.land/x/is_docker@v2.0.0/mod.ts"
   },
@@ -7,6 +7,7 @@
     "https://cdn.jsdelivr.net/npm/raport@0.24.8/lib/index.js": "a8f8c94724df55bf21c86d6a57c0c74909ca5304c85665ab313ca69e730d9985",
     "https://cdn.jsdelivr.net/npm/raport@0.26.0/lib/index.js": "889579efd49e5a43478d410302d2a3838be0f718f2f2c7013c1fe93d187af1b0",
     "https://cdn.jsdelivr.net/npm/raport@0.28.0/lib/index.js": "9bd15bc9920f168a9073a63ae87b95c263b56805a8f5a8a0c3b0153b165480d0",
+    "https://cdn.jsdelivr.net/npm/raport@0.29.0/lib/index.js": "b4d90f4764c1fbf7177b4930be55c5c4d1feadd30f59a5fdb87d627af22615e5",
     "https://deno.land/std@0.106.0/path/_constants.ts": "1247fee4a79b70c89f23499691ef169b41b6ccf01887a0abd131009c5581b853",
     "https://deno.land/std@0.106.0/path/_interface.ts": "1fa73b02aaa24867e481a48492b44f2598cd9dfa513c7b34001437007d3642e4",
     "https://deno.land/std@0.106.0/path/_util.ts": "2e06a3b9e79beaf62687196bd4b60a4c391d862cfa007a20fc3a39f778ba073b",
