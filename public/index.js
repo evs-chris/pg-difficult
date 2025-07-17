@@ -1152,7 +1152,7 @@ class ControlPanel extends Window {
   evalPad() {
     const scratch = new ScratchPad();
     this.host.addWindow(scratch, { title: 'Eval Pad' });
-    scratch.set('pad.syntax', 'raport');
+    setTimeout(() => scratch.set('pad.syntax', 'raport'), 50);
     scratch.findComponent('split')?.resize(0, 50);
   }
   async exportSettings() {
