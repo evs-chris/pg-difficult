@@ -2362,7 +2362,6 @@ class ScratchPad extends Window {
         this.set({
           evalresult: res,
           evaltext,
-          treeresult: typeof res !== 'object' ? undefined : treeify(res),
           evalerror: '',
         });
       }
@@ -2378,7 +2377,7 @@ class ScratchPad extends Window {
     }
     const tabs = this.findComponent('tabs');
     if (tabs && tabs.selection > 1) tabs.select(0);
-    this.set('visited.table', 0);
+    this.set('visited', { table: 0, tree: 0 });
   }
   string(v) {
     return v === undefined ? 'undefined' : JSON.stringify(v);
@@ -2558,13 +2557,38 @@ tbody tr:hover td { background-color: rgba(128, 128, 128, 0.25); }
       const local = this.get('_settings');
       return Object.assign({}, base, local);
     },
+    resultCanTree() {
+      const typ = this.get('pad.syntax');
+      if (typ === 'json') {
+        const v = tryJSONParse(this.get('pad.text'));
+        this.set('evalresult', v);
+        return v && typeof v === 'object';
+      }
+      if (typ === 'raport' && typeof this.get('evalresult') === 'object') return true;
+    },
+    resultTree() {
+      const typ = this.get('pad.syntax');
+      let v;
+      if (typ === 'json') v = this.get('evalresult');
+      else if (typ === 'raport') v = this.get('evalresult');
+      if (v && typeof v === 'object') return treeify(v);
+    },
     resultCanTable() {
-      const data = this.get('evalresult');
-      return evaluate({ data }, 'data is @[Array<object|array>]');
+      const typ = this.get('pad.syntax');
+      let v;
+      if (typ === 'json') {
+        const v = tryJSONParse(this.get('pad.text'));
+        this.set('evalresult', v);
+        return v && typeof v === 'object';
+      } else if (typ === 'raport') v = this.get('evalresult');
+      return evaluate({ data: v }, 'data is @[Array<object|array>]');
     },
     resultTable() {
-      const data = this.get('evalresult');
-      return run({ type: 'delimited', source: 'data', sources: [{ source: 'data' }] }, { data: { value: data } }, {}, { table: 1 });
+      const typ = this.get('pad.syntax');
+      let v;
+      if (typ === 'json') v = this.get('evalresult');
+      else if (typ === 'raport') v = this.get('evalresult');
+      return run({ type: 'delimited', source: 'data', sources: [{ source: 'data' }] }, { data: { value: v } }, {}, { table: 1 });
     },
   },
   observe: {
@@ -2577,6 +2601,7 @@ tbody tr:hover td { background-color: rgba(128, 128, 128, 0.25); }
     },
     'pad.text'(v) {
       if (typeof v === 'string') this.saveDebounced && this.saveDebounced();
+      this.set('visited', { tree: 0, table: 0 });
     },
     'editor.autosave'(v) {
       if (this.saveDebounced) this.saveDebounced.timeout = v ?? 15000;
@@ -3847,3 +3872,9 @@ Object.defineProperty(globalThis, 'R', {
     },
   }),
 });
+
+function tryJSONParse(str) {
+  try {
+    return JSON.parse(str);
+  } catch {}
+}
