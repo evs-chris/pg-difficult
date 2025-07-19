@@ -2225,6 +2225,12 @@ const renderMD = (function() {
       const renderer = new marked.Renderer();
       renderer.code = ({ lang, text: code }) => {
         const l = checkLanguage(lang);
+        let opts = {};
+        let optstr = '';
+        if (~l.indexOf(' ')) {
+          optstr = l.slice(l.indexOf(' '));
+          opts = evaluate(globalContext, `{${optstr}}`) || {};
+        }
         if (lang === 'mermaid') {
           if (typeof subs[code] === 'string') return subs[code];
           else if (globalThis.mermaid) subs[code] = globalThis.mermaid.render(`graph${id++}`, `---\nconfig:\n  theme: ${theme === 'light' ? 'forest' : 'dark'}\n---\n${code}`).then(v => `<div class="mermaid-chart ${theme || 'light'}">${v.svg}</div>`);
@@ -2240,11 +2246,18 @@ const renderMD = (function() {
         } else if (lang === 'raport+text') {
           return `<pre><code class="hljs text">${evaluate(globalContext, code)}</code></pre>`;
         } else if (lang.startsWith('csv+table')) {
-          const data = evaluate({ code }, `parse(code csv:1 header:${lang.includes('nohead') ? false : true} order:${lang.includes('noorder') ? false : true})`);
+          if (!('header' in opts) && lang.includes('nohead')) opts.header = 0;
+          if (!('order' in opts) && lang.includes('noorder')) opts.order = 0;
+          const data = evaluate({ code }, `parse(code csv:1 ${evaluate({ opts }, 'unparse(opts noIndent:1)[1 1<]')})`);
           return run({ type: 'delimited', source: 'data', sources: [{ source: 'data' }] }, { data: { value: data } }, {}, { table: 1 });
         } else if (lang.startsWith('raport+table')) {
           const data = evaluate(globalContext, code);
           return run({ type: 'delimited', source: 'data', sources: [{ source: 'data' }] }, { data: { value: data } }, {}, { table: 1 });
+        } else if (lang.startsWith('json')) {
+          try {
+            if (opts.pretty) code = JSON.stringify(JSON.parse(code), null, '  ');
+          } catch (e) { console.log(e)}
+          return `<pre><code class="hljs json">${hljs.highlight(code, { language: 'json', ignoreIllegals: true }).value}</code></pre>`;
         } else {
           const highlighted = l && hljs.getLanguage(l) ? hljs.highlight(code, { language: l, ignoreIllegals: true }).value : code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
           return `<pre><code class="hljs ${l}">${highlighted}</code></pre>`;
