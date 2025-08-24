@@ -323,6 +323,29 @@
   .tree-children .remove-button:hover { opacity: 1; }
   .tree-children .tree-leaf .name { user-select: none; }
 
+  .markdown-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    padding: 1em;
+    box-sizing: border-box;
+  }
+  .markdown-container div.table-wrap.contain {
+    display: flex;
+    flex-direction: column;
+    max-height: calc(100% - 1em);
+    max-width: 100%;
+    min-height: 2em;
+    overflow: auto;
+  }
+  .markdown-container div.table-wrap {
+    margin: 1em 0;
+  }
+  .markdown-container div.vpad {
+    height: 1em;
+  }
   .markdown-container code, .mermaid-chart {
     border-radius: 0.5em;
     margin: 0.5em 0;
@@ -331,7 +354,6 @@
     .white-space: pre-wrap;
   }
   .markdown-container table {
-    margin: 1em 0;
     border-collapse: collapse;
     border: 1px solid rgba(128, 128, 128, 0.5);
   }
@@ -733,6 +755,8 @@
         <div style="margin-top: 1em;">
           <button on-click="@.exportSettings()">Export Settings</button>
           <button on-click="@.importSettings()">Import Settings</button>
+          {{#if ~/canNotify === undefined}}<button on-click="@.requestNotify()">Turn on Notifications</button>
+          {{else}}<div style="display: inline-block; background-color: rgba(128, 128, 128, 0.2); border-radius: 0.5em; border: 1px solid rgba(128, 128, 128, 0.3); padding: 0.5em; margin: 0.5em;">Notifications {{~/canNotify ? 'En' : 'Dis'}}abled{{/if}}
         </div>
       </div>
     </tab>
@@ -1424,8 +1448,9 @@
           </div>
         </tab>
         <tab title="View">
-          <div class="markdown-container" on-change="@.markdownCheck(@event)">
+          <div class="markdown-container" on-change="@.markdownChange(@event)" on-click="@.markdownClick(@event)" on-input="@.markdownInput(@event)">
             {{{_markdown}}}
+            <div class=vpad />
           </div>
         </tab>
       </tabs>

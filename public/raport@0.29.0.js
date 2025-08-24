@@ -1278,7 +1278,7 @@
             return res[0];
         return { op: '+', args: res, meta: q ? { q } : undefined };
     }
-    const timespan = map(rep1sep(seq(JNum, ws$2, istr('years', 'year', 'y', 'months', 'month', 'minutes', 'minute', 'milliseconds', 'millisecond', 'mm', 'ms', 'm', 'weeks', 'week', 'w', 'days', 'day', 'd', 'hours', 'hour', 'h', 'seconds', 'second', 's')), ws$2), parts => {
+    const timespan = map(rep1sep(seq(JNum, ws$2, istr('years', 'year', 'y', 'months', 'month', 'minutes', 'minute', 'milliseconds', 'millisecond', 'min', 'mm', 'ms', 'm', 'weeks', 'week', 'w', 'days', 'day', 'd', 'hours', 'hour', 'h', 'seconds', 'second', 's')), ws$2), parts => {
         const span = { y: 0, m: 0, d: 0, h: 0, mm: 0, s: 0, ms: 0 };
         for (let i = 0; i < parts.length; i++) {
             if (parts[i][2][0] === 'y')
@@ -1293,7 +1293,7 @@
                 span.h += parts[i][0];
             else if (parts[i][2][0] === 's')
                 span.s += parts[i][0];
-            else if (parts[i][2] === 'mm' || parts[i][2] === 'minutes' || parts[i][2] === 'minute')
+            else if (parts[i][2] === 'mm' || parts[i][2] === 'min' || parts[i][2] === 'minutes' || parts[i][2] === 'minute')
                 span.mm += parts[i][0];
             else if (parts[i][2] === 'ms' || parts[i][2] === 'milliseconds' || parts[i][2] === 'millisecond')
                 span.ms += parts[i][0];
@@ -2471,7 +2471,7 @@
         };
     }
     function isTimespan(v) {
-        return typeof v === 'number' || (typeof v === 'object' && Array.isArray(v.d)) || isTimespanMS(v);
+        return typeof v === 'number' || (v && typeof v === 'object' && Array.isArray(v.d)) || isTimespanMS(v);
     }
     function addTimespan(l, r) {
         if (typeof l === 'number' && typeof r === 'number')
@@ -3233,11 +3233,13 @@
         let fields = report.fields;
         let headers = report.headers;
         if ((!fields || !fields.length) && values.length && typeof values[0] === 'object' && values[0]) {
-            fields = Object.keys(values[0]);
             if (Array.isArray(values[0]))
                 fields = fields.map(i => `_.${i}`);
-            else if (!headers || !headers.length)
-                headers = Object.keys(values[0]);
+            else {
+                fields = Object.keys(values[0]).map(k => `_[${JSON.stringify(k)}]`);
+                if (!headers || !headers.length)
+                    headers = Object.keys(values[0]);
+            }
         }
         if (!fields)
             fields = [];
@@ -5654,12 +5656,16 @@
                 let header = undefined;
                 if (Array.isArray(opts.header))
                     header = opts.header.map((k, i) => [k, i]);
-                else if (typeof opts.header === 'object')
-                    header = res.shift().map((k, i) => { var _a; return [(_a = opts.header[k]) !== null && _a !== void 0 ? _a : k, i]; }).filter(o => o[0]);
+                else if (typeof opts.header === 'object') {
+                    if (Object.keys(opts.header).find(k => !/^\d+$/.test(k)))
+                        header = res.shift().map((k, i) => { var _a; return [(_a = opts.header[k]) !== null && _a !== void 0 ? _a : k, i]; }).filter(o => o[0]);
+                    else
+                        header = Object.entries(opts.header).map(([i, k]) => [`${k}`, +i]);
+                }
                 else if (!!opts.header)
                     header = res.shift().map((k, i) => [k, i]);
                 if (header) {
-                    if (opts.order !== false)
+                    if (opts.order !== false && opts.order !== 0)
                         header.sort((a, b) => `${a}`.toLowerCase() < `${b}`.toLowerCase() ? -1 : `${a}`.toLowerCase() > `${b}`.toLowerCase() ? 1 : 0);
                     return res.map(v => header.reduce((a, c) => (a[c[0]] = v[c[1]], a), {}));
                 }
@@ -5743,12 +5749,15 @@
                     values.shift();
             }
             else if (typeof options.header === 'object') {
-                header = values.shift().map((k, i) => { var _a; return [(_a = options.header[k]) !== null && _a !== void 0 ? _a : k, i]; }).filter(o => o[0]);
+                if (Object.keys(options.header).find(k => !/^\d+$/.test(k)))
+                    header = values.shift().map((k, i) => { var _a; return [(_a = options.header[k]) !== null && _a !== void 0 ? _a : k, i]; }).filter(o => o[0]);
+                else
+                    header = Object.entries(options.header).map(([i, k]) => [`${k}`, +i]);
             }
             else if (!!options.header)
                 header = values.shift().map((k, i) => [k, i]);
             if (header) {
-                if ((options === null || options === void 0 ? void 0 : options.order) !== false)
+                if ((options === null || options === void 0 ? void 0 : options.order) !== false && (options === null || options === void 0 ? void 0 : options.order) !== 0)
                     header.sort((a, b) => `${a}`.toLowerCase() < `${b}`.toLowerCase() ? -1 : `${a}`.toLowerCase() > `${b}`.toLowerCase() ? 1 : 0);
                 return values.map(v => header.reduce((a, c) => (a[c[0]] = v[c[1]], a), {}));
             }
@@ -6190,6 +6199,17 @@
         }
         return found && !excluded;
     }
+    const IntervalMap = {
+        y: 'year',
+        m: 'month',
+        d: 'day',
+        h: 'hour',
+        mm: 'minute',
+        s: 'second',
+        ms: 'millisecond',
+    };
+    const Intervals = Object.keys(IntervalMap);
+    const IntervalNames = Object.values(IntervalMap);
     // basic ops
     registerOperator(simple(['is', 'is-not', '==', '!='], (name, values) => {
         const [l, r] = values;
@@ -6651,6 +6671,9 @@
                 return stringifySchema(value);
             if (opts.base64)
                 return btoa(value);
+            if (isTimespan(value) && (opts.interval || typeof value !== 'number' && !('interval' in opts))) {
+                return timespanToString(value, opts);
+            }
             else if (opts.raport) {
                 let v = stringify(value, opts);
                 if (v === undefined)
@@ -7689,6 +7712,9 @@
         var _a;
         return fmtDate(n, (_a = fmt !== null && fmt !== void 0 ? fmt : opts === null || opts === void 0 ? void 0 : opts.format) !== null && _a !== void 0 ? _a : this.defaults.format);
     }, { format: 'HH:mm:ss' });
+    registerFormat('timespan', function (n, _, opts) {
+        return timespanToString(n, opts);
+    });
     registerFormat('timestamp', function (n, [fmt], opts) {
         var _a;
         return fmtDate(n, (_a = fmt !== null && fmt !== void 0 ? fmt : opts === null || opts === void 0 ? void 0 : opts.format) !== null && _a !== void 0 ? _a : this.defaults.format);
@@ -7810,6 +7836,45 @@
             }, '');
         }
         return escapeHTML(val);
+    }
+    function timespanToString(value, opts) {
+        if (isTimespan(value)) {
+            opts = opts || {};
+            if (opts.precision === 'min')
+                opts.precision = 'mm';
+            let parts;
+            if (typeof value === 'number' || 'ms' in value) {
+                let val = typeof value === 'object' && 'ms' in value ? value.ms : +value;
+                parts = [0, 0, Math.floor(val / 86400000)];
+                val = val - parts[2] * 86400000;
+                parts.push(Math.floor(val / 3600000));
+                val = val - parts[3] * 3600000;
+                parts.push(Math.floor(val / 60000));
+                val = val - parts[4] * 60000;
+                parts.push(Math.floor(val / 1000));
+                parts.push(val - parts[5] * 1000);
+            }
+            else
+                parts = value.d;
+            const res = [];
+            const fmt = opts.fmt || opts.format || 'long';
+            let idx = -1;
+            for (let i = 0; i < parts.length; i++) {
+                const p = Intervals[i];
+                if (opts.precision && (idx = Intervals.indexOf(opts.precision)) && ~idx && idx < i)
+                    break;
+                const part = `${parts[i] || 0}`;
+                if (fmt === 'long' && parts[i])
+                    res.push(`${part} ${IntervalNames[i]}${parts[i] !== 1 ? 's' : ''}`);
+                else if (fmt === 'short' && parts[i])
+                    res.push(`${part}${p}`);
+                else if (fmt.includes('timer') && (parts[i] || i > 2))
+                    res.push(i < 3 ? `${res.length > 0 ? `${fmt.includes('long') ? ',' : ''} ` : ''}${part}${fmt.includes('long') ? ` ${IntervalNames[i]}${parts[i] !== 1 ? 's' : ''}` : p}` : i === 3 ? ` ${part || '0'}` : `${i === 6 ? '.' : ':'}${pad('l', part, i === 6 ? 3 : 2, '0')}`);
+            }
+            return res.join(fmt === 'long' ? ', ' : fmt === 'short' ? ' ' : '');
+        }
+        else
+            return value;
     }
     registerFormat('base64', val => {
         return btoa(`${val}`);

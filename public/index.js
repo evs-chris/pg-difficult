@@ -1179,6 +1179,10 @@ class ControlPanel extends Window {
     if (file.store) store.restore(file.store);
     // TODO: ask what to restore and how (store mode)
   }
+  async requestNotify() {
+    const res = await Notification.requestPermission();
+    this.set('canNotify', res === 'granted');
+  }
   async validateSync(path) {
     const config = this.get(path);
     this.set(`${path}.valid`, await store.validate(config));
@@ -1214,6 +1218,7 @@ Window.extendWith(ControlPanel, {
       this.link('loadedQuery', 'loadedQuery', { instance: app });
       this.link('store', 'store', { instance: app });
       this.link('connected', 'connected', { instance: app });
+      this.link('canNotify', 'canNotify', { instance: app });
     },
   },
   observe: {
@@ -2218,8 +2223,12 @@ const renderMD = (function() {
   let theme;
   let subs;
   let id = 1;
+  let widgets = {};
+  let timer = false;
   return async function(str, opts = {}) {
     theme = opts.theme || Ractive.styleGet('theme');
+    widgets = {};
+    timer = false;
     if (!md) {
       md = marked.parse;
       const renderer = new marked.Renderer();
@@ -2249,15 +2258,42 @@ const renderMD = (function() {
           if (!('header' in opts) && lang.includes('nohead')) opts.header = 0;
           if (!('order' in opts) && lang.includes('noorder')) opts.order = 0;
           const data = evaluate({ code }, `parse(code csv:1 ${evaluate({ opts }, 'unparse(opts noIndent:1)[1 1<]')})`);
-          return run({ type: 'delimited', source: 'data', sources: [{ source: 'data' }] }, { data: { value: data } }, {}, { table: 1 });
+          return `<div class="table-wrap${opts.contain ? ' contain' : ''}">${run({ type: 'delimited', source: 'data', sources: [{ source: 'data' }] }, { data: { value: data } }, {}, { table: 1 })}</div>`;
         } else if (lang.startsWith('raport+table')) {
           const data = evaluate(globalContext, code);
-          return run({ type: 'delimited', source: 'data', sources: [{ source: 'data' }] }, { data: { value: data } }, {}, { table: 1 });
+          return `<div class="table-wrap${opts.contain ? ' contain' : ''}">${run({ type: 'delimited', source: 'data', sources: [{ source: 'data' }] }, { data: { value: data } }, {}, { table: 1 })}</div>`;
         } else if (lang.startsWith('json')) {
           try {
             if (opts.pretty) code = JSON.stringify(JSON.parse(code), null, '  ');
           } catch (e) { console.log(e)}
           return `<pre><code class="hljs json">${hljs.highlight(code, { language: 'json', ignoreIllegals: true }).value}</code></pre>`;
+        } else if (lang.startsWith('widget+')) {
+          let end = lang.indexOf(' ');
+          if (!~end) end = lang.length;
+          const start = lang.indexOf('+') + 1;
+          const widget = lang.slice(start, end);
+          const args = evaluate(globalContext, `{${lang.slice(end)}}`);
+          let idx;
+          if (!widgets[widget]) widgets[widget] = 0;
+          switch (widget) {
+            case 'counter':
+              return `<div class="counter widget" data-index="${widgets.counter++}"><span class=counter>${code}</span><button>-</button><button>+</button><button>Reset</button></div>`;
+            case 'dong':
+              return `<div class="dong widget"><button>Dong!</button></div>`;
+            case 'clock':
+              timer = true;
+              return `<div class="clock widget" data-index="${widgets.clock++}"><span class=time>${evaluate('@date#time')}</span></div>`;
+            case 'timer': {
+              timer = true;
+              const bits = evaluate(globalContext, code) || {};
+              return `<div class="timer widget" data-index="${widgets.timer++}"><span class=time>${bits.end > Date.now() ? evaluate({ bits }, '(bits.end - #now#)#timespan(precision::s fmt::timer)') : bits.remain ? evaluate({ bits }, 'bits.remain#timespan(precision::s fmt::timer)') : ''}</span><label class="field inline"><input placeholder="duration" /></label><button disabled>Start</button><button disabled>Pause</button><button disabled>Reset</button></div>`;
+            }
+            case 'pomodoro': {
+              timer = true;
+              const bits = evaluate(globalContext, code) || {};
+              return `<div class="pomodoro widget" data-index="${widgets.pomodoro++}"><span class=time>${bits.end > Date.now() ? evaluate({ bits }, '(bits.end - #now#)#timespan(precision::s fmt::timer)') : bits.remain ? evaluate({ bits }, 'bits.remain#timespan(precision::s fmt::timer)') : ''}</span><span class=text>${bits.status || ''}</span><button disabled>Start</button><button disabled>Pause</button><button disabled>Next</button><button>Reset</button></div>`;
+            }
+          }
         } else {
           const highlighted = l && hljs.getLanguage(l) ? hljs.highlight(code, { language: l, ignoreIllegals: true }).value : code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
           return `<pre><code class="hljs ${l}">${highlighted}</code></pre>`;
@@ -2276,9 +2312,9 @@ const renderMD = (function() {
       for (const k in subs) subs[k] = await subs[k];
       html = marked.parse(str);
     }
-    if (!opts.nochecks) html = html.replace(/\<input (checked="" )?disabled="" type="checkbox"/g, '<input $1type="checkbox"');
+    if (!opts.nochecks) html = html.replace(/\<input (checked="" )?disabled="" type="checkbox"/g, '<input class=checklist $1type="checkbox"');
     html = html.replace(/\<a (href="https?:\/\/)/g, '<a target="_blank" $1');
-    return html;
+    return { html, timer };
   };
 })();
 
@@ -2395,21 +2431,223 @@ class ScratchPad extends Window {
   string(v) {
     return v === undefined ? 'undefined' : JSON.stringify(v);
   }
-  markdownCheck(ev) {
-    const inputs = this.find('.markdown-container').querySelectorAll('input');
-    const idx = Array.prototype.findIndex.call(inputs, v => v === ev.target);
-    if (~idx) {
-      let txt = this.get('pad.text');
-      let i = 0;
-      txt = txt.replace(/(\*|[a-zA-Z0-9]+\.) \[[ xX]\]/g, (v, t) => {
-        if (i++ === idx) {
-          if (v[3] === 'x') return `${t} [ ]`;
-          else return `${t} [x]`;
-        } else {
-          return v;
+
+  findWidget(el) {
+    if (!el || !el.classList) return;
+    while (el && !el.classList.contains('widget')) {
+      el = el.parentElement;
+    }
+    return el;
+  }
+  widgetCode(widget) {
+    const text = this.get('pad.text');
+    const name = Array.prototype.find.call(widget.classList, c => c !== 'widget');
+    const index = +widget.getAttribute('data-index');
+    let idx = 0;
+    const fence = '```widget+' + name;
+    let pos = text.indexOf(fence);
+    while (~pos && idx < index) {
+      pos = text.indexOf(fence, pos + 1);
+      idx++;
+    }
+    if (~pos) {
+      const eof = text.indexOf('\n', pos);
+      const eob = text.indexOf('```', pos + 1);
+      if (!~eof || !~eob) return;
+      const opts = evaluate(globalContext, `{${text.slice(pos + fence.length, eof)}}`);
+      return { code: text.slice(eof, eob), opts, from: eof + 1, to: eob - 1 };
+    }
+  }
+  replaceWidgetCode(code, value) {
+    if (code && ~code.from && ~code.to) {
+      const text = this.get('pad.text');
+      this.lockmd = true;
+      this.set('pad.text', text.slice(0, code.from) + value + text.slice(code.to));
+      this.lockmd = false;
+    }
+  }
+
+  markdownChange(ev) {
+    if (ev.target.classList.contains('checklist')) {
+      const inputs = this.find('.markdown-container').querySelectorAll('input');
+      const idx = Array.prototype.findIndex.call(inputs, v => v === ev.target);
+      if (~idx) {
+        let txt = this.get('pad.text');
+        let i = 0;
+        txt = txt.replace(/(\*|[a-zA-Z0-9]+\.) \[[ xX]\]/g, (v, t) => {
+          if (i++ === idx) {
+            if (v[3] === 'x') return `${t} [ ]`;
+            else return `${t} [x]`;
+          } else {
+            return v;
+          }
+        });
+        this.lockmd = true;
+        this.set('pad.text', txt);
+        this.lockmd = false;
+      }
+    }
+  }
+  markdownClick(ev) {
+    const e = ev.target;
+    const w = this.findWidget(e);
+    if (!w) return;
+    if (w.classList.contains('counter')) {
+      let count = w.querySelector('span.counter');
+      if (!count) return;
+      let num = +count.innerText;
+      if (e.innerText === '-') num--;
+      else if (e.innerText === '+') num++;
+      else num = 0;
+      count.innerText = `${num}`;
+      const code = this.widgetCode(w);
+      if (code) this.replaceWidgetCode(code, count.innerText);
+    } else if (w.classList.contains('timer') || w.classList.contains('pomodoro')) {
+      const pom = w.classList.contains('pomodoro');
+      const code = this.widgetCode(w);
+      if (e.innerText === 'Start') {
+        const data = evaluate(code.code);
+        const time = data?.remain ? evaluate(data, `date(#now# + remain)`) : evaluate({ tm: pom ? code.opts?.on || '25mm' : w.querySelector('input').value }, `date(#now# + interval(tm))`);
+        this.replaceWidgetCode(code, evaluate({ data: { end: +time } }, 'unparse(data)'));
+        this.checkTimerPrecision(1);
+      } else if (e.innerText === 'Pause') {
+        const data = { remain: evaluate(code, 'date(eval(code).end) - #now#' ) };
+        if (pom) data.segment = evaluate(code.code)?.segment || 'work';
+        this.replaceWidgetCode(code, evaluate({ data }, 'unparse(data)'));
+      } else if (e.innerText === 'Reset') {
+        this.replaceWidgetCode(code, '');
+        w.querySelector('.time').innerText = '';
+      } else if (e.innerText === 'Next') {
+        const data = evaluate(code.code);
+        const segment = data?.segment || 'work';
+        const next = segment === 'work' ? 'break' : 'work';
+        const tm = evaluate({ int: next === 'work' ? code.opts?.on || '25mm' : code.opts?.off || '5mm' }, 'date(#now# + interval(int))');
+        this.replaceWidgetCode(code, evaluate({ data: { end: +tm, segment: next } }, 'unparse(data)'));
+        w.querySelector('.time').innerText = `${next} for ${evaluate({ rem: +tm - Date.now() }, 'rem#timespan(format::timer precision::s)')}`;
+      }
+    } else if (w.classList.contains('dong')) {
+      notificate({ sound: 'dong', message: 'Dong!', timeout: 4000 });
+    }
+  }
+  markdownInput(ev) {
+    const e = ev.target;
+    const w = this.findWidget(e);
+    if (!w) return;
+    if (w.classList.contains('timer')) {
+      const buttons = w.querySelectorAll('button');
+      if (evaluate(`#${e.value}#`)) buttons[0].disabled = false;
+      else buttons[0].disabled = true;
+    }
+  }
+  markdownTimes() {
+    // TODO: maybe don't parse the code on every tick?
+    let precision = 15;
+    const ts = this._times;
+    const prec = ts?.precision || 15;
+    let obj;
+    if (ts) {
+      if (this.get('activeTab') === 1) {
+        obj = ts.clock;
+        for (const o of obj || []) {
+          if (o.opts?.precision === 's') precision = 1;
+          const fmt = o.opts?.precision === 's' ? 'HH:mm:ss' : 'HH:mm';
+          o.time.innerText = evaluate({ fmt }, '@date#time(fmt)');
         }
-      });
-      this.set('pad.text', txt);
+      }
+      if (obj = ts.timer) {
+        for (const o of obj) {
+          const state = evaluate(this.widgetCode(o.widget).code);
+          if (state?.end) {
+            const now = Date.now();
+            const rem = now - state.end;
+            const btns = o.widget.querySelectorAll('button');
+            if (rem > 0 && (rem <= prec * 1000 || rem < 30000 && !o.data.donged)) {
+              notificate({ sound: o.opts?.sound || 'time-beep', message: o.opts?.message, body: o.opts?.body, timeout: o.opts?.timeout });
+              o.time.innerText = 'elapsed';
+              o.data.donged = true;
+              btns[0].disabled = !evaluate({ str: o.widget.querySelector('input').value }, 'interval(str)');
+              btns[1].disabled = true;
+              btns[2].disabled = false;
+            } else {
+              if (rem < 0) {
+                o.time.innerText = evaluate({ rem: -rem }, 'rem#timespan(format::timer precision::s)');
+                if (!['mm', 'min'].includes(o.opts?.precision)) precision = 1;
+                btns[0].disabled = btns[2].disabled = true;
+                btns[1].disabled = false;
+              } else {
+                o.time.innerText = 'elapsed';
+                btns[0].disabled = !evaluate({ str: o.widget.querySelector('input').value }, 'interval(str)');
+                btns[1].disabled = true;
+                btns[2].disabled = false;
+              }
+            }
+          } else if (state?.remain) {
+            const btns = o.widget.querySelectorAll('button');
+            o.time.innerText = `paused: ${evaluate({ rem: state.remain }, 'rem#timespan(format::timer precision::s)')}`;
+            btns[0].disabled = btns[2].disabled = false;
+            btns[1].disabled = true;
+          } else {
+            o.time.innerText = '';
+            const btns = o.widget.querySelectorAll('button');
+            btns[0].disabled = !evaluate({ str: o.widget.querySelector('input').value }, 'interval(str)');
+            btns[1].disabled = btns[2].disabled = true;
+          }
+        }
+      }
+      if (obj = ts.pomodoro) {
+        for (const o of obj) {
+          const code = this.widgetCode(o.widget);
+          const state = evaluate(code.code);
+          const which = state?.segment || 'work';
+          if (state?.end) {
+            const now = Date.now();
+            const rem = now - state.end;
+            const btns = o.widget.querySelectorAll('button');
+            if (rem > 0) {
+              const msgs = Object.assign({}, { work: 'Take a break.', break: 'Start working.' }, o.opts?.message);
+              notificate({ sound: o.opts?.sound?.[which] || o.opts?.sound || (which === 'work' ? 'relax' : 'next'), message: msgs[which], body: o.opts?.body?.[which], timeout: o.opts?.timeout ?? 5000 });
+              const next = which === 'work' ? 'break' : 'work';
+              const tm = evaluate({ int: next === 'work' ? o.opts?.on || '25mm' : o.opts?.off || '5mm' }, 'date(#now# + interval(int))');
+              const data = { end: +tm, segment: next };
+              this.replaceWidgetCode(code, evaluate({ data }, 'unparse(data)'));
+              o.time.innerText = `${next} for ${evaluate({ rem: +tm - Date.now() }, 'rem#timespan(format::timer precision::s)')}`;
+              btns[1].disabled = btns[2].disabled = false;
+              btns[0].disabled = btns[3].disabled = true;
+            } else {
+              if (rem < 0) {
+                o.time.innerText = `${which} for ${evaluate({ rem: -rem }, 'rem#timespan(format::timer precision::s)')}`;
+                if (o.opts?.precision === 's' || rem > -60000) precision = 1;
+                btns[0].disabled = btns[3].disabled = true;
+                btns[1].disabled = btns[2].disabled = false;
+              } else {
+                o.time.innerText = 'elapsed';
+                btns[0].disabled = btns[1].disabled = btns[2].disabled = true;
+                btns[3].disabled = false;
+              }
+            }
+          } else if (state?.remain) {
+            const btns = o.widget.querySelectorAll('button');
+            o.time.innerText = `${which} paused: ${evaluate({ rem: state.remain }, 'rem#timespan(format::timer precision::s)')}`;
+            btns[0].disabled = btns[3].disabled = false;
+            btns[1].disabled = btns[2].disabled = true;
+          } else {
+            o.time.innerText = '';
+            const btns = o.widget.querySelectorAll('button');
+            btns[0].disabled = false;
+            btns[1].disabled = btns[2].disabled = btns[3].disabled = true;
+          }
+        }
+      }
+      this.checkTimerPrecision(precision);
+    }
+  }
+  checkTimerPrecision(prec) {
+    const ts = this._times;
+    if (!ts) return;
+    if (ts.precision !== prec) {
+      clearTimeout(this._clockint);
+      this._clockint = setInterval(() => this.markdownTimes(), prec * 1000);
+      ts.precision = prec;
     }
   }
   async printMarkdown(md, dl) {
@@ -2428,7 +2666,7 @@ code {
 table {
   margin: 1em 0;
   border-collapse: collapse;
-  border: 1px sold rgba(128, 128, 128, 0.5);
+  border: 1px solid rgba(128, 128, 128, 0.5);
 }
 td, th {
   padding: 0.25em 0.5em;
@@ -2475,8 +2713,29 @@ ${md}</body></html>`
     }
   }
   async renderMD() {
+    if (this.lockmd) return;
     const v = this.get('pad.text');
-    if (v && this.get('pad.syntax') === 'markdown') this.set('_markdown', await renderMD(v));
+    if (v && this.get('pad.syntax') === 'markdown') {
+      const { html, timer } = await renderMD(v);
+      this.set('_markdown', html);
+      if (timer) {
+        if (!this._clockint) this._clockint = setInterval(() => this.markdownTimes(), 1000);
+        const old = this._times;
+        const ts = this._times = { precision: 1 };
+        for (const t of this.findAll('.widget .time')) {
+          const w = this.findWidget(t);
+          const i = +w.getAttribute('data-index');
+          const type = Array.prototype.find.call(w.classList, c => c !== 'widget');
+          const d = this.widgetCode(w);
+          if (!this._times[type]) this._times[type] = [];
+          this._times[type][i] = { time: t, widget: w, index: i, opts: d.opts, data: old?.[type]?.[i]?.data || {}, code: d.code };
+        }
+      } else {
+        if (this._clockint) clearInterval(this._clockint);
+        this._clockint = undefined;
+        this._times = undefined;
+      }
+    }
   }
 }
 Window.extendWith(ScratchPad, {
@@ -2492,14 +2751,17 @@ dd { margin: 0.5em 0 1em 2em; white-space: pre-wrap; }
 .log-entry .time:hover { opacity: 1; }
 .clear-logs { transition: opacity 0.2s ease; opacity: 0.2; }
 .clear-logs:hover { opacity: 1; }
-table { margin: 0; border-collapse: collapse; border: 1px sold rgba(128, 128, 128, 0.5); }
+table { margin: 0; border-collapse: collapse; border: 1px solid rgba(128, 128, 128, 0.5); }
 td, th { padding: 0.25em 0.5em; border: 1px solid rgba(128, 128, 128, 0.5); }
 th { text-align: center; border-bottom: 1px solid; position: sticky; }
 th { background-color: ${data('raui.primary.bg') || '#fff'}; }
-thead th { top: 0; }
+thead th { top: -1em; }
+.contain thead th { top: 0; }
 tbody th { left: 0; }
 tbody tr:nth-child(2n+1) td { background-color: rgba(128, 128, 128, 0.1); }
 tbody tr:hover td { background-color: rgba(128, 128, 128, 0.25); }
+
+span.counter { margin-right: 1em; }
 `; },
   use: [RauiPopover.default({ name: 'pop' })],
   options: { flex: true, resizable: true, minimize: false, width: '50em', height: '35em' },
@@ -2520,7 +2782,7 @@ tbody tr:hover td { background-color: rgba(128, 128, 128, 0.25); }
 
       this._markd = this.observe('pad.text', debounce(() => {
         this.renderMD();
-      }, 1500));
+      }, 1500, { check: () => !this.lockmd }));
     },
     raise() {
       setTimeout(() => {
@@ -2535,6 +2797,7 @@ tbody tr:hover td { background-color: rgba(128, 128, 128, 0.25); }
     destruct() {
       if (this.get('pad._id')) store.release('scratch', this.get('pad._id'));
       if (this._markd) this._markd.cancel();
+      if (this._clockint) clearTimeout(this._clockint);
     },
     render() {
       this.saveDebounced.timeout = this.get('editor.autosave') ?? 15000;
@@ -3669,6 +3932,11 @@ function unloading() {
   clearTimeout(unloadTm);
 }
 
+if (window.Notification && typeof window.Notification === 'function' && Notification.permission) {
+  if (Notification.permission === 'granted') app.set('canNotify', true);
+  else if (Notification.permission === 'denied') app.set('canNotify', false);
+}
+
 function debounce(fn, timeout = 1000, opts) {
   let tm;
   opts = opts || {};
@@ -3837,6 +4105,21 @@ async function makeRequest(config, params) {
   } catch (e) {
     console.warn(`failed to load fetch data source`, e);
     return res ?? [];
+  }
+}
+
+const sounds = ['dong', 'time-beep', 'notify-whistle', 'whistle', 'relax', 'next'];
+function notificate(details) {
+  details = details || {};
+  if (sounds.includes(details.sound)) {
+    const a = new Audio(`/${details.sound}.mp3`);
+    a.play();
+  }
+  if (details.message) {
+    const e = { icon: '/icon.png' };
+    if (details.body) e.body = details.body;
+    const n = new Notification(details.message, e);
+    if (typeof details.timeout === 'number') setTimeout(() => n.close(), details.timeout);
   }
 }
 
