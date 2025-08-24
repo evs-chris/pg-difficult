@@ -1234,7 +1234,7 @@ Window.extendWith(ControlPanel, {
     async 'filter.scratch'(v) {
       if (!(v || '').trim()) return this.set('filter._scratch', undefined);
       let flt = parse(v);
-      if (flt && (('op' in flt && flt.op === 'block') || 'r' in flt || ('v' in flt && typeof flt.v === 'string'))) {
+      if (flt && (('op' in flt && flt.op === 'block') || 'r' in flt || ('v' in flt && Object.keys(flt).length === 1))) {
         // just use the text
         v = `[name text context] ilike ${JSON.stringify(`%${v}%`)}`;
       }
