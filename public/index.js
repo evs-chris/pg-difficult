@@ -3705,6 +3705,7 @@ Window.extendWith(SourceEdit, {
 const wsUrl = new URL(window.location);
 wsUrl.protocol = wsUrl.protocol === 'https:' ? 'wss:' : 'ws:';
 wsUrl.pathname = '/ws';
+wsUrl.hash = '';
 function connect() {
   if (globalThis.ws) globalThis.ws.close();
   let ws = globalThis.ws = new WebSocket(wsUrl);
@@ -4126,6 +4127,21 @@ function notificate(details) {
 window.addEventListener('beforeunload', unload);
 window.addEventListener('unload', unloading);
 window.addEventListener('storage', debounce(readSync, 5000));
+window.addEventListener('hashchange', async () => {
+  const loc = window.location;
+  if (loc.hash && loc.hash.startsWith('#scratch/')) {
+    const name = loc.hash.slice(9);
+    const list = await store.list('scratch');
+    for (const s of list) {
+      if (s.name === name) {
+        app.openScratch(s);
+        break;
+      }
+    }
+  }
+  window.location.hash = '';
+});
+if (window.location.hash) window.location.hash = '';
 
 // Set up debug helper
 let el;
