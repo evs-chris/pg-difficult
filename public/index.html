@@ -752,11 +752,12 @@
             </div>
           {{/each}}
         </fieldset>
-        <div style="margin-top: 1em;">
+        <div style="margin-top: 3em; display: flex;">
           <button on-click="@.exportSettings()">Export Settings</button>
           <button on-click="@.importSettings()">Import Settings</button>
           {{#if ~/canNotify === undefined}}<button on-click="@.requestNotify()">Turn on Notifications</button>
-          {{else}}<div style="display: inline-block; background-color: rgba(128, 128, 128, 0.2); border-radius: 0.5em; border: 1px solid rgba(128, 128, 128, 0.3); padding: 0.5em; margin: 0.5em;">Notifications {{~/canNotify ? 'En' : 'Dis'}}abled{{/if}}
+          {{else}}<div style="display: inline-block; background-color: rgba(128, 128, 128, 0.2); border-radius: 0.5em; border: 1px solid rgba(128, 128, 128, 0.3); padding: 0.5em; margin: auto;">Notifications {{~/canNotify ? 'En' : 'Dis'}}abled{{/if}}
+          <button on-click="@.debugServer()">Server Debug</button>
         </div>
       </div>
     </tab>
@@ -1281,14 +1282,18 @@
   {{#partial header}}
     <div style="display: flex; flex-shrink: 0; margin-bottom: -0.4em;">
       {{#if pad.syntax === 'raport'}}<label as-field class=inline><button class=flat on-click="@.evaluate(pad.text, pad.context)" title="Evaluate expression (ctrl+enter). Highlight a portion of text and shift+click or ctrl+enter to evaluate only the highlighted text.">{{>play}}</button></label>{{/if}}
-      <label as-field class=inline title="Separating segments of a file name with / will result in the pad appearing in a sub-node of the scratch pad tree view."><input value="{{pad.name}}" placeholder="Name..." lazy=1000 /></label>
-      <div style="flex-grow: 1; display: flex; justify-content: space-around;">
-        {{#if ~/pad._id}}
-          {{#if ~/unsaved && !nosave}}<div style="padding: 0.5em; opacity: 0.7; background-color: rgba(128, 128, 128, 0.5); border-radius: 0 0 0.5em 0.5em; height: 1em; cursor: pointer;" title="There are unsaved changes in this pad. The changes will automatically save after your autosave timeout, or you can click here to save now." on-click="@.save()">unsaved</div>{{/if}}
-        {{else}}
-          <label as-field class=inline><button style="align-self: center;" on-click="@.save()">Save</button></label>
-        {{/if}}
-      </div>
+      {{#if !ephemeral}}
+        <label as-field class=inline title="Separating segments of a file name with / will result in the pad appearing in a sub-node of the scratch pad tree view."><input value="{{pad.name}}" placeholder="Name..." lazy=1000 /></label>
+        <div style="flex-grow: 1; display: flex; justify-content: space-around;">
+          {{#if ~/pad._id}}
+            {{#if ~/unsaved && !nosave}}<div style="padding: 0.5em; opacity: 0.7; background-color: rgba(128, 128, 128, 0.5); border-radius: 0 0 0.5em 0.5em; height: 1em; cursor: pointer;" title="There are unsaved changes in this pad. The changes will automatically save after your autosave timeout, or you can click here to save now." on-click="@.save()">unsaved</div>{{/if}}
+          {{else}}
+            <label as-field class=inline><button style="align-self: center;" on-click="@.save()">Save</button></label>
+          {{/if}}
+        </div>
+      {{else}}
+        <div style="flex-grow: 1; display: flex; justify-content: space-around;"><div style="padding: 0.5em; opacity: 0.7; background-color: rgba(128, 128, 128, 0.5); border-radius: 0 0 0.5em 0.5em; height: 1em; cursor: help;" title="Ephemeral data is available in the *data source.">Ephemeral Data Explorer</div></div>
+      {{/if}}
       <div>
         <label as-field class=inline><button class="settings flat" title="Editor settings" as-pop=`~/showSettings`>{{>cog}}</button></label>
         <label as-field class=inline><select value="{{pad.syntax}}" lazy=1000>

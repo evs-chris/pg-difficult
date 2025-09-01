@@ -272,6 +272,7 @@ router.get('/:path*', async ctx => {
 });
 
 interface Ping { action: 'ping' }
+interface Debug { action: 'debug', id: number }
 interface Start { action: 'start'; id: number; config: DatabaseConfig }
 interface Restart { action: 'restart'; id: number; config: DatabaseConfig }
 interface Resume { action: 'resume'; id: number; config: DatabaseConfig }
@@ -289,7 +290,7 @@ interface Unleak { action: 'unleak'; config: DatabaseConfig }
 interface Interval { action: 'interval'; time: number }
 interface Halt { action: 'halt' }
 interface ServerFetch extends FetchRequest { action: 'fetch', id: string }
-type Message = Ping|Start|Restart|Resume|Stop|Status|Clear|Segment|Hide|Check|Schema|Query|QueryAll|Leak|Unleak|Interval|Halt|ServerFetch;
+type Message = Ping|Debug|Start|Restart|Resume|Stop|Status|Clear|Segment|Hide|Check|Schema|Query|QueryAll|Leak|Unleak|Interval|Halt|ServerFetch;
 
 async function message(this: WebSocket, msg: Message) {
   try {
@@ -315,6 +316,9 @@ async function message(this: WebSocket, msg: Message) {
         break;
       case 'fetch': makeRequest(msg, this, msg.id); break;
       case 'halt': halt(); break;
+      case 'debug':
+        notify({ data: { config, state, VERSION, timestamp: evaluate('date()#timestamp') }, action: 'result', id: msg.id }, this);
+        break;
     }
   } catch (e) {
     if ('id' in msg) error(e.message, this, { id: msg.id, stack: e.stack });

@@ -956,10 +956,19 @@ const app = globalThis.app = new App({
     } catch {
       return;
     }
-    win = new ScratchPad();
+    const win = new ScratchPad();
     if (pad?.id) win.load(pad.id, copy);
     this.host.addWindow(win, { title: pad?.id ? `Loading scratch pad...` : 'New Scratch Pad' });
     if (file) win.set('pad', file, { deep: true });
+  },
+  openEphemeralPad(data, title) {
+    const win = new ScratchPad();
+    win.set({
+      ephemeral: data,
+      'pad.text': '*data',
+      'pad.syntax': 'raport',
+    });
+    this.host.addWindow(win, { title: title || `Ephemeral Data Inspector (${win.id})` });
   },
   openLocalDiff() {
     const id = ++localDiffId;
@@ -1186,6 +1195,10 @@ class ControlPanel extends Window {
   async validateSync(path) {
     const config = this.get(path);
     this.set(`${path}.valid`, await store.validate(config));
+  }
+  async debugServer() {
+    const { data } = await request({ action: 'debug' });
+    app.openEphemeralPad(data, `Server Data ${evaluate('#now##timestamp')}`);
   }
 }
 Window.extendWith(ControlPanel, {
@@ -2349,11 +2362,13 @@ class ScratchPad extends Window {
   }
   async save() {
     const pad = Object.assign({}, this.get('pad'));
-    if (pad._id) store.save(pad);
-    else {
-      pad.type = 'scratch';
-      const res = await store.save(pad);
-      await this.load(res._id);
+    if (!this.get('ephemeral')) {
+      if (pad._id) store.save(pad);
+      else {
+        pad.type = 'scratch';
+        const res = await store.save(pad);
+        await this.load(res._id);
+      }
     }
     this.saveDebounced.cancel();
     this.set('unsaved', false);
@@ -2398,6 +2413,8 @@ class ScratchPad extends Window {
         const opts = app.get('scratchroot') || {};
         const root = new Root(Object.assign({}, globalContext), opts);
         root.sources = Object.assign({}, opts.sources);
+        const ephem = this.get('ephemeral');
+        if (ephem) root.sources.data = { value: ephem };
         root.log = this.log;
         if (opts.all) {
           for (const k in opts.all.apply || {}) if (opts.all.apply[k]) root.sources[k] = { value: opts.all.apply[k] };
