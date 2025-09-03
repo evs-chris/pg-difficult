@@ -953,6 +953,14 @@ const app = globalThis.app = new App({
     }
     try {
       if (file) file = await app.pickFile();
+      let m;
+      if ((m = /\.\w+$/.exec(file.name))) {
+        const ext = m[0].slice(1);
+        if (ScratchSyntax.concat(['txt', 'md', 'js', 'ts', 'go', 'hbs', 'wiki', 'py', 'cpp']).includes(ext)) {
+          file.name = file.name.slice(0, file.name.length - ext.length - 1);
+          file.syntax = { md: 'markdown', js: 'javascript', ts: 'typescript', go: 'golang', hbs: 'handlebars', txt: 'plain_text', wiki: 'mediawiki', py: 'python', cpp: 'c_cpp' }[ext] || ext;
+        }
+      }
     } catch {
       return;
     }
@@ -1151,6 +1159,17 @@ class ControlPanel extends Window {
   async scratchText(id) {
     const v = await store.get(id);
     return v.text;
+  }
+  scratchName(pad) {
+    let name;
+    if (/\.\w+$/.test(pad.name)) name = pad.name;
+    else {
+      const ext = { markdown: 'md', javascript: 'js', typescript: 'ts', golang: 'go', handlebars: 'hbs', plain_text: 'txt', mediawiki: 'wiki', python: 'py', c_cpp: 'cpp' }[pad.syntax || 'plain_text'] || pad.syntax;
+      if (ext) name = `${pad.name}.${ext}`;
+    }
+    const idx = name.lastIndexOf('/');
+    if (~idx) name = name.slice(idx + 1);
+    return name;
   }
   async queryText(id) {
     const v = await store.get(id);
@@ -2207,6 +2226,7 @@ Window.extendWith(SchemaCompare, {
 .entry .key { font-weight: bold; }
 `,
 });
+const ScratchSyntax = [ 'c_cpp', 'csharp', 'css', 'ejs', 'golang', 'handlebars', 'html', 'ini', 'java', 'javascript', 'json', 'jsx', 'julia', 'kotlin', 'less', 'liquid', 'lisp', 'lua', 'markdown', 'mediawiki', 'nix', 'nunjucks', 'ocaml', 'odin', 'pascal', 'perl', 'pgsql', 'php', 'plain_text', 'python', 'raport', 'ruby', 'rust', 'sass', 'scala', 'scheme', 'sh', 'sql', 'stylus', 'svg', 'swift', 'tcl', 'toml', 'tsx', 'twig', 'typescript', 'vue', 'xml', 'xquery', 'yaml', 'zig' ];
 
 const renderMD = (function() {
   const checkLanguage = (function() {

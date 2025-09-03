@@ -623,7 +623,7 @@
       </div>
       <div style="overflow: auto;">
         {{#partial leaf}}
-          <div class=back-dots /><div class=tree-leaf><span class=name as-marquee title="Open scratch pad. ctrl or shift click to download. alt+click to open a new copy of this scratch pad." on-click="@event.ctrlKey || @event.shiftKey ? download(.name, @.scratchText(.value.id)) : @.open(.value)">{{.name}}</span> <span style="line-height: 1.5em;">{{.value.syntax}} <span class=remove-button title="Remove this scrath pad." on-click="@.remove(.value)">&times;</span></span></div>
+          <div class=back-dots /><div class=tree-leaf><span class=name as-marquee title="Open scratch pad. ctrl or shift click to download. alt+click to open a new copy of this scratch pad." on-click="@event.ctrlKey || @event.shiftKey ? download(@.scratchName(.value), @.scratchText(.value.id)) : @.open(.value)">{{.name}}</span> <span style="line-height: 1.5em;">{{.value.syntax}} <span class=remove-button title="Remove this scrath pad." on-click="@.remove(.value)">&times;</span></span></div>
         {{/partial}}
         {{>node ~/scratchPadTree, ~/expand.scratch as expandAll, ~/filter.scratch as filter}}
       </div>
