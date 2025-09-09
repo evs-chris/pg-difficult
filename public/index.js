@@ -969,6 +969,16 @@ const app = globalThis.app = new App({
     this.host.addWindow(win, { title: pad?.id ? `Loading scratch pad...` : 'New Scratch Pad' });
     if (file) win.set('pad', file, { deep: true });
   },
+  async scratchQuery(id) {
+    if (id) {
+      const wid = `scratch-${id}`;
+      let win = this.host.getWindow(wid);
+      if (win) return win.raise(true);
+      win = new ScratchPad();
+      win.loadQuery(id);
+      this.host.addWindow(win, { title: `Loading query...` });
+    }
+  },
   openEphemeralPad(data, title) {
     const win = new ScratchPad();
     win.set({
@@ -1154,7 +1164,10 @@ class ControlPanel extends Window {
     const copy = !file && this.event?.event && this.event.event.altKey;
     if (v.type === 'report') app.openReport(v, file, copy);
     else if (v.type === 'scratch') app.openScratch(v, file, copy);
-    else if (v.type === 'query') app.set('loadedQuery', v.id);
+    else if (v.type === 'query') {
+      if (this.event?.event?.altKey && v.id) app.scratchQuery(v.id);
+      else app.set('loadedQuery', v.id);
+    }
   }
   async scratchText(id) {
     const v = await store.get(id);
@@ -1501,16 +1514,18 @@ class Query extends Window {
   async saveQuery(ctx) {
     const loaded = this.get('loaded');
     const name = await app.ask(`Enter a query name:`, 'Query Name', loaded?.name || '');
+    const sql = ctx.get('query');
     const process = ctx.get('processParams');
     const params = ctx.get('parameters');
     if (name) {
       if (loaded) {
+        loaded.sql = sql;
         loaded.name = name;
         loaded.processParams = !!process;
         loaded.params = process ? params : undefined;
         await store.save(loaded);
       } else {
-        const res = await store.save({ name, type: 'query', sql: this.get('query'), processParams: process ? process : undefined, params: process ? params : undefined });
+        const res = await store.save({ name, type: 'query', sql, processParams: process ? process : undefined, params: process ? params : undefined });
         await store.acquire('query', res._id);
         this.link(`store.query.${res._id}`, 'loaded', { instance: app });
       }
@@ -1521,8 +1536,9 @@ class Query extends Window {
     if (q) {
       await store.acquire('query', q);
       this.link(`store.query.${q}`, 'loaded', { instance: app });
+      ctx.set('query', this.get('loaded.sql'));
       ctx.set('processParams', !!this.get('loaded.processParams'));
-      ctx.set('parameters', this.get('loaded.params') || []);
+      ctx.set('parameters', (this.get('loaded.params') || []).slice());
     } else if (cur) {
       this.set('query', cur.sql);
       this.unlink('loaded');
@@ -1582,9 +1598,9 @@ Window.extendWith(Query, {
       },
       init: false,
     },
-    'query loaded.sql processParams': {
+    'query processParams': {
       handler: debounce(function() {
-        const v = this.get('loaded.sql') || this.get('query') || '';
+        const v = this.get('query') || '';
         this.set('parameters', this.get('processParams') ? extractQueryParams(v, this.get('parameters')) : undefined);
       }, 500),
     },
@@ -2380,14 +2396,26 @@ class ScratchPad extends Window {
     if (old?._id) store.release('scratch', old._id);
     this.lock = false;
   }
+  async loadQuery(id) {
+    this.lock = true;
+    await store.acquire('query', id);
+    this.link(`store.query.${id}`, 'query', { instance: app });
+    if (id) this.host.changeWindowId(this.id, `scratch-${id}`);
+    this.lock = false;
+  }
   async save() {
-    const pad = Object.assign({}, this.get('pad'));
-    if (!this.get('ephemeral')) {
-      if (pad._id) store.save(pad);
-      else {
-        pad.type = 'scratch';
-        const res = await store.save(pad);
-        await this.load(res._id);
+    const query = this.get('query');
+    if (query) {
+      await store.save(this.get('query'));
+    } else {
+      const pad = Object.assign({}, this.get('pad'));
+      if (!this.get('ephemeral')) {
+        if (pad._id) store.save(pad);
+        else {
+          pad.type = 'scratch';
+          const res = await store.save(pad);
+          await this.load(res._id);
+        }
       }
     }
     this.saveDebounced.cancel();
@@ -2395,7 +2423,7 @@ class ScratchPad extends Window {
   }
   saveDebounced = debounce(() => this.save(), 15000, {
     check() {
-      const res = !store.writing && !this.lock && this.get('pad._id');
+      const res = !store.writing && !this.lock && (this.get('pad._id') || this.get('query._id'));
       if (res) this.set('unsaved', true);
       return res;
     },
@@ -2825,7 +2853,7 @@ span.counter { margin-right: 1em; }
       setTimeout(() => {
         const el = this.find('.editor-el');
         const tabs = this.findComponent('tabs');
-        if (el && (!tabs || this.get('pad.syntax') !== 'markdown' || tabs.get('selected') === 0)) {
+        if (el && !this.get('query') && (!tabs || this.get('pad.syntax') !== 'markdown' || tabs.get('selected') === 0)) {
           const ctx = this.getContext(el);
           ctx.decorators?.ace?.focus();
         }
@@ -2909,6 +2937,9 @@ span.counter { margin-right: 1em; }
       this.title = `Scratch Pad${n ? ` - ${n}` : ''}`;
       this.saveDebounced && this.saveDebounced();
     },
+    'query.name'(n) {
+      if (typeof n === 'string') this.title = `Query Editor${n ? ` - ${n}` : ''}`;
+    },
     'pad.syntax'() {
       if (typeof this.get('pad.text') === 'string') this.saveDebounced && this.saveDebounced();
     },
@@ -2921,6 +2952,12 @@ span.counter { margin-right: 1em; }
     },
     '@style.theme'() {
       this.renderMD();
+    },
+    'query.sql query.processParams': {
+      handler: debounce(function() {
+        const v = this.get('query.sql') || '';
+        this.set('query.params', this.get('query.processParams') ? extractQueryParams(v, this.get('query.params')) : undefined);
+      }, 500),
     },
   },
 });
@@ -3266,16 +3303,18 @@ class HostExplore extends Window {
   async saveQuery(ctx) {
     const loaded = this.get('loaded');
     const name = await app.ask(`Enter a query name:`, 'Query Name', loaded?.name || '');
+    const sql = this.get('query');
     const process = ctx.get('processParams');
     const params = process ? ctx.get('parameters') : undefined;
     if (name) {
       if (loaded) {
         loaded.name = name;
+        loaded.sql = query;
         loaded.processParams = !!process;
         loaded.params = process ? params : undefined;
         await store.save(loaded);
       } else {
-        const res = await store.save({ name, type: 'query', sql: this.get('query'), processParams: process ? process : undefined, params: process ? params : undefined });
+        const res = await store.save({ name, type: 'query', sql, processParams: process ? process : undefined, params: process ? params : undefined });
         await store.acquire('query', res._id);
         this.link(`store.query.${res._id}`, 'loaded', { instance: app });
       }
@@ -3286,8 +3325,9 @@ class HostExplore extends Window {
     if (q) {
       await store.acquire('query', q);
       this.link(`store.query.${q}`, 'loaded', { instance: app });
+      ctx.set('query', this.get('loaded.sql'));
       ctx.set('processParams', !!this.get('loaded.processParams'));
-      ctx.set('parameters', this.get('loaded.params') || []);
+      ctx.set('parameters', (this.get('loaded.params') || []).slice());
     } else if (cur) {
       this.set('query', cur.sql);
       this.unlink('loaded');
@@ -3460,9 +3500,9 @@ filter(list |entry| => {
       },
       init: false,
     },
-    'query loaded.sql processQueryParams': {
+    'query processQueryParams': {
       handler: debounce(function() {
-        const v = this.get('loaded.sql') || this.get('query') || '';
+        const v = this.get('query') || '';
         this.set('queryParams', this.get('processQueryParams') ? extractQueryParams(v, this.get('queryParams')) : undefined);
       }, 500),
     }
