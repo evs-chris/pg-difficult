@@ -2391,7 +2391,7 @@ const renderMD = (function() {
     if (checkLanguage.rerun) {
       checkLanguage.rerun = false;
       await new Promise(ok => setTimeout(ok, 250));
-      html = await renderMD(str, opts);
+      html = (await renderMD(str, opts))?.html;
     }
     if (Object.keys(subs).length) {
       for (const k in subs) subs[k] = await subs[k];
@@ -3732,7 +3732,7 @@ class Report extends Window {
     report.type = 'report';
     report.definition = (await this.request({ action: 'get', get: 'report' })).get;
     report.sources = (await this.request({ action: 'get', get: 'sources' })).get;
-    for (const s of report.sources) {
+    for (const s of (report.sources || [])) {
       if (['pg-fetch', 'query', 'query-all'].includes(s.type) && s.data) {
         delete s.cached;
         delete s.data;
