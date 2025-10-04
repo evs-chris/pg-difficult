@@ -392,6 +392,15 @@ async function start(config: DatabaseConfig, id: number, ws: WebSocket, start?: 
         state.segment = (await diff.getState(client, 'segment')) || state.segment;
         state.hide = await diff.getState(client, 'hide') === 'true';
       }
+
+      for (const id in state.diffs) {
+        const d = state.diffs[id];
+        if (d.client) {
+          await diff.setState(d.client, 'segments', state.segment);
+          await diff.setState(d.client, 'hide', state.hide);
+        }
+      }
+
       notify({ id, action: 'resumed' }, ws);
       try {
         await client.end({ timeout: 10 });

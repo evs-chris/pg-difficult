@@ -1844,6 +1844,9 @@ res
     const schema = schemas[entry.source];
     const base = app.get('entries') || [];
     const entries = [];
+    const client = Object.values(app.get('status.clients') || {}).find(c => c.source === this.source).config;
+
+    if (!client) return this.host.toast('Unable to find connection config for reversal', { type: 'error', timeout: 3000 });
 
     const idx = base.findIndex(e => entry.id === e.id);
 
@@ -1888,7 +1891,7 @@ res
     const blocked = this.blocked;
     this.blocked = true;
     try {
-      await request({ action: 'query', query: reverse.map(p => p[0]), params: reverse.map(p => p[1]), client: Object.values(app.get('status.clients') || {}).find(c => c.source === this.source).config });
+      await request({ action: 'query', query: reverse.map(p => p[0]), params: reverse.map(p => p[1]), client });
     } finally {
       if (!blocked) this.blocked = false;
     }

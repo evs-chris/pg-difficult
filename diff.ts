@@ -221,9 +221,9 @@ export async function next(client: Client, segment: string) {
   await client.unsafe(`notify __pg_difficult, '${JSON.stringify({ action: 'segment', segment }).replace(/\'/g, '\\\'')}'`);
 }
 
-export async function setState(client: Client, key: string, value: string) {
-  const res = await client`update pgdifficult.state set value = ${value} where key = ${key};`;
-  if (res.count < 1) await client `insert into pgdifficult.state (key, value) values (${key}, ${value});`;
+export async function setState(client: Client, key: string, value: string|boolean|number) {
+  const res = await client`update pgdifficult.state set value = ${`${value}`} where key = ${key};`;
+  if (res.count < 1) await client `insert into pgdifficult.state (key, value) values (${key}, ${`${value}`});`;
   await client.unsafe(`notify __pg_difficult, '${JSON.stringify({ action: 'state', key, value }).replace(/\'/g, '\\\'')}'`);
 }
 
