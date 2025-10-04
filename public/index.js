@@ -296,16 +296,16 @@ const store = globalThis.store = {};
     }
   }
 
-  store.save = async function save(rec) {
+  store.save = async function save(rec, force) {
     if (!rec) return;
     if (!pdb) throw new Error('Storage has not been initialized.');
     if (!rec._id) {
       const r = await pdb.post(rec);
       rec._id = r.id;
-      rec._rev = r._rev;
+      rec._rev = r.rev;
     } else  {
-      const r = await pdb.put(rec);
-      rec._rev = r._rev;
+      const r = await pdb.put(rec, { force });
+      rec._rev = r.rev;
     }
     return rec;
   };
@@ -410,11 +410,10 @@ const store = globalThis.store = {};
           const [dRev] = d._rev.split('-');
           if (+dRev > +curRev) await store.save(d);
         } else if (mode === 2) {
-          d._rev = cur._rev;
-          await store.save(d);
+          await store.save(d, true);
         }
       } else if (!cur) {
-        await store.save(d);
+        await store.save(d, true);
       }
     }
   }
@@ -1008,6 +1007,11 @@ const app = globalThis.app = new App({
     this.host.addWindow(w, { title, block: true, top: 'center', left: 'center' });
     return w.result;
   },
+  chooseMany(question, options, pre, title) {
+    const w = new ChooseMany({ data: { message: question, options, title, choice: pre || [] } });
+    this.host.addWindow(w, { title, block: true, top: 'center', left: 'center' });
+    return w.result;
+  },
   async loadEntries() {
     const file = await load('.pgdd');
     const win = new Entries(undefined, { data: { loaded: JSON.parse(file.text) } });
@@ -1042,6 +1046,8 @@ Ractive.helpers.appSet = (p, v) => app.set(p, v);
 store.init();
 readSync();
 store.sync(app.get('sync.servers'));
+
+const settingsOptions = { connection: 'Connections', query: 'Saved Queries', scratch: 'Scratch Pads', report: 'Reports', settings: 'Settings', sync: 'Sync Servers' };
 
 class ControlPanel extends Window {
   constructor(opts) { super(opts); }
@@ -1212,13 +1218,25 @@ class ControlPanel extends Window {
     const json = {};
     const settings = app.get('store.settings') || {};
     json.store = await store.dump();
-    json.sync = app.get('sync');
+    const types = await app.chooseMany('What would you like to export?', settingsOptions, ['scratch', 'settings', 'report', 'query', 'connection'], 'Export Data');
+    if (types === false || !types.length) return;
+    json.store = json.store.filter(d => types.includes(d.type));
+    if (types.includes('sync')) json.sync = app.get('sync');
     download(`${settings.title ? `${settings.title} - ` : ''}${window.location.host} ${evaluate('@date#timestamp')} settings.pgdconf`.replace(/:/g, '-'), JSON.stringify(json), 'application/pg-difficult-config');
   }
   async importSettings() {
     const file = JSON.parse((await load('.pgdconf', false)).text);
-    if (file.store) store.restore(file.store);
-    // TODO: ask what to restore and how (store mode)
+    if (!file?.store) return;
+    const types = await app.chooseMany(
+      'This will forcibly overwrite any conflicting data. What would you like to import?', settingsOptions,
+      ['scratch', 'settings', 'report', 'query', 'connection'].map(k => file.store.find(d => d.type === k)?.type).filter(k => k),
+      'Import Data'
+    );
+    if (types === false || !types.length) return;
+    file.store = file.store.filter(d => types.includes(d.type));
+    if (file.store) store.restore(file.store, 2);
+    if (types.includes('sync') && file.sync) app.set('sync', file.sync);
+    // TODO: ask how to restore (store mode - replace, update only, etc)
   }
   async requestNotify() {
     const res = await Notification.requestPermission();
@@ -1284,15 +1302,19 @@ Window.extendWith(ControlPanel, {
     async 'filter.scratch'(v) {
       if (!(v || '').trim()) return this.set('filter._scratch', undefined);
       let flt = parse(v);
+      let res;
       if (flt && (('op' in flt && flt.op === 'block') || 'r' in flt || ('v' in flt && Object.keys(flt).length === 1))) {
         // just use the text
-        v = `[name text context] ilike ${JSON.stringify(`%${v}%`)}`;
-      }
-      const list = await store.list('scratch');
-      const res = [];
-      for (const e of list) {
-        const i = await store.get(e.id);
-        if (evaluate(i, v)) res.push(e.id);
+        v = parse(`name ilike ${JSON.stringify(`%${v}%`)}`);
+        const list = await store.list('scratch');
+        res = list.filter(e => evaluate(e, v)).map(e => e.id);
+      } else {
+        const list = await store.list('scratch');
+        res = [];
+        for (const e of list) {
+          const i = await store.get(e.id);
+          if (evaluate(i, v)) res.push(e.id);
+        }
       }
       this.set('filter._scratch', res);
     },
@@ -1355,6 +1377,17 @@ class Choose extends Window {
 Window.extendWith(Choose, {
   template: '#choose',
   options: { flex: true, close: false, resizable: false, maximize: false, minimize: false, width: 'auto', height: 'auto' },
+});
+
+class ChooseMany extends Window {
+  constructor(opts) { super(opts); }
+}
+Window.extendWith(ChooseMany, {
+  template: '#choose-many',
+  options: { flex: true, close: false, resizable: false, maximize: false, minimize: false, width: 'auto', height: 'auto' },
+  data() {
+    return { choice: [] };
+  },
 });
 
 class Connect extends Window {

@@ -319,7 +319,7 @@
   }
 
   .tree-children .tree-leaf:hover { background-color: rgba(128, 128, 128, 0.05); }
-  .tree-children .remove-button { cursor: pointer; margin-left: 1em; opacity: 0.5; transition: opacity 0.2s ease; }
+  .tree-children .remove-button { cursor: pointer; margin-left: 1em; margin-right: 0.8em; opacity: 0.5; transition: opacity 0.2s ease; }
   .tree-children .remove-button:hover { opacity: 1; }
   .tree-children .tree-leaf .name { user-select: none; }
 
@@ -596,29 +596,31 @@
     </tab>
     <tab title="Saved Queries" hidden="@global.clientOnly">
       <div style="padding: 0.3em; display: flex; justify-content: space-between; align-items: center; min-height: 2.75em;">
-        <span>Queries are saved in browser storage. Click a query to make it available to load in a query window.</span>
-        {{#if ~/loadedQuery}}<button on-click="@.set('loadedQuery', undefined)">Cancel</button>{{/if}}
+        <span>Click to load <tip>Queries are saved in browser storage via Pouch DB. Click a query to make it available to load in a query window. shift+click or ctrl+click a query to download it. alt+click a query to edit it in a scratch pad.</tip></span>
+        <label style="margin-left: 1em;"><input type=checkbox checked="{{~/expand.query}}" /> Expand all?</label>
+        {{#if ~/loadedQuery}}<button on-click="@.set('loadedQuery', undefined)">Cancel</button>{{else}}<span />{{/if}}
       </div>
       <div style="overflow: auto;">
-        {{#partial leaf}}<div class=back-dots /><div class=tree-leaf><span class=name as-marquee title="Load this query. ctrl or shift click to download." on-click="@event.ctrlKey || @event.shiftKey ? download(.name + '.sql', @.queryText(.value.id)) : @.open(.value)">{{.name}}</span> <span style="line-height: 1.5em;"><span class=remove-button title="Remove this query." on-click="@.remove(.value)">&times;</span></span></div>{{/partial}}
-        {{>node ~/queryTree}}
+        {{#partial leaf}}<div class=back-dots /><div class=tree-leaf><span class=name as-marquee title="Load this query. ctrl or shift click to download. alt-click to edit in a scratch pad." on-click="@event.ctrlKey || @event.shiftKey ? download(.name + '.sql', @.queryText(.value.id)) : @.open(.value)">{{.name}}</span> <span style="line-height: 1.5em;"><span class=remove-button title="Remove this query." on-click="@.remove(.value)">&times;</span></span></div>{{/partial}}
+        {{>node ~/queryTree, ~/expand.query as expandAll, false as filter}}
       </div>
     </tab>
     <tab title="Reports">
       <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.3em;">
-        <div style="padding: 0.3em;">Reports can be set up to run against a Diff, a Schema, a Provided Result from querying multiple database, a Query for multiple database, a Query for a single database, or a JSON blob. Query-based reports can be managed from the Host Explorer.</div>
+        <div style="padding: 0.3em;">Open a Raport editor <tip>Reports can be set up to run against a Diff, a Schema, a Provided Result from querying multiple database, a Query for multiple database, a Query for a single database, or a JSON blob. Query-based reports can be managed from the Host Explorer. ctrl+click or shift+click a report to download it as a Raport project. alt+click to open a new copy of a report in a Raport designer.</tip></div>
+        <label style="margin-left: 1em;"><input type=checkbox checked="{{~/expand.report}}" /> Expand all?</label>
         <div style="flex-shrink: 0;"><button title="Open a new report designer." on-click="@.open({ type: 'report' })">New Designer</button></div>
       </div>
       <div style="overflow: auto;">
         {{#partial leaf}}
-          <div class=back-dots /><div class=tree-leaf><span class=name as-marquee {{#if .value.host}}style="cursor: not-allowed;" title="This report utilizes SQL query sources, making it only accessible from a Host Explorer. ctrl or shift click to download." on-click="@event.shiftKey || @event.ctrlKey ? download(.name + '.raport-proj', @.reportText(.value.id)) : false"{{else}}title="Open report designer. ctrl or shift click to download. alt+click to open a new copy of this report in the report designer." on-click="@event.shiftKey || @event.ctrlKey ? download(.name + '.raport-proj', @.reportText(.value.id)) : @event.altKey ? @.scratchQuery(.value.id) : @.open(.value)"{{/if}}>{{.name}}</span> <span style="line-height: 1.5em;">{{.value.kind}} <span class=remove-button title="Remove this {{.value.type}}." on-click="@.remove(.value)">&times;</span></span></div>
+          <div class=back-dots /><div class=tree-leaf><span class=name as-marquee {{#if .value.host}}style="cursor: not-allowed;" title="This report utilizes SQL query sources, making it only accessible from a Host Explorer. ctrl or shift click to download." on-click="@event.shiftKey || @event.ctrlKey ? download(.name + '.raport-proj', @.reportText(.value.id)) : false"{{else}}title="Open report designer. ctrl or shift click to download. alt+click to open a new copy of this report in the report designer." on-click="@event.shiftKey || @event.ctrlKey ? download(.name + '.raport-proj', @.reportText(.value.id)) : @.open(.value)"{{/if}}>{{.name}}</span> <span style="line-height: 1.5em;">{{.value.kind}} <span class=remove-button title="Remove this {{.value.type}}." on-click="@.remove(.value)">&times;</span></span></div>
         {{/partial}}
-        {{>node ~/reportTree}}
+        {{>node ~/reportTree, ~/expand.report as expandAll, false as filter}}
       </div>
     </tab>
     <tab title="Scratch Pads">
       <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.3em;">
-        <div style="padding: 0.3em;"><input type=search class=tree-filter lazy=500 value="{{~/filter.scratch}}" placeholder="filter / search" style="width: 20em;" /><tip>Scratch pads are a place to write bits of text that are automatically saved to browser local storage when they are edited.</tip><label style="margin-left: 1em;"><input type=checkbox checked="{{~/expand.scratch}}" /> Expand all?</label></div>
+        <div style="padding: 0.3em;"><input type=search class=tree-filter lazy=500 value="{{~/filter.scratch}}" placeholder="filter / search" style="width: 20em;" /><tip>Scratch pads are a place to write bits of text that are automatically saved to browser local storage via Pouch DB when they are edited. Fields available in the filter expression are name, syntax, text, and context. Searching without a raport expression will result in searching for the entered string in the name of the scratch pad. Name is the full name, including any path.</tip><label style="margin-left: 1em;"><input type=checkbox checked="{{~/expand.scratch}}" /> Expand all?</label></div>
         <div style="flex-shrink: 0;"><button title="Open a new scratch pad." on-click="@.open({ type: 'scratch' })">New Scratch Pad</button></div>
       </div>
       <div style="overflow: auto;">
@@ -773,7 +775,7 @@
 </script>
 
 <script type=text/ractive id=tree>
-  <div class=tree-line>{{#if .name}}<div class=back-dots /><span class=expander on-click="@context.toggle('.expand')">{{.expand ? '-' : (filter || expandAll) ? ' ' : '+'}}</span> <span class=name as-marquee on-click="@context.toggle('.expand')"> {{.name}}/</span>{{else}}<span style="margin-left: 0.5em;" class=name as-marquee>{{.name}}/ </span>{{/if}}</div>
+  <div class=tree-line>{{#if .name}}<div class=back-dots /><span class=expander on-click="@context.toggle('.expand')">{{.expand ? '-' : (filter || expandAll) ? '\u00a0' : '+'}}</span> <span class=name as-marquee on-click="@context.toggle('.expand')"> {{.name}}/</span>{{else}}<span style="margin-left: 0.5em;" class=name as-marquee>{{.name}}/ </span>{{/if}}</div>
   {{#if .expand || filter || expandAll}}
     <div class=tree-children>
       <div class=back-line />
@@ -1672,7 +1674,7 @@
                     {{#partial leaf}}
                       <div class=back-dots /><div class=tree-leaf class-selected="~/queryreport._id === .value.id"><span class=name as-marquee on-click="@.swapReport('queryreport', .value)">{{.name}}</span></div>
                     {{/partial}}
-                    {{>node ~/singleReportTree}}
+                    {{>node ~/singleReportTree, ~/expand.report as expandAll, false as filter}}
                   </div>
                 </div>
               </tab>
@@ -1746,7 +1748,7 @@
                 {{#partial leaf}}
                   <div class=back-dots /><div class=tree-leaf class-selected="~/allreport._id === .value.id"><span class=name as-marquee on-click="@.swapReport('allreport', .value)">{{.name}}</span></div>
                 {{/partial}}
-                {{>node ~/multipleReportTree}}
+                {{>node ~/multipleReportTree, ~/expand.report as expandAll, false as filter}}
               </div>
             </div>
           </tab>
@@ -2040,6 +2042,25 @@
   <div class=content-wrapper>
     <div class="message" style="max-width: 36em;">{{.message}}</div>
   </div>
+</script>
+
+<script type=text/ractive id=choose-many>
+  <div class=content-wrapper>
+    <div class="message" style="max-width: 36em;">{{.message}}</div>
+    <div style="margin: 1em 0 1em 1em; max-height: 80vh; overflow: auto;">
+    {{#each options}}
+      <div><label><input type=checkbox name={{choice}} value={{@key}} /> {{.}}</label></div>
+    {{/each}}
+    </div>
+    <div style="text-align: center;">
+      <button on-click="@.set('choice', [])">None</button>
+      <button on-click="@.set('choice', Object.keys(options))">All</button>
+    </div>
+  </div>
+  <buttons>
+    <button left class=reject on-click="@.close(false, false)">Cancel</button>
+    <button right class=accept on-click="@.close(false, choice)">Continue</button>
+  </buttons>
 </script>
 
   </head>
