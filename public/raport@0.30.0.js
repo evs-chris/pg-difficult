@@ -2065,8 +2065,9 @@
         return opMap[name];
     }
     const _defaultGetValue = (c, b, v) => evalApply(c, b, [v]);
-    function sort(context, arr, sorts, getValue) {
+    function sort(context, arr, sorts, getValue, options) {
         let sortArr;
+        context = extend$1(context, { special: { invert: (options === null || options === void 0 ? void 0 : options.invert) !== undefined && options.invert !== false } });
         if (Array.isArray(sorts)) {
             sortArr = sorts;
         }
@@ -2120,6 +2121,8 @@
                 // default to asc
                 return false;
             });
+            const invopt = (options === null || options === void 0 ? void 0 : options.invert) === 'first' ? [0] : options === null || options === void 0 ? void 0 : options.invert;
+            const invert = sortArr.map((_, i) => Array.isArray(invopt) ? (invopt.includes(i) ? -1 : 1) : (invopt ? -1 : 1));
             arr.sort((a, b) => {
                 for (let i = 0; i < sortArr.length; i++) {
                     const s = sortArr[i];
@@ -2134,14 +2137,14 @@
                                     : l > r ? 1
                                         : 0;
                     if (cmp)
-                        return (desc ? -1 : 1) * cmp;
+                        return (desc ? -1 : 1) * invert[i] * cmp;
                 }
                 return 0;
             });
         }
         return arr;
     }
-    function filter(ds, filter, sorts, groups, context) {
+    function filter(ds, filter, sorts, groups, context, options) {
         const _ds = Array.isArray(ds) ? { value: ds } : ds;
         if (!_ds || !Array.isArray(_ds.value))
             return _ds;
@@ -2163,7 +2166,7 @@
             });
         }
         if (sorts)
-            sort(_context, values, sorts);
+            sort(_context, values, sorts, undefined, options);
         if (groups && !Array.isArray(groups))
             groups = [groups];
         if (Array.isArray(groups) && groups.length) {
@@ -2197,11 +2200,27 @@
     }
     function applyOperator(root, operation) {
         const op = opMap[operation.op];
+        let opts = operation.opts ? evalParse(root, operation.opts) : undefined;
+        let args = operation.args || [];
+        if (opts && opts._) {
+            if (Array.isArray(opts._)) {
+                args = opts._.map(a => ({ v: a }));
+            }
+            else if (typeof opts._ === 'object') {
+                if (opts._.options)
+                    opts = Object.assign({}, opts._.options, opts);
+                else
+                    opts = Object.assign({}, opts._, opts);
+                if (Array.isArray(opts.arguments))
+                    args = opts.arguments.map(a => ({ v: a }));
+            }
+        }
         // if the operator doesn't exist, try a local, pipe, or skip
         if (!op) {
             const local = safeGet(root, operation.op) || safeGet(root.root, operation.op);
             if (isApplication(local)) {
-                return evalApply(root, local, (operation.args || []).map(a => evalParse(root, a)));
+                args = args.map(a => evalParse(root, a));
+                return evalApply(root, local, args, { options: opts, arguments: args });
             }
             else if (operation.op === 'pipe') { // handle the special built-in pipe operator
                 if (!operation.args || !operation.args.length)
@@ -2220,46 +2239,43 @@
             }
             return true;
         }
-        let args;
         if (op.type === 'checked') {
-            args = [];
-            const flts = operation.args || [];
+            const _args = [];
+            const flts = args;
             const ctx = op.extend ? extend$1(root, {}) : root;
-            const opts = operation.opts ? evalParse(ctx, operation.opts) : undefined;
             for (let i = 0; i < flts.length; i++) {
                 const a = flts[i];
                 const arg = evalParse(ctx, a);
                 const res = op.checkArg(operation.op, i, flts.length - 1, arg, opts, ctx, a);
                 if (res === 'continue')
-                    args.push(arg);
+                    _args.push(arg);
                 else if ('skip' in res) {
                     i += res.skip;
                     if ('value' in res)
-                        args.push(res.value);
+                        _args.push(res.value);
                 }
                 else if ('result' in res)
                     return res.result;
             }
-            return op.apply(operation.op, args, opts, ctx);
+            return op.apply(operation.op, _args, opts, ctx);
         }
         else if (op.type === 'value') {
-            args = (operation.args || []).map(a => evalParse(root, a));
-            return op.apply(operation.op, args, operation.opts ? evalParse(root, operation.opts) : undefined, root);
+            args = args.map(a => evalParse(root, a));
+            return op.apply(operation.op, args, opts, root);
         }
         else {
             let arr;
             const ctx = op.extend ? extend$1(root, {}) : root;
-            const args = (operation.args || []).slice();
-            const opts = operation.opts ? evalParse(ctx, operation.opts) : undefined;
+            const _args = args.slice();
             let arg;
             if (!op.value) {
-                arg = evalParse(ctx, args[0]);
+                arg = evalParse(ctx, _args[0]);
                 if (Array.isArray(arg)) {
-                    args.shift();
+                    _args.shift();
                     arr = arg;
                 }
                 else if (typeof arg === 'object' && 'value' in arg && Array.isArray(arg.value)) {
-                    args.shift();
+                    _args.shift();
                     arr = arg.value;
                 }
                 if (!arr) {
@@ -2272,7 +2288,7 @@
                         arr = [];
                 }
             }
-            return op.apply(operation.op, Array.isArray(arr) ? arr : [], args, opts, ctx);
+            return op.apply(operation.op, Array.isArray(arr) ? arr : [], _args, opts, ctx);
         }
     }
     function isKeypath(v) {
@@ -2291,7 +2307,7 @@
         if (typeof v !== 'object' || !('a' in v) || typeof v.a !== 'object')
             return false;
         const len = Object.keys(v).length;
-        return len === 1 || len === 2 && 'n' in v;
+        return len === 1 || len === 2 && ('n' in v || 'c' in v) || len === 3 && 'n' in v && 'c' in v;
     }
     function isValueOrExpr(o) {
         return typeof o === 'string' || isValue(o);
@@ -2844,10 +2860,26 @@
                     }
                     if (p.y < 0) {
                         p.offsetY = m[0];
+                        if (isNaN(h)) {
+                            p.y = (placement.availableY || 1) + p.y;
+                            const r = error(context, p, 'Negative y position requires height');
+                            s += r.output;
+                            ps.unshift([p.x, p.y, getWidthWithMargin(w, placement, context), r.height]);
+                            continue;
+                        }
                         if (placement.availableY == null)
                             p.y = 0;
                         else
                             p.y = (placement.availableY || 1) + p.y - h + 1;
+                        if (p.y < 0) {
+                            const offset = maxYOffset(ps);
+                            state = state || { offset };
+                            state.last = i;
+                            state.attempt = (state.attempt || 0) + 1;
+                            if (state.attempt > 1)
+                                return error(context, placement, 'Negative y position underflow error');
+                            return { output: s, continue: state, height: offset };
+                        }
                     }
                     const { x, y } = p;
                     const r = renderWidget(w, context, p, state && state.child);
@@ -3850,6 +3882,7 @@
         return `<span${styleClass(ctx, ['label'], style$1(w, placement, ctx, { lineSize: true }))}>${val}</span>`;
     });
     registerRenderer('container', (w, ctx, placement, state) => {
+        var _a;
         addStyle(ctx, 'container', `.container {position:absolute;box-sizing:border-box;}`);
         let h;
         if (!w.height)
@@ -3872,11 +3905,9 @@
             r.width = getWidthWithMargin(w, placement, ctx);
         }
         if ((r.cancel || r.continue) && !w.bridge) {
-            const state = r.continue || {};
+            // must start fresh
+            const state = { attempt: ((_a = r.continue) === null || _a === void 0 ? void 0 : _a.attempt) || 1 };
             state.offset = 0;
-            // must start over
-            delete state.last;
-            state.attempt = (state.attempt || 0) + 1;
             if (state.attempt > 1)
                 return error(ctx, placement);
             return { continue: state, output: '' };
@@ -4080,7 +4111,8 @@
         }
         if (w.footer) {
             const fctx = (rctx && rctx.context) || (state && state.state && state.state.context && state.state.context.context);
-            const c = extend(ctx, { special: { source: group && group.grouped ? group.all : arr, level: group && group.level, grouped: groupNo !== false, group: group && group.group, values: (fctx && fctx.special || {}).values }, commit: {} });
+            const values = (fctx && fctx.special || {}).values;
+            const c = extend(ctx, { value: values ? Object.assign({}, ctx.context.value, values) : ctx.context.value, special: { source: group && group.grouped ? group.all : arr, level: group && group.level, grouped: groupNo !== false, group: group && group.group, values }, commit: {} });
             if (group) {
                 if (w.groupEnds && w.groupEnds[group.grouped])
                     r = renderWidget(w.footer, c, { x: 0, y, availableX: placement.availableX, maxX: placement.maxX, maxY: placement.maxY, availableY });
@@ -6449,7 +6481,7 @@
             return [str];
         else
             return str.split(split || '');
-    }), simple(['filter'], (_name, values, _opts, ctx) => {
+    }), simple(['filter'], (_name, values, opts, ctx) => {
         let [arr, flt, sorts, groups] = values;
         if (!Array.isArray(arr)) {
             if (arr && Array.isArray(arr.value))
@@ -6457,13 +6489,13 @@
             else if (typeof arr === 'object' && arr) {
                 let step = Object.entries(arr).filter((e, i) => evalApply(ctx, flt, [e[1], i, e[0]], { index: i, key: e[0] }));
                 if (sorts)
-                    step = sort(ctx, step, sorts, (c, b, v) => evalApply(c, b, [v[1], v[0]], { key: v[0] }));
+                    step = sort(ctx, step, sorts, (c, b, v) => evalApply(c, b, [v[1], v[0]], { key: v[0] }), opts);
                 return step.reduce((a, c) => (a[c[0]] = c[1], a), {});
             }
             else
                 return [];
         }
-        return filter({ value: arr }, flt, sorts, groups, ctx).value;
+        return filter({ value: arr }, flt, sorts, groups, ctx, opts).value;
     }), simple(['source'], (_name, values, _opts, ctx) => {
         const [val, app] = values;
         let source = toDataSet(val);
@@ -6479,7 +6511,7 @@
                 return {};
         }
         return filter({ value: arr }, null, null, groups, ctx).value;
-    }), simple(['sort'], (_name, values, _opts, ctx) => {
+    }), simple(['sort'], (_name, values, opts, ctx) => {
         let [arr, sorts] = values;
         if (!Array.isArray(arr)) {
             if (arr && Array.isArray(arr.value))
@@ -6487,14 +6519,14 @@
             else if (arr && typeof arr === 'object') {
                 if (!sorts)
                     sorts = [{ a: { r: { p: '@', k: ['key'] } } }];
-                return sort(ctx, Object.entries(arr), sorts, (c, b, v) => evalApply(c, b, [v[1], v[0]], { key: v[0] })).reduce((a, c) => (a[c[0]] = c[1], a), {});
+                return sort(ctx, Object.entries(arr), sorts, (c, b, v) => evalApply(c, b, [v[1], v[0]], { key: v[0] }), opts).reduce((a, c) => (a[c[0]] = c[1], a), {});
             }
             else
                 return {};
         }
         if (!sorts)
             sorts = [{ a: { r: { k: ['_'] } } }];
-        return sort(ctx, arr.slice(), sorts);
+        return sort(ctx, arr.slice(), sorts, undefined, opts);
     }), simple(['time-span', 'time-span-ms'], (_name, args, opts) => {
         const namedArgs = opts || {};
         const span = isDateRel(args[0]) && isDateRel(args[1]) ? datesDiff(dateRelToDate(args[0]), dateRelToDate(args[1])) : isTimespan(args[0]) ? args[0] : 0;
@@ -6990,8 +7022,11 @@
                 return `${op.apply('string', [src], undefined, ctx)}`.slice(start, end);
         }
     }), simple(['len', 'length'], (_name, [src]) => {
+        var _a;
         if (typeof src === 'string' || Array.isArray(src))
             return src.length;
+        else if (isApplication(src))
+            return ((_a = src.n) === null || _a === void 0 ? void 0 : _a.length) || 0;
         else if (typeof src === 'object' && Object.keys(src).length === 1 && Array.isArray(src.value))
             return src.value.length;
         else if (typeof src === 'object')
@@ -7342,14 +7377,16 @@
         },
         apply(_name, [value, body], opts, ctx) {
             if (Array.isArray(value)) {
-                const last = value.length - 1;
-                return value.map((v, i) => evalApply(ctx, body, [v, i], { last, index: i, key: i, 'last-key': last })).join((opts === null || opts === void 0 ? void 0 : opts.join) || '');
+                const count = value.length;
+                const last = count - 1;
+                return value.map((v, i) => evalApply(ctx, body, [v, i], { last, index: i, key: i, 'last-key': last, count })).join((opts === null || opts === void 0 ? void 0 : opts.join) || '');
             }
             else if (typeof value === 'object' && value) {
                 const entries = Object.entries(value);
                 const lastKey = entries[entries.length - 1][0];
-                const last = entries.length - 1;
-                return Object.entries(value).map(([k, v], i) => evalApply(ctx, body, [v, k], { last, 'last-key': lastKey, index: i, key: k })).join('');
+                const count = entries.length;
+                const last = count - 1;
+                return Object.entries(value).map(([k, v], i) => evalApply(ctx, body, [v, k], { last, 'last-key': lastKey, index: i, key: k, count })).join('');
             }
             else {
                 return '';

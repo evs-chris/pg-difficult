@@ -2,7 +2,7 @@ import * as oak from 'https://deno.land/x/oak@v12.5.0/mod.ts';
 import postgres from 'https://deno.land/x/postgresjs@v3.4.4/mod.js';
 import * as diff from './diff.ts';
 import { open } from 'https://deno.land/x/deno_open@v0.0.6/index.ts';
-import { evaluate } from 'https://cdn.jsdelivr.net/npm/raport@0.29.0/lib/index.js';
+import { evaluate } from 'https://cdn.jsdelivr.net/npm/raport@0.30.0/lib/index.js';
 
 type JSONValue = postgres.JSONValue;
 
