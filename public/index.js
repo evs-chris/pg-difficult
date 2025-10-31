@@ -2337,6 +2337,8 @@ const renderMD = (function() {
           return `<img src="data:image/jpeg;base64,${code}" />`;
         } else if (lang === 'raport+html') {
           return evaluate(globalContext, code);
+        } else if (lang === 'raport-template+html' || lang === 'raport-tpl+html' || lang === 'rptpl+html') {
+          return template(globalContext, code);
         } else if (lang === 'raport+text') {
           return `<pre><code class="hljs text">${evaluate(globalContext, code)}</code></pre>`;
         } else if (lang.startsWith('csv+table')) {
