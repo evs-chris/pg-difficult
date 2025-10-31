@@ -625,7 +625,7 @@ class App extends Ractive {
         }
       }, 100);
     };
-    window.addEventListener('focus', nope);
+    setTimeout(() => window.addEventListener('focus', nope), 500);
     this.find('.file-picker').click();
     return res;
   }
@@ -930,7 +930,8 @@ const app = globalThis.app = new App({
     }
     try {
       if (file) file = await app.pickFile('.raport-proj, .json, .raport');
-    } catch {
+    } catch (e) {
+      console.error(e);
       return;
     }
     const win = new Report();
