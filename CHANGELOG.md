@@ -1,3 +1,40 @@
+## 1.15.0
+
+2025-04-12
+
+### Bugs
+
+* Printing rendered markdown from a scratch pad will now include CSS for highlighted code blocks.
+* Raport scratch pad context can now be only whitespace without breaking evaluation.
+* Code blocks in rendered markdown force word break so stuff like long JSON blobs with no spaces don't disappear off the end of the block.
+* Selects in dark mode will no longer become unreadable in some browsers.
+* The favicon will now correctly match the selected color scheme.
+* Undo with multiple running diffs will now try harder to prevent cross-contamination among the diffs that leads to not being able to undo.
+
+### Features
+
+* Markdown scratch pads now have basic support for highlighting raport, raport template (raport-tpl, raport-template, rptpl) and ejs (underscore, lodash) code blocks.
+* Markdown scratch pads can now use raport and raport-template to output HTML into the markdown viewer by adding `+html` to code blocks flagged as raport or raport template.
+* The scratch pad tree now supports filtering/searching within scratch pads. Searching within scratch pads requires using a raport expression in the filter input e.g. `:string in text`.
+* Password fields now include a way to view the password as plain text.
+* Diff entries now include the timestamp of the diff in their hover tooltip.
+* There is now basic support for parameterized queries.
+* If there is a raport scratch pad named pg-difficult/context, it will be used to preload all raport expression evaluations.
+* Raport scratch pads that produce arrays of objects or arrays of arrays will have the option to view the results as a table.
+* JSON scratch pads now offer tree and table views as appropriate.
+* Markdown code fences can now be given options that affect their rendering. Options are passed as raport key/value pairs.
+  * JSON: `pretty:1` will stringify the JSON with indents when rendering.
+  * csv+table: `header` and `order` will be passed through to raport csv parser.
+* Markdown code fences have experimental support for a few widgets, where the state of the widget is maintained in the code block.
+  * widget+counter renders a basic +/- counter.
+  * widget+clock renders a text clock. The code fence option, `precision` (`mm` or `s`), controls the time display.
+  * widget+timer renders a timer with a duration input and control buttons. Code fence options that control timer behavior include `precision` (same as clock), `sound` ('dong', 'time-beep', 'notify-whistle', 'whistle', 'relax', and 'next'), `message` (a string shown as a browser notification title), `body` (a string for a browser notification body), and timeout (a number of seconds for which to show a browser notification).
+  * widget+pomodoro renders a pomodoro widget that shows the time remaining and which stage is currently running. Options passed to the code fence to control the intervals are the same as those for the timer plus `on` (the working interval) and `off` (the break interval). `sound`, `message`, and `body` may be objects with a 'work' and 'break' key that will be used with the corresponding transition.
+* Markdown scratch pads can now include cross-links to other scratch pads in the form `#scratch` plus the full name of the other pad e.g. `[other pad](#scratch/path/to/other pad)`
+* Uploading and downloading scratch pads will now automatically handle extensions if the file name doesn't already include them.
+* There is now a server state debugger, accessible from Settings, that allows inspecting server state in an ephemeral raport pad.
+
+
 ## 1.14.0
 
 2025-03-29

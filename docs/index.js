@@ -28,7 +28,7 @@ Ractive.helpers.age = function(ts) {
   return evaluate({ d }, `d#date,'HH:mm EEE'`);
 }
 Ractive.helpers.escapeKey = Ractive.escapeKey;
-Ractive.helpers.evaluate = Raport.evaluate;
+Ractive.helpers.evaluate = evaluate;
 Ractive.helpers.download = download;
 Ractive.helpers.basename = basename;
 
@@ -107,6 +107,18 @@ const colors = {
 setInterval(() => {
   Ractive.sharedSet('now', new Date());
 }, 5000);
+
+const icon = `data:image/svg+xml,%3Csvg%20width%3D'20'%20height%3D'20'%20viewBox%3D'85%20114%2060%2061'%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%3E%3Cpath%20style%3D'fill%3A%23787878%3Bfill-opacity%3A1%3Bstroke%3A%23000%3Bstroke-width%3A1.32292%3Bstroke-dasharray%3Anone'%20d%3D'M120.956%20121.59c0%203.514-7.857%206.363-17.55%206.363-9.692%200-17.549-2.849-17.549-6.363s7.857-6.364%2017.55-6.364c9.692%200%2017.549%202.85%2017.549%206.364'%2F%3E%3Cpath%20style%3D'fill%3A__FILL__%3Bfill-opacity%3A1%3Bstroke%3A%23000%3Bstroke-width%3A1.32292%3Bstroke-dasharray%3Anone'%20d%3D'M126.415%20127.381c9.247.18%2016.592%202.957%2016.592%206.355%200%203.514-7.857%206.363-17.55%206.363-3.388%200-6.552-.348-9.235-.951l.71-2.087z'%2F%3E%3Cpath%20style%3D'fill%3A%23787878%3Bfill-opacity%3A.5%3Bstroke%3A%23000%3Bstroke-width%3A1.32292%3Bstroke-dasharray%3Anone%3Bstroke-opacity%3A1'%20d%3D'm116.854%20137.113-4.338%2014.17-12.726%2010.932c-7.956-.602-13.92-3.15-13.919-6.096l.001-34.302c2.57%208.399%2033.886%207.802%2035.046%200v11.16z'%2F%3E%3Cpath%20style%3D'fill%3A__FILL__%3Bfill-opacity%3A.5%3Bstroke%3A%23000%3Bstroke-width%3A1.32292%3Bstroke-dasharray%3Anone%3Bstroke-opacity%3A1'%20d%3D'M107.923%20168.386v-13.157l4.593-3.945%203.796-12.297c7.727%202.127%2024.138%201.49%2026.657-5.023v34.422m-.007-.254c0%203.514-7.847%206.363-17.527%206.363s-17.527-2.849-17.527-6.363'%2F%3E%3Cpath%20style%3D'fill%3A%23fff%3Bfill-opacity%3A0%3Bstroke%3A%23010207%3Bstroke-width%3A1.32292%3Bstroke-dasharray%3Anone%3Bstroke-opacity%3A1'%20d%3D'm90.465%20170.226%2022.051-18.942%204.338-14.17%2016.484-16.774'%20fill%3D'none'%2F%3E%3C%2Fsvg%3E`;
+
+function setIcon(color = '#325932') {
+  const head = document.getElementsByTagName('head')[0];
+  const prev = head.querySelector('link[rel="shortcut icon"]');
+  const next = document.createElement('link');
+  next.rel = 'shortcut icon';
+  next.href = icon.replace(/__FILL__/g, encodeURIComponent(color));
+  prev.remove();
+  head.appendChild(next);
+}
 
 let syncLock;
 function readSync() {
@@ -284,16 +296,16 @@ const store = globalThis.store = {};
     }
   }
 
-  store.save = async function save(rec) {
+  store.save = async function save(rec, force) {
     if (!rec) return;
     if (!pdb) throw new Error('Storage has not been initialized.');
     if (!rec._id) {
       const r = await pdb.post(rec);
       rec._id = r.id;
-      rec._rev = r._rev;
+      rec._rev = r.rev;
     } else  {
-      const r = await pdb.put(rec);
-      rec._rev = r._rev;
+      const r = await pdb.put(rec, { force });
+      rec._rev = r.rev;
     }
     return rec;
   };
@@ -398,11 +410,10 @@ const store = globalThis.store = {};
           const [dRev] = d._rev.split('-');
           if (+dRev > +curRev) await store.save(d);
         } else if (mode === 2) {
-          d._rev = cur._rev;
-          await store.save(d);
+          await store.save(d, true);
         }
       } else if (!cur) {
-        await store.save(d);
+        await store.save(d, true);
       }
     }
   }
@@ -574,6 +585,8 @@ function expandSchema(schema) {
 
 let reportId = 0;
 let localDiffId = 0;
+let contextScratch;
+let globalContext = {};
 
 class App extends Ractive {
   constructor(opts) { super(opts); }
@@ -612,7 +625,7 @@ class App extends Ractive {
         }
       }, 100);
     };
-    window.addEventListener('focus', nope);
+    setTimeout(() => window.addEventListener('focus', nope), 500);
     this.find('.file-picker').click();
     return res;
   }
@@ -640,6 +653,7 @@ Ractive.extendWith(App, {
   css(data) {
     return `
       html { color: ${data('raui.primary.fg') || '#222'}; background-color: ${data('raui.primary.bg') || '#fff'}; font-size: ${data('scale') || 100}%; }
+      .tree-filter { color: ${data('raui.primary.fg') || '#222'}; }
       .query-text textarea {
         color: ${data('raui.primary.fg') || data('raui.fg') || '#222'};
         background-color: ${data('raui.primary.bg') || data('raui.bg') || '#fff'};
@@ -649,6 +663,10 @@ Ractive.extendWith(App, {
       .striped:nth-child(even), .striped-even { background-color: ${data('theme') === 'dark' ? '#3b3b3b' : '#fdfdfd'}; }
       button svg { width: 1.5em; height: 1.5em; display: inline-block; vertical-align: middle; fill: ${data('raui.primary.bg') || '#fff'}; }
       button.flat svg { fill: ${data('raui.primary.fg') || '#222'}; }
+      svg.icon { fill: none; stroke: ${data('raui.primary.fg') || '#222'}; }
+      label.field svg.icon { opacity: 0.8; transition: opacity 0.2s ease; }
+      label.field svg.icon:hover { opacity: 1; }
+      label.field select:focus { background-color: ${data('raui.primary.bg') || '#fff'}; }
       .mermaid { background-color: ${data('theme') === 'dark' ? '#191919' : '#f7f7f7'}; }
     `;
   },
@@ -804,6 +822,27 @@ const app = globalThis.app = new App({
         });
       }
     },
+    'store.scratch.list'(v) {
+      if (v) {
+        const ctx = v.find(s => s.name === 'pg-difficult/context' && s.syntax === 'raport');
+        if (ctx) {
+          if (contextScratch) {
+            contextScratch.cancel();
+            store.release('scratch', contextScratch._id);
+          }
+          contextScratch = this.observe(`store.scratch.${ctx.id}`, v => {
+            if (v) {
+              const ctx = new Root({});
+              if (v.context) evaluate(ctx, v.context);
+              evaluate(ctx, v.text);
+              globalContext = ctx.value;
+            }
+          });
+          contextScratch._id = ctx.id;
+          store.acquire('scratch', ctx.id);
+        }
+      }
+    },
     sync: {
       handler: debounce(() => {
         writeSync();
@@ -891,7 +930,8 @@ const app = globalThis.app = new App({
     }
     try {
       if (file) file = await app.pickFile('.raport-proj, .json, .raport');
-    } catch {
+    } catch (e) {
+      console.error(e);
       return;
     }
     const win = new Report();
@@ -913,13 +953,40 @@ const app = globalThis.app = new App({
     }
     try {
       if (file) file = await app.pickFile();
+      let m;
+      if ((m = /\.\w+$/.exec(file.name))) {
+        const ext = m[0].slice(1);
+        if (ScratchSyntax.concat(['txt', 'md', 'js', 'ts', 'go', 'hbs', 'wiki', 'py', 'cpp']).includes(ext)) {
+          file.name = file.name.slice(0, file.name.length - ext.length - 1);
+          file.syntax = { md: 'markdown', js: 'javascript', ts: 'typescript', go: 'golang', hbs: 'handlebars', txt: 'plain_text', wiki: 'mediawiki', py: 'python', cpp: 'c_cpp' }[ext] || ext;
+        }
+      }
     } catch {
       return;
     }
-    win = new ScratchPad();
+    const win = new ScratchPad();
     if (pad?.id) win.load(pad.id, copy);
     this.host.addWindow(win, { title: pad?.id ? `Loading scratch pad...` : 'New Scratch Pad' });
     if (file) win.set('pad', file, { deep: true });
+  },
+  async scratchQuery(id) {
+    if (id) {
+      const wid = `scratch-${id}`;
+      let win = this.host.getWindow(wid);
+      if (win) return win.raise(true);
+      win = new ScratchPad();
+      win.loadQuery(id);
+      this.host.addWindow(win, { title: `Loading query...` });
+    }
+  },
+  openEphemeralPad(data, title) {
+    const win = new ScratchPad();
+    win.set({
+      ephemeral: data,
+      'pad.text': '*data',
+      'pad.syntax': 'raport',
+    });
+    this.host.addWindow(win, { title: title || `Ephemeral Data Inspector (${win.id})` });
   },
   openLocalDiff() {
     const id = ++localDiffId;
@@ -938,6 +1005,11 @@ const app = globalThis.app = new App({
   },
   choose(question, buttons, title) {
     const w = new Choose({ data: { message: question, buttons } });
+    this.host.addWindow(w, { title, block: true, top: 'center', left: 'center' });
+    return w.result;
+  },
+  chooseMany(question, options, pre, title) {
+    const w = new ChooseMany({ data: { message: question, options, title, choice: pre || [] } });
     this.host.addWindow(w, { title, block: true, top: 'center', left: 'center' });
     return w.result;
   },
@@ -975,6 +1047,8 @@ Ractive.helpers.appSet = (p, v) => app.set(p, v);
 store.init();
 readSync();
 store.sync(app.get('sync.servers'));
+
+const settingsOptions = { connection: 'Connections', query: 'Saved Queries', scratch: 'Scratch Pads', report: 'Reports', settings: 'Settings', sync: 'Sync Servers' };
 
 class ControlPanel extends Window {
   constructor(opts) { super(opts); }
@@ -1097,11 +1171,25 @@ class ControlPanel extends Window {
     const copy = !file && this.event?.event && this.event.event.altKey;
     if (v.type === 'report') app.openReport(v, file, copy);
     else if (v.type === 'scratch') app.openScratch(v, file, copy);
-    else if (v.type === 'query') app.set('loadedQuery', v.id);
+    else if (v.type === 'query') {
+      if (this.event?.event?.altKey && v.id) app.scratchQuery(v.id);
+      else app.set('loadedQuery', v.id);
+    }
   }
   async scratchText(id) {
     const v = await store.get(id);
     return v.text;
+  }
+  scratchName(pad) {
+    let name;
+    if (/\.\w+$/.test(pad.name)) name = pad.name;
+    else {
+      const ext = { markdown: 'md', javascript: 'js', typescript: 'ts', golang: 'go', handlebars: 'hbs', plain_text: 'txt', mediawiki: 'wiki', python: 'py', c_cpp: 'cpp' }[pad.syntax || 'plain_text'] || pad.syntax;
+      if (ext) name = `${pad.name}.${ext}`;
+    }
+    const idx = name.lastIndexOf('/');
+    if (~idx) name = name.slice(idx + 1);
+    return name;
   }
   async queryText(id) {
     const v = await store.get(id);
@@ -1124,24 +1212,44 @@ class ControlPanel extends Window {
   evalPad() {
     const scratch = new ScratchPad();
     this.host.addWindow(scratch, { title: 'Eval Pad' });
-    scratch.set('pad.syntax', 'raport');
+    setTimeout(() => scratch.set('pad.syntax', 'raport'), 50);
     scratch.findComponent('split')?.resize(0, 50);
   }
   async exportSettings() {
     const json = {};
     const settings = app.get('store.settings') || {};
     json.store = await store.dump();
-    json.sync = app.get('sync');
+    const types = await app.chooseMany('What would you like to export?', settingsOptions, ['scratch', 'settings', 'report', 'query', 'connection'], 'Export Data');
+    if (types === false || !types.length) return;
+    json.store = json.store.filter(d => types.includes(d.type));
+    if (types.includes('sync')) json.sync = app.get('sync');
     download(`${settings.title ? `${settings.title} - ` : ''}${window.location.host} ${evaluate('@date#timestamp')} settings.pgdconf`.replace(/:/g, '-'), JSON.stringify(json), 'application/pg-difficult-config');
   }
   async importSettings() {
     const file = JSON.parse((await load('.pgdconf', false)).text);
-    if (file.store) store.restore(file.store);
-    // TODO: ask what to restore and how (store mode)
+    if (!file?.store) return;
+    const types = await app.chooseMany(
+      'This will forcibly overwrite any conflicting data. What would you like to import?', settingsOptions,
+      ['scratch', 'settings', 'report', 'query', 'connection'].map(k => file.store.find(d => d.type === k)?.type).filter(k => k),
+      'Import Data'
+    );
+    if (types === false || !types.length) return;
+    file.store = file.store.filter(d => types.includes(d.type));
+    if (file.store) store.restore(file.store, 2);
+    if (types.includes('sync') && file.sync) app.set('sync', file.sync);
+    // TODO: ask how to restore (store mode - replace, update only, etc)
+  }
+  async requestNotify() {
+    const res = await Notification.requestPermission();
+    this.set('canNotify', res === 'granted');
   }
   async validateSync(path) {
     const config = this.get(path);
     this.set(`${path}.valid`, await store.validate(config));
+  }
+  async debugServer() {
+    const { data } = await request({ action: 'debug' });
+    app.openEphemeralPad(data, `Server Data ${evaluate('#now##timestamp')}`);
   }
 }
 Window.extendWith(ControlPanel, {
@@ -1174,6 +1282,7 @@ Window.extendWith(ControlPanel, {
       this.link('loadedQuery', 'loadedQuery', { instance: app });
       this.link('store', 'store', { instance: app });
       this.link('connected', 'connected', { instance: app });
+      this.link('canNotify', 'canNotify', { instance: app });
     },
   },
   observe: {
@@ -1191,6 +1300,25 @@ Window.extendWith(ControlPanel, {
         });
       }
     },
+    async 'filter.scratch'(v) {
+      if (!(v || '').trim()) return this.set('filter._scratch', undefined);
+      let flt = parse(v);
+      let res;
+      if (flt && (('op' in flt && flt.op === 'block') || 'r' in flt || ('v' in flt && Object.keys(flt).length === 1))) {
+        // just use the text
+        v = parse(`name ilike ${JSON.stringify(`%${v}%`)}`);
+        const list = await store.list('scratch');
+        res = list.filter(e => evaluate(e, v)).map(e => e.id);
+      } else {
+        const list = await store.list('scratch');
+        res = [];
+        for (const e of list) {
+          const i = await store.get(e.id);
+          if (evaluate(i, v)) res.push(e.id);
+        }
+      }
+      this.set('filter._scratch', res);
+    },
   },
   computed: {
     connections() {
@@ -1198,9 +1326,13 @@ Window.extendWith(ControlPanel, {
       return all.filter(c => !c.use || c.use === 'diff');
     },
     scratchPadTree() {
-      const old = this.get('_scratchPadTree');
-      const tree = dirify(this.get('store.scratch.list'), old);
+      const filter = this.get('filter._scratch');
+      const all = this.get('store.scratch.list');
+      const list = filter ? all.filter(i => filter.includes(i.id)) : all;
+      const old = this.get('_scratchPadTreeOld');
+      const tree = dirify(list, old);
       this.set('_scratchPadTree', tree);
+      if (!filter) this.set('_scratchPadTreeOld', tree);
       return tree;
     },
     queryTree() {
@@ -1246,6 +1378,17 @@ class Choose extends Window {
 Window.extendWith(Choose, {
   template: '#choose',
   options: { flex: true, close: false, resizable: false, maximize: false, minimize: false, width: 'auto', height: 'auto' },
+});
+
+class ChooseMany extends Window {
+  constructor(opts) { super(opts); }
+}
+Window.extendWith(ChooseMany, {
+  template: '#choose-many',
+  options: { flex: true, close: false, resizable: false, maximize: false, minimize: false, width: 'auto', height: 'auto' },
+  data() {
+    return { choice: [] };
+  },
 });
 
 class Connect extends Window {
@@ -1390,7 +1533,7 @@ class Query extends Window {
     }
     this.blocked = true;
     try {
-      const res = await request({ action: 'query', query: [query], client: this.config });
+      const res = await request({ action: 'query', query: [query], params: processQueryParams(this.get('parameters')), client: this.config });
       this.set('result', res.result);
       this.set('runtime', res.time);
       this.set('affected', res.affected);
@@ -1402,25 +1545,34 @@ class Query extends Window {
     }
     this.blocked = false;
   }
-  async saveQuery() {
+  async saveQuery(ctx) {
     const loaded = this.get('loaded');
     const name = await app.ask(`Enter a query name:`, 'Query Name', loaded?.name || '');
+    const sql = ctx.get('query');
+    const process = ctx.get('processParams');
+    const params = ctx.get('parameters');
     if (name) {
       if (loaded) {
+        loaded.sql = sql;
         loaded.name = name;
+        loaded.processParams = !!process;
+        loaded.params = process ? params : undefined;
         await store.save(loaded);
       } else {
-        const res = await store.save({ name, type: 'query', sql: this.get('query') });
+        const res = await store.save({ name, type: 'query', sql, processParams: process ? process : undefined, params: process ? params : undefined });
         await store.acquire('query', res._id);
         this.link(`store.query.${res._id}`, 'loaded', { instance: app });
       }
     }
   }
-  async loadQuery(q) {
+  async loadQuery(q, ctx) {
     const cur = this.get('loaded');
     if (q) {
       await store.acquire('query', q);
       this.link(`store.query.${q}`, 'loaded', { instance: app });
+      ctx.set('query', this.get('loaded.sql'));
+      ctx.set('processParams', !!this.get('loaded.processParams'));
+      ctx.set('parameters', (this.get('loaded.params') || []).slice());
     } else if (cur) {
       this.set('query', cur.sql);
       this.unlink('loaded');
@@ -1452,6 +1604,7 @@ Window.extendWith(Query, {
       this.set('settings', Object.assign({}, app.get('store.settings')));
       this.link('store.settings.editor', 'editor', { instance: app });
       this.link('loadedQuery', 'loadedQuery', { instance: app });
+      this.link('loaded.labels', 'parameterLabels');
     },
     raise() {
       const txt = this.getContext('.query-text');
@@ -1478,7 +1631,13 @@ Window.extendWith(Query, {
         }
       },
       init: false,
-    }
+    },
+    'query processParams': {
+      handler: debounce(function() {
+        const v = this.get('query') || '';
+        this.set('parameters', this.get('processParams') ? extractQueryParams(v, this.get('parameters')) : undefined);
+      }, 500),
+    },
   },
 });
 
@@ -1686,6 +1845,9 @@ res
     const schema = schemas[entry.source];
     const base = app.get('entries') || [];
     const entries = [];
+    const client = Object.values(app.get('status.clients') || {}).find(c => c.source === this.source).config;
+
+    if (!client) return this.host.toast('Unable to find connection config for reversal', { type: 'error', timeout: 3000 });
 
     const idx = base.findIndex(e => entry.id === e.id);
 
@@ -1730,7 +1892,7 @@ res
     const blocked = this.blocked;
     this.blocked = true;
     try {
-      await request({ action: 'query', query: reverse.map(p => p[0]), params: reverse.map(p => p[1]), client: Object.values(app.get('status.clients') || {}).find(c => c.source === this.source).config });
+      await request({ action: 'query', query: reverse.map(p => p[0]), params: reverse.map(p => p[1]), client });
     } finally {
       if (!blocked) this.blocked = false;
     }
@@ -2117,12 +2279,13 @@ Window.extendWith(SchemaCompare, {
 .entry .key { font-weight: bold; }
 `,
 });
+const ScratchSyntax = [ 'c_cpp', 'csharp', 'css', 'ejs', 'golang', 'handlebars', 'html', 'ini', 'java', 'javascript', 'json', 'jsx', 'julia', 'kotlin', 'less', 'liquid', 'lisp', 'lua', 'markdown', 'mediawiki', 'nix', 'nunjucks', 'ocaml', 'odin', 'pascal', 'perl', 'pgsql', 'php', 'plain_text', 'python', 'raport', 'ruby', 'rust', 'sass', 'scala', 'scheme', 'sh', 'sql', 'stylus', 'svg', 'swift', 'tcl', 'toml', 'tsx', 'twig', 'typescript', 'vue', 'xml', 'xquery', 'yaml', 'zig' ];
 
 const renderMD = (function() {
   const checkLanguage = (function() {
-    const map = { bash: false, c: false, cpp: false, csharp: false, go: false, handlebars: false, javascript: false, lua: false, mermaid: false, pgsql: false, php: false, rust: false, sql: false, typescript: false, vbnet: false, xml: false };
-    const alias = { js: 'javascript', ts: 'typescript', ractive: 'handlebars', sh: 'bash', vb: 'vbnet', 'c#': 'csharp', golang: 'go', rs: 'rust', hbs: 'handlebars', chart: 'mermaid' };
-    const deps = { handlebars: ['xml'] };
+    const map = { bash: false, c: false, cpp: false, csharp: false, ejs: false, go: false, handlebars: false, javascript: false, lua: false, mermaid: false, pgsql: false, php: false, raport: false, 'raport-tpl': false, rust: false, sql: false, typescript: false, vbnet: false, xml: false };
+    const alias = { js: 'javascript', ts: 'typescript', ractive: 'handlebars', sh: 'bash', vb: 'vbnet', 'c#': 'csharp', golang: 'go', rs: 'rust', hbs: 'handlebars', chart: 'mermaid', underscore: 'ejs', lodash: 'ejs', 'raport-template': 'raport-tpl', rptpl: 'raport-tpl' };
+    const deps = { ejs: ['javascript'], handlebars: ['xml'], 'raport-tpl': ['raport'] };
     const urls = {
       mermaid: './mermaidjs@11.0.2.js',
     };
@@ -2146,13 +2309,23 @@ const renderMD = (function() {
   let theme;
   let subs;
   let id = 1;
+  let widgets = {};
+  let timer = false;
   return async function(str, opts = {}) {
     theme = opts.theme || Ractive.styleGet('theme');
+    widgets = {};
+    timer = false;
     if (!md) {
       md = marked.parse;
       const renderer = new marked.Renderer();
       renderer.code = ({ lang, text: code }) => {
         const l = checkLanguage(lang);
+        let opts = {};
+        let optstr = '';
+        if (~l.indexOf(' ')) {
+          optstr = l.slice(l.indexOf(' '));
+          opts = evaluate(globalContext, `{${optstr}}`) || {};
+        }
         if (lang === 'mermaid') {
           if (typeof subs[code] === 'string') return subs[code];
           else if (globalThis.mermaid) subs[code] = globalThis.mermaid.render(`graph${id++}`, `---\nconfig:\n  theme: ${theme === 'light' ? 'forest' : 'dark'}\n---\n${code}`).then(v => `<div class="mermaid-chart ${theme || 'light'}">${v.svg}</div>`);
@@ -2164,15 +2337,51 @@ const renderMD = (function() {
         } else if (lang === 'jpeg+base64') {
           return `<img src="data:image/jpeg;base64,${code}" />`;
         } else if (lang === 'raport+html') {
-          return evaluate(code);
+          return evaluate(globalContext, code);
+        } else if (lang === 'raport-template+html' || lang === 'raport-tpl+html' || lang === 'rptpl+html') {
+          return template(globalContext, code);
         } else if (lang === 'raport+text') {
-          return `<pre><code class="hljs text">${evaluate(code)}</code></pre>`;
+          return `<pre><code class="hljs text">${evaluate(globalContext, code)}</code></pre>`;
         } else if (lang.startsWith('csv+table')) {
-          const data = evaluate({ code }, `parse(code csv:1 header:${lang.includes('nohead') ? false : true})`);
-          return run({ type: 'delimited', source: 'data', sources: [{ source: 'data' }] }, { data: { value: data } }, {}, { table: 1 });
+          if (!('header' in opts) && lang.includes('nohead')) opts.header = 0;
+          if (!('order' in opts) && lang.includes('noorder')) opts.order = 0;
+          const data = evaluate({ code }, `parse(code csv:1 ${evaluate({ opts }, 'unparse(opts noIndent:1)[1 1<]')})`);
+          return `<div class="table-wrap${opts.contain ? ' contain' : ''}">${run({ type: 'delimited', source: 'data', sources: [{ source: 'data' }] }, { data: { value: data } }, {}, { table: 1 })}</div>`;
         } else if (lang.startsWith('raport+table')) {
-          const data = evaluate(code);
-          return run({ type: 'delimited', source: 'data', sources: [{ source: 'data' }] }, { data: { value: data } }, {}, { table: 1 });
+          const data = evaluate(globalContext, code);
+          return `<div class="table-wrap${opts.contain ? ' contain' : ''}">${run({ type: 'delimited', source: 'data', sources: [{ source: 'data' }] }, { data: { value: data } }, {}, { table: 1 })}</div>`;
+        } else if (lang.startsWith('json')) {
+          try {
+            if (opts.pretty) code = JSON.stringify(JSON.parse(code), null, '  ');
+          } catch (e) { console.log(e)}
+          return `<pre><code class="hljs json">${hljs.highlight(code, { language: 'json', ignoreIllegals: true }).value}</code></pre>`;
+        } else if (lang.startsWith('widget+')) {
+          let end = lang.indexOf(' ');
+          if (!~end) end = lang.length;
+          const start = lang.indexOf('+') + 1;
+          const widget = lang.slice(start, end);
+          const args = evaluate(globalContext, `{${lang.slice(end)}}`);
+          let idx;
+          if (!widgets[widget]) widgets[widget] = 0;
+          switch (widget) {
+            case 'counter':
+              return `<div class="counter widget" data-index="${widgets.counter++}"><span class=counter>${code}</span><button>-</button><button>+</button><button>Reset</button></div>`;
+            case 'dong':
+              return `<div class="dong widget"><button>Dong!</button></div>`;
+            case 'clock':
+              timer = true;
+              return `<div class="clock widget" data-index="${widgets.clock++}"><span class=time>${evaluate('@date#time')}</span></div>`;
+            case 'timer': {
+              timer = true;
+              const bits = evaluate(globalContext, code) || {};
+              return `<div class="timer widget" data-index="${widgets.timer++}"><span class=time>${bits.end > Date.now() ? evaluate({ bits }, '(bits.end - #now#)#timespan(precision::s fmt::timer)') : bits.remain ? evaluate({ bits }, 'bits.remain#timespan(precision::s fmt::timer)') : ''}</span><label class="field inline"><input placeholder="duration" /></label><button disabled>Start</button><button disabled>Pause</button><button disabled>Reset</button></div>`;
+            }
+            case 'pomodoro': {
+              timer = true;
+              const bits = evaluate(globalContext, code) || {};
+              return `<div class="pomodoro widget" data-index="${widgets.pomodoro++}"><span class=time>${bits.end > Date.now() ? evaluate({ bits }, '(bits.end - #now#)#timespan(precision::s fmt::timer)') : bits.remain ? evaluate({ bits }, 'bits.remain#timespan(precision::s fmt::timer)') : ''}</span><span class=text>${bits.status || ''}</span><button disabled>Start</button><button disabled>Pause</button><button disabled>Next</button><button>Reset</button></div>`;
+            }
+          }
         } else {
           const highlighted = l && hljs.getLanguage(l) ? hljs.highlight(code, { language: l, ignoreIllegals: true }).value : code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
           return `<pre><code class="hljs ${l}">${highlighted}</code></pre>`;
@@ -2185,15 +2394,15 @@ const renderMD = (function() {
     if (checkLanguage.rerun) {
       checkLanguage.rerun = false;
       await new Promise(ok => setTimeout(ok, 250));
-      html = await renderMD(str, opts);
+      html = (await renderMD(str, opts))?.html;
     }
     if (Object.keys(subs).length) {
       for (const k in subs) subs[k] = await subs[k];
       html = marked.parse(str);
     }
-    if (!opts.nochecks) html = html.replace(/\<input (checked="" )?disabled="" type="checkbox"/g, '<input $1type="checkbox"');
+    if (!opts.nochecks) html = html.replace(/\<input (checked="" )?disabled="" type="checkbox"/g, '<input class=checklist $1type="checkbox"');
     html = html.replace(/\<a (href="https?:\/\/)/g, '<a target="_blank" $1');
-    return html;
+    return { html, timer };
   };
 })();
 
@@ -2226,20 +2435,34 @@ class ScratchPad extends Window {
     if (old?._id) store.release('scratch', old._id);
     this.lock = false;
   }
+  async loadQuery(id) {
+    this.lock = true;
+    await store.acquire('query', id);
+    this.link(`store.query.${id}`, 'query', { instance: app });
+    if (id) this.host.changeWindowId(this.id, `scratch-${id}`);
+    this.lock = false;
+  }
   async save() {
-    const pad = Object.assign({}, this.get('pad'));
-    if (pad._id) store.save(pad);
-    else {
-      pad.type = 'scratch';
-      const res = await store.save(pad);
-      await this.load(res._id);
+    const query = this.get('query');
+    if (query) {
+      await store.save(this.get('query'));
+    } else {
+      const pad = Object.assign({}, this.get('pad'));
+      if (!this.get('ephemeral')) {
+        if (pad._id) store.save(pad);
+        else {
+          pad.type = 'scratch';
+          const res = await store.save(pad);
+          await this.load(res._id);
+        }
+      }
     }
     this.saveDebounced.cancel();
     this.set('unsaved', false);
   }
   saveDebounced = debounce(() => this.save(), 15000, {
     check() {
-      const res = !store.writing && !this.lock && this.get('pad._id');
+      const res = !store.writing && !this.lock && (this.get('pad._id') || this.get('query._id'));
       if (res) this.set('unsaved', true);
       return res;
     },
@@ -2261,7 +2484,7 @@ class ScratchPad extends Window {
       if (sel) txt = sel;
     }
     const ok = parse(txt, { consumeAll: true });
-    const ctxok = context ? parse(context, { consumeAll: true }) : { v: {} };
+    const ctxok = context && context.trim() ? parse(context, { consumeAll: true }) : { v: {} };
     if (ok && 'cause' in ok) {
       this.set({
         evalresult: '',
@@ -2275,8 +2498,10 @@ class ScratchPad extends Window {
         });
       } else {
         const opts = app.get('scratchroot') || {};
-        const root = new Root({}, opts);
+        const root = new Root(Object.assign({}, globalContext), opts);
         root.sources = Object.assign({}, opts.sources);
+        const ephem = this.get('ephemeral');
+        if (ephem) root.sources.data = { value: ephem };
         root.log = this.log;
         if (opts.all) {
           for (const k in opts.all.apply || {}) if (opts.all.apply[k]) root.sources[k] = { value: opts.all.apply[k] };
@@ -2290,7 +2515,6 @@ class ScratchPad extends Window {
         this.set({
           evalresult: res,
           evaltext,
-          treeresult: typeof res !== 'object' ? undefined : treeify(res),
           evalerror: '',
         });
       }
@@ -2306,31 +2530,232 @@ class ScratchPad extends Window {
     }
     const tabs = this.findComponent('tabs');
     if (tabs && tabs.selection > 1) tabs.select(0);
+    this.set('visited', { table: 0, tree: 0 });
   }
   string(v) {
     return v === undefined ? 'undefined' : JSON.stringify(v);
   }
-  markdownCheck(ev) {
-    const inputs = this.find('.markdown-container').querySelectorAll('input');
-    const idx = Array.prototype.findIndex.call(inputs, v => v === ev.target);
-    if (~idx) {
-      let txt = this.get('pad.text');
-      let i = 0;
-      txt = txt.replace(/(\*|[a-zA-Z0-9]+\.) \[[ xX]\]/g, (v, t) => {
-        if (i++ === idx) {
-          if (v[3] === 'x') return `${t} [ ]`;
-          else return `${t} [x]`;
-        } else {
-          return v;
+
+  findWidget(el) {
+    if (!el || !el.classList) return;
+    while (el && !el.classList.contains('widget')) {
+      el = el.parentElement;
+    }
+    return el;
+  }
+  widgetCode(widget) {
+    const text = this.get('pad.text');
+    const name = Array.prototype.find.call(widget.classList, c => c !== 'widget');
+    const index = +widget.getAttribute('data-index');
+    let idx = 0;
+    const fence = '```widget+' + name;
+    let pos = text.indexOf(fence);
+    while (~pos && idx < index) {
+      pos = text.indexOf(fence, pos + 1);
+      idx++;
+    }
+    if (~pos) {
+      const eof = text.indexOf('\n', pos);
+      const eob = text.indexOf('```', pos + 1);
+      if (!~eof || !~eob) return;
+      const opts = evaluate(globalContext, `{${text.slice(pos + fence.length, eof)}}`);
+      return { code: text.slice(eof, eob), opts, from: eof + 1, to: eob - 1 };
+    }
+  }
+  replaceWidgetCode(code, value) {
+    if (code && ~code.from && ~code.to) {
+      const text = this.get('pad.text');
+      this.lockmd = true;
+      this.set('pad.text', text.slice(0, code.from) + value + text.slice(code.to));
+      this.lockmd = false;
+    }
+  }
+
+  markdownChange(ev) {
+    if (ev.target.classList.contains('checklist')) {
+      const inputs = this.find('.markdown-container').querySelectorAll('input');
+      const idx = Array.prototype.findIndex.call(inputs, v => v === ev.target);
+      if (~idx) {
+        let txt = this.get('pad.text');
+        let i = 0;
+        txt = txt.replace(/(\*|[a-zA-Z0-9]+\.) \[[ xX]\]/g, (v, t) => {
+          if (i++ === idx) {
+            if (v[3] === 'x') return `${t} [ ]`;
+            else return `${t} [x]`;
+          } else {
+            return v;
+          }
+        });
+        this.lockmd = true;
+        this.set('pad.text', txt);
+        this.lockmd = false;
+      }
+    }
+  }
+  markdownClick(ev) {
+    const e = ev.target;
+    const w = this.findWidget(e);
+    if (!w) return;
+    if (w.classList.contains('counter')) {
+      let count = w.querySelector('span.counter');
+      if (!count) return;
+      let num = +count.innerText;
+      if (e.innerText === '-') num--;
+      else if (e.innerText === '+') num++;
+      else num = 0;
+      count.innerText = `${num}`;
+      const code = this.widgetCode(w);
+      if (code) this.replaceWidgetCode(code, count.innerText);
+    } else if (w.classList.contains('timer') || w.classList.contains('pomodoro')) {
+      const pom = w.classList.contains('pomodoro');
+      const code = this.widgetCode(w);
+      if (e.innerText === 'Start') {
+        const data = evaluate(code.code);
+        const time = data?.remain ? evaluate(data, `date(#now# + remain)`) : evaluate({ tm: pom ? code.opts?.on || '25mm' : w.querySelector('input').value }, `date(#now# + interval(tm))`);
+        this.replaceWidgetCode(code, evaluate({ data: { end: +time } }, 'unparse(data)'));
+        this.checkTimerPrecision(1);
+      } else if (e.innerText === 'Pause') {
+        const data = { remain: evaluate(code, 'date(eval(code).end) - #now#' ) };
+        if (pom) data.segment = evaluate(code.code)?.segment || 'work';
+        this.replaceWidgetCode(code, evaluate({ data }, 'unparse(data)'));
+      } else if (e.innerText === 'Reset') {
+        this.replaceWidgetCode(code, '');
+        w.querySelector('.time').innerText = '';
+      } else if (e.innerText === 'Next') {
+        const data = evaluate(code.code);
+        const segment = data?.segment || 'work';
+        const next = segment === 'work' ? 'break' : 'work';
+        const tm = evaluate({ int: next === 'work' ? code.opts?.on || '25mm' : code.opts?.off || '5mm' }, 'date(#now# + interval(int))');
+        this.replaceWidgetCode(code, evaluate({ data: { end: +tm, segment: next } }, 'unparse(data)'));
+        w.querySelector('.time').innerText = `${next} for ${evaluate({ rem: +tm - Date.now() }, 'rem#timespan(format::timer precision::s)')}`;
+      }
+    } else if (w.classList.contains('dong')) {
+      notificate({ sound: 'dong', message: 'Dong!', timeout: 4000 });
+    }
+  }
+  markdownInput(ev) {
+    const e = ev.target;
+    const w = this.findWidget(e);
+    if (!w) return;
+    if (w.classList.contains('timer')) {
+      const buttons = w.querySelectorAll('button');
+      if (evaluate(`#${e.value}#`)) buttons[0].disabled = false;
+      else buttons[0].disabled = true;
+    }
+  }
+  markdownTimes() {
+    // TODO: maybe don't parse the code on every tick?
+    let precision = 15;
+    const ts = this._times;
+    const prec = ts?.precision || 15;
+    let obj;
+    if (ts) {
+      if (this.get('activeTab') === 1) {
+        obj = ts.clock;
+        for (const o of obj || []) {
+          if (o.opts?.precision === 's') precision = 1;
+          const fmt = o.opts?.precision === 's' ? 'HH:mm:ss' : 'HH:mm';
+          o.time.innerText = evaluate({ fmt }, '@date#time(fmt)');
         }
-      });
-      this.set('pad.text', txt);
+      }
+      if (obj = ts.timer) {
+        for (const o of obj) {
+          const state = evaluate(this.widgetCode(o.widget).code);
+          if (state?.end) {
+            const now = Date.now();
+            const rem = now - state.end;
+            const btns = o.widget.querySelectorAll('button');
+            if (rem > 0 && (rem <= prec * 1000 || rem < 30000 && !o.data.donged)) {
+              notificate({ sound: o.opts?.sound || 'time-beep', message: o.opts?.message, body: o.opts?.body, timeout: o.opts?.timeout });
+              o.time.innerText = 'elapsed';
+              o.data.donged = true;
+              btns[0].disabled = !evaluate({ str: o.widget.querySelector('input').value }, 'interval(str)');
+              btns[1].disabled = true;
+              btns[2].disabled = false;
+            } else {
+              if (rem < 0) {
+                o.time.innerText = evaluate({ rem: -rem }, 'rem#timespan(format::timer precision::s)');
+                if (!['mm', 'min'].includes(o.opts?.precision)) precision = 1;
+                btns[0].disabled = btns[2].disabled = true;
+                btns[1].disabled = false;
+              } else {
+                o.time.innerText = 'elapsed';
+                btns[0].disabled = !evaluate({ str: o.widget.querySelector('input').value }, 'interval(str)');
+                btns[1].disabled = true;
+                btns[2].disabled = false;
+              }
+            }
+          } else if (state?.remain) {
+            const btns = o.widget.querySelectorAll('button');
+            o.time.innerText = `paused: ${evaluate({ rem: state.remain }, 'rem#timespan(format::timer precision::s)')}`;
+            btns[0].disabled = btns[2].disabled = false;
+            btns[1].disabled = true;
+          } else {
+            o.time.innerText = '';
+            const btns = o.widget.querySelectorAll('button');
+            btns[0].disabled = !evaluate({ str: o.widget.querySelector('input').value }, 'interval(str)');
+            btns[1].disabled = btns[2].disabled = true;
+          }
+        }
+      }
+      if (obj = ts.pomodoro) {
+        for (const o of obj) {
+          const code = this.widgetCode(o.widget);
+          const state = evaluate(code.code);
+          const which = state?.segment || 'work';
+          if (state?.end) {
+            const now = Date.now();
+            const rem = now - state.end;
+            const btns = o.widget.querySelectorAll('button');
+            if (rem > 0) {
+              const msgs = Object.assign({}, { work: 'Take a break.', break: 'Start working.' }, o.opts?.message);
+              notificate({ sound: o.opts?.sound?.[which] || o.opts?.sound || (which === 'work' ? 'relax' : 'next'), message: msgs[which], body: o.opts?.body?.[which], timeout: o.opts?.timeout ?? 5000 });
+              const next = which === 'work' ? 'break' : 'work';
+              const tm = evaluate({ int: next === 'work' ? o.opts?.on || '25mm' : o.opts?.off || '5mm' }, 'date(#now# + interval(int))');
+              const data = { end: +tm, segment: next };
+              this.replaceWidgetCode(code, evaluate({ data }, 'unparse(data)'));
+              o.time.innerText = `${next} for ${evaluate({ rem: +tm - Date.now() }, 'rem#timespan(format::timer precision::s)')}`;
+              btns[1].disabled = btns[2].disabled = false;
+              btns[0].disabled = btns[3].disabled = true;
+            } else {
+              if (rem < 0) {
+                o.time.innerText = `${which} for ${evaluate({ rem: -rem }, 'rem#timespan(format::timer precision::s)')}`;
+                if (o.opts?.precision === 's' || rem > -60000) precision = 1;
+                btns[0].disabled = btns[3].disabled = true;
+                btns[1].disabled = btns[2].disabled = false;
+              } else {
+                o.time.innerText = 'elapsed';
+                btns[0].disabled = btns[1].disabled = btns[2].disabled = true;
+                btns[3].disabled = false;
+              }
+            }
+          } else if (state?.remain) {
+            const btns = o.widget.querySelectorAll('button');
+            o.time.innerText = `${which} paused: ${evaluate({ rem: state.remain }, 'rem#timespan(format::timer precision::s)')}`;
+            btns[0].disabled = btns[3].disabled = false;
+            btns[1].disabled = btns[2].disabled = true;
+          } else {
+            o.time.innerText = '';
+            const btns = o.widget.querySelectorAll('button');
+            btns[0].disabled = false;
+            btns[1].disabled = btns[2].disabled = btns[3].disabled = true;
+          }
+        }
+      }
+      this.checkTimerPrecision(precision);
+    }
+  }
+  checkTimerPrecision(prec) {
+    const ts = this._times;
+    if (!ts) return;
+    if (ts.precision !== prec) {
+      clearTimeout(this._clockint);
+      this._clockint = setInterval(() => this.markdownTimes(), prec * 1000);
+      ts.precision = prec;
     }
   }
   async printMarkdown(md, dl) {
-    if (dl) {
-      const name = ((this.get('pad.name') || 'untitled') + '.html').split('/').pop();
-      download(name, `<html><head><style>
+    const html = `<html><head><style>
 html {
   font-family: sans-serif;
 }
@@ -2340,11 +2765,12 @@ code, .mermaid-chart {
 }
 code {
   white-space: pre-wrap;
+  word-break: break-all;
 }
 table {
   margin: 1em 0;
   border-collapse: collapse;
-  border: 1px sold rgba(128, 128, 128, 0.5);
+  border: 1px solid rgba(128, 128, 128, 0.5);
 }
 td, th {
   padding: 0.25em 0.5em;
@@ -2380,21 +2806,45 @@ h1, h2, h3 {
 }
 ${await (await fetch('./hljs@11.10.0/stackoverflow-light.css')).text()}
 </style></head><body>
-${md}</body></html>`, 'text/html');
+${md}</body></html>`
+    if (dl) {
+      const name = ((this.get('pad.name') || 'untitled') + '.html').split('/').pop();
+      download(name, html, 'text/html');
     } else {
       const frame = document.getElementById('print');
-      frame.contentDocument.body.innerHTML = await renderMD(this.get('pad.text'), { theme: 'light', nochecks: true });
+      frame.contentDocument.body.innerHTML = html;
       frame.contentWindow.print();
     }
   }
   async renderMD() {
+    if (this.lockmd) return;
     const v = this.get('pad.text');
-    if (v && this.get('pad.syntax') === 'markdown') this.set('_markdown', await renderMD(v));
+    if (v && this.get('pad.syntax') === 'markdown') {
+      const { html, timer } = await renderMD(v);
+      this.set('_markdown', html);
+      if (timer) {
+        if (!this._clockint) this._clockint = setInterval(() => this.markdownTimes(), 1000);
+        const old = this._times;
+        const ts = this._times = { precision: 1 };
+        for (const t of this.findAll('.widget .time')) {
+          const w = this.findWidget(t);
+          const i = +w.getAttribute('data-index');
+          const type = Array.prototype.find.call(w.classList, c => c !== 'widget');
+          const d = this.widgetCode(w);
+          if (!this._times[type]) this._times[type] = [];
+          this._times[type][i] = { time: t, widget: w, index: i, opts: d.opts, data: old?.[type]?.[i]?.data || {}, code: d.code };
+        }
+      } else {
+        if (this._clockint) clearInterval(this._clockint);
+        this._clockint = undefined;
+        this._times = undefined;
+      }
+    }
   }
 }
 Window.extendWith(ScratchPad, {
   template: '#scratch-pad',
-  css: `
+  css(data) { return `
 h3 { text-align: left; }
 dt { margin-top: 1rem; font-family: monospace; }
 dd { margin: 0.5em 0 1em 2em; white-space: pre-wrap; }
@@ -2405,7 +2855,18 @@ dd { margin: 0.5em 0 1em 2em; white-space: pre-wrap; }
 .log-entry .time:hover { opacity: 1; }
 .clear-logs { transition: opacity 0.2s ease; opacity: 0.2; }
 .clear-logs:hover { opacity: 1; }
-`,
+table { margin: 0; border-collapse: collapse; border: 1px solid rgba(128, 128, 128, 0.5); }
+td, th { padding: 0.25em 0.5em; border: 1px solid rgba(128, 128, 128, 0.5); }
+th { text-align: center; border-bottom: 1px solid; position: sticky; }
+th { background-color: ${data('raui.primary.bg') || '#fff'}; }
+thead th { top: -1em; }
+.contain thead th { top: 0; }
+tbody th { left: 0; }
+tbody tr:nth-child(2n+1) td { background-color: rgba(128, 128, 128, 0.1); }
+tbody tr:hover td { background-color: rgba(128, 128, 128, 0.25); }
+
+span.counter { margin-right: 1em; }
+`; },
   use: [RauiPopover.default({ name: 'pop' })],
   options: { flex: true, resizable: true, minimize: false, width: '50em', height: '35em' },
   partials: {
@@ -2425,13 +2886,13 @@ dd { margin: 0.5em 0 1em 2em; white-space: pre-wrap; }
 
       this._markd = this.observe('pad.text', debounce(() => {
         this.renderMD();
-      }, 1500));
+      }, 1500, { check: () => !this.lockmd }));
     },
     raise() {
       setTimeout(() => {
         const el = this.find('.editor-el');
         const tabs = this.findComponent('tabs');
-        if (el && (!tabs || this.get('pad.syntax') !== 'markdown' || tabs.get('selected') === 0)) {
+        if (el && !this.get('query') && (!tabs || this.get('pad.syntax') !== 'markdown' || tabs.get('selected') === 0)) {
           const ctx = this.getContext(el);
           ctx.decorators?.ace?.focus();
         }
@@ -2440,13 +2901,14 @@ dd { margin: 0.5em 0 1em 2em; white-space: pre-wrap; }
     destruct() {
       if (this.get('pad._id')) store.release('scratch', this.get('pad._id'));
       if (this._markd) this._markd.cancel();
+      if (this._clockint) clearTimeout(this._clockint);
     },
     render() {
       this.saveDebounced.timeout = this.get('editor.autosave') ?? 15000;
     },
   },
   data() {
-    return { docs, ops: evaluate(docs.operators), fmts: evaluate(docs.formats), expand: {}, pad: { name: '', syntax: 'markdown', text: '' } };
+    return { docs, ops: evaluate(docs.operators), fmts: evaluate(docs.formats), expand: {}, pad: { name: '', syntax: 'markdown', text: '' }, visited: { table: 0 } };
   },
   computed: {
     operators() {
@@ -2474,24 +2936,67 @@ dd { margin: 0.5em 0 1em 2em; white-space: pre-wrap; }
       const base = this.get('_editor');
       const local = this.get('_settings');
       return Object.assign({}, base, local);
-    }
+    },
+    resultCanTree() {
+      const typ = this.get('pad.syntax');
+      if (typ === 'json') {
+        const v = tryJSONParse(this.get('pad.text'));
+        this.set('evalresult', v);
+        return v && typeof v === 'object';
+      }
+      if (typ === 'raport' && typeof this.get('evalresult') === 'object') return true;
+    },
+    resultTree() {
+      const typ = this.get('pad.syntax');
+      let v;
+      if (typ === 'json') v = this.get('evalresult');
+      else if (typ === 'raport') v = this.get('evalresult');
+      if (v && typeof v === 'object') return treeify(v);
+    },
+    resultCanTable() {
+      const typ = this.get('pad.syntax');
+      let v;
+      if (typ === 'json') {
+        const v = tryJSONParse(this.get('pad.text'));
+        this.set('evalresult', v);
+        return v && typeof v === 'object';
+      } else if (typ === 'raport') v = this.get('evalresult');
+      return evaluate({ data: v }, 'data is @[Array<object|array>]');
+    },
+    resultTable() {
+      const typ = this.get('pad.syntax');
+      let v;
+      if (typ === 'json') v = this.get('evalresult');
+      else if (typ === 'raport') v = this.get('evalresult');
+      return run({ type: 'delimited', source: 'data', sources: [{ source: 'data' }] }, { data: { value: v } }, {}, { table: 1 });
+    },
   },
   observe: {
     'pad.name'(n) {
       this.title = `Scratch Pad${n ? ` - ${n}` : ''}`;
       this.saveDebounced && this.saveDebounced();
     },
+    'query.name'(n) {
+      if (typeof n === 'string') this.title = `Query Editor${n ? ` - ${n}` : ''}`;
+    },
     'pad.syntax'() {
       if (typeof this.get('pad.text') === 'string') this.saveDebounced && this.saveDebounced();
     },
     'pad.text'(v) {
       if (typeof v === 'string') this.saveDebounced && this.saveDebounced();
+      this.set('visited', { tree: 0, table: 0 });
     },
     'editor.autosave'(v) {
       if (this.saveDebounced) this.saveDebounced.timeout = v ?? 15000;
     },
     '@style.theme'() {
       this.renderMD();
+    },
+    'query.sql query.processParams': {
+      handler: debounce(function() {
+        const v = this.get('query.sql') || '';
+        this.set('query.params', this.get('query.processParams') ? extractQueryParams(v, this.get('query.params')) : undefined);
+      }, 500),
     },
   },
 });
@@ -2637,7 +3142,7 @@ class HostExplore extends Window {
     }
 
     if (source.condition) {
-      const root = new Root({}, { parameters: params });
+      const root = new Root(Object.assign({}, globalContext), { parameters: params });
       const ok = evaluate(root, source.condition);
       if (!ok) {
         if (source.alternate) return { value: evaluate(root, source.alternate) };
@@ -2782,7 +3287,7 @@ class HostExplore extends Window {
 
       for (const src of report.sources) {
         if (src.condition) {
-          const root = new Root({}, { parameters: params });
+          const root = new Root(Object.assign({}, globalContext), { parameters: params });
           const ok = evaluate(root, src.condition);
           if (!ok) {
             if (src.alternate) data[src.name] = { value: evaluate(root, src.alternate) };
@@ -2822,7 +3327,7 @@ class HostExplore extends Window {
     }
     this.blocked = true;
     try {
-      const res = await request({ action: 'query', query: [query], client });
+      const res = await request({ action: 'query', query: [query], params: processQueryParams(this.get('queryParams')), client });
       this.set('result', res.result);
       this.set('runtime', res.time);
       this.set('affected', res.affected);
@@ -2834,25 +3339,34 @@ class HostExplore extends Window {
     }
     this.blocked = false;
   }
-  async saveQuery() {
+  async saveQuery(ctx) {
     const loaded = this.get('loaded');
     const name = await app.ask(`Enter a query name:`, 'Query Name', loaded?.name || '');
+    const sql = this.get('query');
+    const process = ctx.get('processParams');
+    const params = process ? ctx.get('parameters') : undefined;
     if (name) {
       if (loaded) {
         loaded.name = name;
+        loaded.sql = query;
+        loaded.processParams = !!process;
+        loaded.params = process ? params : undefined;
         await store.save(loaded);
       } else {
-        const res = await store.save({ name, type: 'query', sql: this.get('query') });
+        const res = await store.save({ name, type: 'query', sql, processParams: process ? process : undefined, params: process ? params : undefined });
         await store.acquire('query', res._id);
         this.link(`store.query.${res._id}`, 'loaded', { instance: app });
       }
     }
   }
-  async loadQuery(q) {
+  async loadQuery(q, ctx) {
     const cur = this.get('loaded');
     if (q) {
       await store.acquire('query', q);
       this.link(`store.query.${q}`, 'loaded', { instance: app });
+      ctx.set('query', this.get('loaded.sql'));
+      ctx.set('processParams', !!this.get('loaded.processParams'));
+      ctx.set('parameters', (this.get('loaded.params') || []).slice());
     } else if (cur) {
       this.set('query', cur.sql);
       this.unlink('loaded');
@@ -2994,7 +3508,7 @@ dd { white-space: pre-wrap; }
         const con = cons.find(c => c.constr === constr);
         if (!con) continue;
         const list = hosts[constr];
-        res[constr] = Raport.evaluate({ list, con, filter, apply, last, results: provided }, `let flt = parse('=>{filter}' raport:1);
+        res[constr] = evaluate(Object.assign({}, globalContext, { list, con, filter, apply, last, results: provided }), `let flt = parse('=>{filter}' raport:1);
 let connection = con.config;
 let constr = con.constr;
 filter(list |entry| => {
@@ -3024,6 +3538,12 @@ filter(list |entry| => {
         }
       },
       init: false,
+    },
+    'query processQueryParams': {
+      handler: debounce(function() {
+        const v = this.get('query') || '';
+        this.set('queryParams', this.get('processQueryParams') ? extractQueryParams(v, this.get('queryParams')) : undefined);
+      }, 500),
     }
   },
 });
@@ -3136,7 +3656,7 @@ class Report extends Window {
   async fetchSource(msg) {
     const src = msg.source;
     if (src.condition) {
-      const root = new Root({}, { parameters: msg.params || {} });
+      const root = new Root(Object.assign({}, globalContext), { parameters: msg.params || {} });
       const ok = evaluate(root, src.condition);
       if (!ok) {
         if (src.alternate) this.respond({ data: evaluate(root, src.alternate) }, msg);
@@ -3215,7 +3735,7 @@ class Report extends Window {
     report.type = 'report';
     report.definition = (await this.request({ action: 'get', get: 'report' })).get;
     report.sources = (await this.request({ action: 'get', get: 'sources' })).get;
-    for (const s of report.sources) {
+    for (const s of (report.sources || [])) {
       if (['pg-fetch', 'query', 'query-all'].includes(s.type) && s.data) {
         delete s.cached;
         delete s.data;
@@ -3293,19 +3813,7 @@ Window.extendWith(SourceEdit, {
   },
   observe: {
     'source.query'(q) {
-      if (q) {
-        let list = [];
-        q.replaceAll(/\$([0-9])+/g, (_, n) => { list.push(+n); return _; });
-        list = Raport.evaluate({ list }, 'sort(unique(list))');
-        for (let i = 0; i < list.length; i++) {
-          if (list[i] !== i + 1) {
-            this.set('error', `Parameter $${i + 1} expected, but found $${list[i]}`);
-            return;
-          }
-        }
-        this.set('error', undefined);
-        this.set('paramArray', list.map(p => ''));
-      }
+      if (q) this.set('paramArray', extractQueryParams(q))
     },
   },
 });
@@ -3313,6 +3821,7 @@ Window.extendWith(SourceEdit, {
 const wsUrl = new URL(window.location);
 wsUrl.protocol = wsUrl.protocol === 'https:' ? 'wss:' : 'ws:';
 wsUrl.pathname = '/ws';
+wsUrl.hash = '';
 function connect() {
   if (globalThis.ws) globalThis.ws.close();
   let ws = globalThis.ws = new WebSocket(wsUrl);
@@ -3449,17 +3958,17 @@ function cloneDeep(any) {
 
 function queryParams(definition, source, params) {
   if (source.query) {
-    const ctx = new Raport.Root(definition.context ? cloneDeep(definition.context) : {});
+    const ctx = new Raport.Root(Object.assign({}, globalContext, definition.context ? cloneDeep(definition.context) : {}));
     ctx.parameters = params;
-    if (definition.extraContext) Raport.evaluate(definition.extraContext)
+    if (definition.extraContext) evaluate(ctx, definition.extraContext)
     params = params || {};
     if (definition.parameters) {
       for (const p of definition.parameters) {
-        if (!(p.name in params) && p.init) params[p.name] = Raport.evaluate(ctx, p.init);
+        if (!(p.name in params) && p.init) params[p.name] = evaluate(ctx, p.init);
       }
     }
     if (source.parameters) {
-      return source.parameters.map(p => Raport.evaluate(ctx, p));
+      return source.parameters.map(p => evaluate(ctx, p));
     } else return [];
   }
 }
@@ -3540,6 +4049,11 @@ function unloading() {
   clearTimeout(unloadTm);
 }
 
+if (window.Notification && typeof window.Notification === 'function' && Notification.permission) {
+  if (Notification.permission === 'granted') app.set('canNotify', true);
+  else if (Notification.permission === 'denied') app.set('canNotify', false);
+}
+
 function debounce(fn, timeout = 1000, opts) {
   let tm;
   opts = opts || {};
@@ -3550,8 +4064,9 @@ function debounce(fn, timeout = 1000, opts) {
       tm = null;
     }
   };
-  const callback = () => {
-    fn.apply(opts.target, lastArgs);
+  let target;
+  const callback = function() {
+    fn.apply(target, lastArgs);
     tm = null;
   };
   let res;
@@ -3561,6 +4076,7 @@ function debounce(fn, timeout = 1000, opts) {
     if (res.timeout < 0) return;
     if (res.timeout < 200 || isNaN(res.timeout)) res.timeout = 1000;
     lastArgs = args;
+    target = opts.target || this;
     tm = setTimeout(callback, res.timeout);
   });
   res.timeout = timeout;
@@ -3614,6 +4130,27 @@ function dirify(v, oldtree) {
   return tree;
 }
 
+function extractQueryParams(query, cur = []) {
+  // TODO: handle quotes and whatnot
+  let list = [];
+  query.replaceAll(/--.*$/g, '').replaceAll(/\$([0-9]+)+/g, (_, n) => { list.push(+n); return _; });
+  list = evaluate({ list }, 'sort(unique(list))');
+  for (let i = 0; i < list.length; i++) if (i + 1 !== list[i]) return undefined;
+  return list.map(i => cur[i - 1] || '');
+}
+
+function processQueryParams(params) {
+  if (Array.isArray(params) && !params.length) params = undefined;
+  if (params) {
+    params = params.map(p => {
+      const r = evaluate(p);
+      if (r === undefined) return p;
+      return r;
+    });
+  }
+  return params ? [params] : undefined;
+}
+
 function csvToHtml(text) {
   const dark = Ractive.styleGet('theme') === 'dark';
   return `<html>
@@ -3654,7 +4191,7 @@ async function makeRequest(config, params) {
     const entry = requestCache[key];
     if (entry) return entry.cache;
   }
-  const root = new Root({}, { parser: parseTemplate, parameters: params });
+  const root = new Root(globalContext, { parser: parseTemplate, parameters: params });
   const req = { url: evaluate(root, config.url) };
   if (Array.isArray(config.headers)) {
     req.headers = {};
@@ -3667,7 +4204,7 @@ async function makeRequest(config, params) {
     if (config.server) res = (await request(Object.assign({ action: 'fetch' }, req))).result;
     else res = await (await fetch(req.url, req)).text();
     if (!config.eval || config.eval === 'json') res = JSON.parse(res);
-    else if (config.eval === 'raport') res = evaluate({}, res);
+    else if (config.eval === 'raport') res = evaluate(globalContext, res);
     else if (config.eval === 'try') {
       let val = res;
       if (val[0] === '<') return evaluate({ val }, 'parse(val xml:1)');
@@ -3688,9 +4225,39 @@ async function makeRequest(config, params) {
   }
 }
 
+const sounds = ['dong', 'time-beep', 'notify-whistle', 'whistle', 'relax', 'next'];
+function notificate(details) {
+  details = details || {};
+  if (sounds.includes(details.sound)) {
+    const a = new Audio(`/${details.sound}.mp3`);
+    a.play();
+  }
+  if (details.message) {
+    const e = { icon: '/icon.png' };
+    if (details.body) e.body = details.body;
+    const n = new Notification(details.message, e);
+    if (typeof details.timeout === 'number') setTimeout(() => n.close(), details.timeout);
+  }
+}
+
 window.addEventListener('beforeunload', unload);
 window.addEventListener('unload', unloading);
 window.addEventListener('storage', debounce(readSync, 5000));
+window.addEventListener('hashchange', async () => {
+  const loc = window.location;
+  if (loc.hash && loc.hash.startsWith('#scratch/')) {
+    const name = loc.hash.slice(9);
+    const list = await store.list('scratch');
+    for (const s of list) {
+      if (s.name === name) {
+        app.openScratch(s);
+        break;
+      }
+    }
+  }
+  window.location.hash = '';
+});
+if (window.location.hash) window.location.hash = '';
 
 // Set up debug helper
 let el;
@@ -3734,14 +4301,8 @@ Object.defineProperty(globalThis, 'R', {
   }),
 });
 
-const icon = `data:image/svg+xml,%3Csvg%20width%3D'20'%20height%3D'20'%20viewBox%3D'85%20114%2060%2061'%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%3E%3Cpath%20style%3D'fill%3A%23787878%3Bfill-opacity%3A1%3Bstroke%3A%23000%3Bstroke-width%3A1.32292%3Bstroke-dasharray%3Anone'%20d%3D'M120.956%20121.59c0%203.514-7.857%206.363-17.55%206.363-9.692%200-17.549-2.849-17.549-6.363s7.857-6.364%2017.55-6.364c9.692%200%2017.549%202.85%2017.549%206.364'%2F%3E%3Cpath%20style%3D'fill%3A__FILL__%3Bfill-opacity%3A1%3Bstroke%3A%23000%3Bstroke-width%3A1.32292%3Bstroke-dasharray%3Anone'%20d%3D'M126.415%20127.381c9.247.18%2016.592%202.957%2016.592%206.355%200%203.514-7.857%206.363-17.55%206.363-3.388%200-6.552-.348-9.235-.951l.71-2.087z'%2F%3E%3Cpath%20style%3D'fill%3A%23787878%3Bfill-opacity%3A.5%3Bstroke%3A%23000%3Bstroke-width%3A1.32292%3Bstroke-dasharray%3Anone%3Bstroke-opacity%3A1'%20d%3D'm116.854%20137.113-4.338%2014.17-12.726%2010.932c-7.956-.602-13.92-3.15-13.919-6.096l.001-34.302c2.57%208.399%2033.886%207.802%2035.046%200v11.16z'%2F%3E%3Cpath%20style%3D'fill%3A__FILL__%3Bfill-opacity%3A.5%3Bstroke%3A%23000%3Bstroke-width%3A1.32292%3Bstroke-dasharray%3Anone%3Bstroke-opacity%3A1'%20d%3D'M107.923%20168.386v-13.157l4.593-3.945%203.796-12.297c7.727%202.127%2024.138%201.49%2026.657-5.023v34.422m-.007-.254c0%203.514-7.847%206.363-17.527%206.363s-17.527-2.849-17.527-6.363'%2F%3E%3Cpath%20style%3D'fill%3A%23fff%3Bfill-opacity%3A0%3Bstroke%3A%23010207%3Bstroke-width%3A1.32292%3Bstroke-dasharray%3Anone%3Bstroke-opacity%3A1'%20d%3D'm90.465%20170.226%2022.051-18.942%204.338-14.17%2016.484-16.774'%20fill%3D'none'%2F%3E%3C%2Fsvg%3E`;
-
-function setIcon(color = '#325932') {
-  const head = document.getElementsByTagName('head')[0];
-  const prev = head.querySelector('link[rel="shortcut icon"]');
-  const next = document.createElement('link');
-  next.rel = 'shortcut icon';
-  next.href = icon.replace(/__FILL__/g, encodeURIComponent(color));
-  prev.remove();
-  head.appendChild(next);
+function tryJSONParse(str) {
+  try {
+    return JSON.parse(str);
+  } catch {}
 }

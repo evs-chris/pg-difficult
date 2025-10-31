@@ -28,7 +28,7 @@ zip -r pg-difficult_deno.zip app
 cd ../
 
 CHECKSUM=`sha256sum -b ./build/pg-difficult_deno.zip | cut -d ' ' -f 1 | xxd -r -p | base64`
-cat nix.template | sed -e "s/VERSION/${VERSION}/g;s/CHECKSUM/${CHECKSUM}/g" | tee nix/pg-difficult.nix
+cat nix.template | sed -e "s/VERSION/${VERSION}/g; s:CHECKSUM:${CHECKSUM}:g" | tee nix/pg-difficult.nix
 
 # try to make it easier for nix?
 tar -czf build/nix.tar.gz nix
