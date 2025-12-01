@@ -983,7 +983,9 @@ async function makeRequest(config: FetchRequest, ws: WebSocket, id: string) {
     if (config.body) init.body = config.body;
     if (config.method) init.method = config.method;
     const res = await fetch(config.url, init);
-    notify({ id, action: 'result', result: await res.text() }, ws);
+    const headers: { [k: stirng]: string } = {};
+    for (const [k, v] of res.headers) headers[k] = v;
+    notify({ id, action: 'result', result: await res.text(), headers, status: res.status, statusText: res.statusText }, ws);
   } catch (e) {
     notify({ id, action: 'result', result: { error: e.stack } });
   }

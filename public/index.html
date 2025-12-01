@@ -18,6 +18,7 @@
     <script src="./raui@0.15.6/Popover.js"></script>
     <script src="./raui@0.15.6/Tabs.js"></script>
     <script src="./raui@0.15.6/Table.js"></script>
+    <script src="./raui@0.15.6/Card.js"></script>
     <script src="./raui@0.15.6/VirtualList.js"></script>
     <script src="./pouchdb@9.0.0.js"></script>
 <style>
@@ -1294,7 +1295,7 @@
         {{#if ~/unsaved && !nosave}}<div style="padding: 0.5em; opacity: 0.7; background-color: rgba(128, 128, 128, 0.5); border-radius: 0 0 0.5em 0.5em; height: 1em; cursor: pointer;" title="There are unsaved changes in this pad. The changes will automatically save after your autosave timeout, or you can click here to save now." on-click="@.save()">unsaved</div>{{/if}}
         <div style="flex-grow: 1;" />
       {{else}}
-        <label as-field class=inline title="Separating segments of a file name with / will result in the pad appearing in a sub-node of the scratch pad tree view."><input value="{{pad.name}}" placeholder="Name..." lazy=1000 /></label>
+        <label as-field class=inline title="Separating segments of a file name with / will result in the pad appearing in a sub-node of the scratch pad tree view." style="flex-grow: 1;"><input value="{{pad.name}}" placeholder="Name..." lazy=1000 style="width: 100%;" /></label>
         <div style="flex-grow: 1; display: flex; justify-content: space-around;">
           {{#if ~/pad._id}}
             {{#if ~/unsaved && !nosave}}<div style="padding: 0.5em; opacity: 0.7; background-color: rgba(128, 128, 128, 0.5); border-radius: 0 0 0.5em 0.5em; height: 1em; cursor: pointer;" title="There are unsaved changes in this pad. The changes will automatically save after your autosave timeout, or you can click here to save now." on-click="@.save()">unsaved</div>{{/if}}
@@ -1337,6 +1338,7 @@
             <option>pgsql</option>
             <option>php</option>
             <option>plain_text</option>
+            <option>postman</option>
             <option>python</option>
             <option>raport</option>
             <option>ruby</option>
@@ -1363,6 +1365,60 @@
         {{/if}}
       </div>
     </div>
+  {{/partial}}
+  {{#partial request}}
+    <div style="display: flex;">
+      <label as-field style="flex-grow: 0;">Method<select value="{{.request.method}}">{{#each 'GET POST PUT DELETE OPTIONS HEAD'.split(' ')}}<option>{{.}}</option>{{/each}}</select></label>
+      <label as-field style="flex-grow: 1;">URL<input value="{{.request.url.raw}}" /></label>
+    </div>
+    <fieldset>
+      <legend>Headers <button class="flat" on-click="@context.push('.request.header', { key: '', value: '', type: 'text' })" title="Add a header">+</button></legend>
+      {{#each .request.header}}
+        <div>
+          <label as-field>Name<input value="{{.key}}" /></label>
+          <label as-field>Value<input value="{{.value}}" /></label>
+          <label as-field>Type<select value="{{.type}}"><option>text</option></select></label>
+          <label as-field><button class=reject on-click="@context.splice('../', @index, 1)">Remove</button></label>
+        </div>
+      {{else}}
+        <div>No headers defined.</div>
+      {{/each}}
+    </fieldset>
+    {{#if ['POST', 'PUT', 'DELETE'].includes(.request.method)}}
+      <fieldset>
+        <legend><input type=checkbox twoway=false checked="{{.request.body}}" on-change="@context.set('request.body', @node.checked ? {} : undefined)" /> Body</legend>
+        {{#if !!.request.body}}
+          <label as-field class=inline><select value="{{.request.body.mode}}"><option>none</option><option>raw</option><option>form-data</option><option>x-www-form-urlencoded</option></select></label>
+          {{#if .request.body.mode === 'raw'}}
+            <label as-field>Content<textarea style="min-height: {{Math.min(30, @.lineCount(.request.body.raw) + 4)}}em;">{{.request.body.raw}}</textarea></label>
+          {{/if}}
+        {{/if}}
+      </fieldset>
+    {{/if}}
+  {{/partial}}
+  {{#partial endpoints}}
+    {{#each .item}}
+      <card section pad expandable expanded=false>
+        <title>
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span>{{.name}}</span>
+            <span style="font-size: 0.75em;">
+              <button on-click="@context.push('.item', { name: 'New Endpoint' }), false" title="Add child endpoint">+</button>
+              <button style="margin-left: 1em;" on-click="@context.splice('../', @index, 1), false" title="Remove this enpoint and all of its children" class=reject>Remove</button>
+            </span>
+          </div>
+        </title>
+        <label as-field>Name<input value="{{.name}}" /></label>
+        {{#if .request}}
+          <label as-field>Method<select value="{{.request.method}}">{{#each 'GET POST PUT DELETE OPTIONS HEAD'.split(' ')}}<option>{{.}}</option>{{/each}}</select></label>
+          <br/>
+          {{>request}}
+        {{/if}}
+        {{#if .item}}
+          {{>endpoints}}
+        {{/if}}
+      </card>
+    {{/each}}
   {{/partial}}
   <div style="flex-grow: 1; position: relative; display: flex; height: 100%;">
     {{#if ~/query}}
@@ -1507,6 +1563,127 @@
             {{{~/resultTable}}}
           {{/if}}
         </tab>
+      </tabs>
+    {{elseif pad.syntax === 'postman'}}
+      {{#if ~/unsaved}}<div style="position: absolute; left: 50%; top: 0; padding: 0.5em; opacity: 0.7; background-color: rgba(128, 128, 128, 0.5); border-radius: 0 0 0.5em 0.5em; height: 1em; z-index: 100; cursor: pointer;" title="There are unsaved changes in this pad. The changes will automatically save after your autosave timeout, or you can click here to save now." on-click="@.save()">unsaved</div>{{/if}}
+      <tabs pad flex style="height: 100%;" bind-selected="~/activeTab">
+        <tab title="Request">
+          <div class=postman>
+            <label as-field>Request to Run<select value="{{~/_activePostman}}" on-change="@.set('activePostman', JSON.parse(JSON.stringify(~/_activePostman)))">
+              <option value="{{undefined}}">(Select an Endpoint)</option>
+              <option value="{{ { name: 'Custom Request' } }}">Custom...</option>
+              {{#each ~/endpoints}}<option value="{{.}}">{{@key}}</option>{{/each}}
+            </select></label>
+            <label as-field><input type=checkbox twoway=false checked="{{@global.clientOnly || ~/forceClient}}" on-change="@.set('forceClient', @node.checked)" disabled="{{@global.clientOnly}}" /> Fetch from browser?</label>
+            {{#if ~/activePostman}}{{#with ~/activePostman}}
+              {{>request}}
+            {{/with}}{{/if}}
+            <br/>
+            {{#if ~/activePostman}}
+              <div style="display: flex; justify-content: space-between; margin-bottom: 1em;">
+                <button on-click="@.makeRequest()" title="Make the request using {{#if @global.clientOnly}}the browser fetch agent. This will require the destination endpoint to support CORS for this request.{{else}}the server fetch agent. The destination endpoint does not have to support CORS for this request.{{/if}}">Send Request</button>
+                <button on-click="@.set('tmp.code', @.renderFetchRequest())">View Fetch</button>
+                <button on-click="@.set('tmp.code', @.renderCurlRequest())">View cURL</button>
+              </div>
+              <div style="position: relative;">
+                {{#if ~/tmp.code}}
+                  {{{~/tmp.code}}}
+                  <button class=ghost style="position: absolute; top: 0.5em; right: 0.5em;" on-click="copyToClipboard(~/tmp.code)" title="Copy text to clipboard">Copy</button>
+                {{/if}}
+              </div>
+            {{/if}}
+          </div>
+        </tab>
+        <tab title="Response" hidden="{{!postmanResult}}">
+          {{#with postmanResult}}
+            <h3 style="margin: 0.5em 0 1em; 0">{{.status}} - {{.statusText}}</h3>
+            <fieldset>
+              <legend>Headers</legend>
+              <dl>
+                {{#each .headers}}
+                <dt>{{@key}}</dt>
+                <dd>{{.}}</dd>
+                {{/each}}
+              </dl>
+            </fieldset>
+            {{#if .body}}
+              <div style="position: relative; margin-top: 1em;">
+                <pre><code class=hljs>{{.body}}</code></pre>
+                <button class=ghost style="position: absolute; top: 0.5em; right: 0.5em;" on-click="copyToClipboard(.body)" title="Copy text to clipboard">Copy</button>
+              </div>
+            {{/if}}
+          {{/with}}
+        </tab>
+        <tab title="Tree" hidden="{{!_resultTree}}" no-pad on-enter="@.add('visited.tree')">
+          <div style="position: absolute; top: 0; right: 0; background-color: rgba(128, 128, 128, 0.2); border-radius: 0 0 0 1em;">
+            <label as-field class=inline style="min-height: 2.7em;"><input type="checkbox" checked="{{~/expandAll}}" /> Expand all?</label>
+          </div>
+          {{#if ~/visited.tree}}
+            {{>root ~/_resultTree}}
+          {{/if}}
+        </tab>
+        <tab title="Endpoints">
+          <div class=postman>
+            {{>endpoints ~/postman}}
+          </div>
+        </tab>
+        <tab title="Variables">
+          {{#each ~/postman.variable}}
+            <div><label as-field>Name<input value="{{.key}}" /></label><label as-field>Value<input value="{{.value}}" /></label><label as-field><button class=reject on-click="@context.splice('../', @index, 1)">Delete</button></label></div>
+          {{else}}
+            No variables defined
+          {{/each}}
+        </tab>
+        <tab title="History" hidden="{{!~/history.length}}">
+          {{#each ~/history}}
+            <card no-pad section expandable expanded=false>
+              <title>
+                <div style="display: flex; justify-content: space-between; align-items: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                  <span style="overflow: hidden; text-overflow: ellipsis; display: inline-block;" title="{{.request.url}} - {{.result.statusText}}">{{.result.status}} - {{.request.method}} {{.request.url}}</span>
+                  <span>
+                  </span>
+                </div>
+              </title>
+              <div style="display: flex; flex-direction: column; flex-grow: 1;">
+                <tabs height=dynamic>
+                  <tab title="Response Body">
+                    <pre><code class=hljs>{{.result.body}}</code></pre>
+                  </tab>
+                  <tab title="Response Headers">
+                    <pre><code class=hljs>{{JSON.stringify(.result.headers, null, '  ')}}</code></pre>
+                  </tab>
+                  <tab title="Request Body" hidden="{{!.request.body}}">
+                    <pre><code class=hljs>{{.request.body}}</code></pre>
+                  </tab>
+                  <tab title="Request Headers">
+                    <pre><code class=hljs>{{JSON.stringify(.request.headers, null, '  ')}}</code></pre>
+                  </tab>
+                </tabs>
+              </div>
+              <div style="display: flex; justify-content: space-between;" class=rcard-actions>
+                <div>
+                  <button on-click="@.loadPostmanResult(.result)" title="Reload this result in the results tab(s)">Review</button>
+                  <button on-click="@.reloadRequest(.request), @.set('activeTab', 0)" title="Reload this request in the request tab to be run again">Reload</button>
+                </div>
+                <div>
+                  <button on-click="@.makeRequest(.request)" title="Rerun this request without modification">Rerun</button>
+                </div>
+                <div>
+                  <button class=reject on-click="@context.splice('../', @index, 1)" title="Remove this result from the history">Remove</button>
+                </div>
+              </div>
+            </card>
+          {{/each}}
+        </tab>
+        <tab no-pad title="JSON" lazy>
+          <div style="flex-grow: 1; display: flex; flex-direction: column;">
+            {{>header, true as nosave}}
+            <div style="flex-grow: 1;" class="editor-el" as-ace="{ bind: 'pad.text', syntax: 'json', theme: @style.theme == 'dark' ? (~/editor.darkTheme || 'tomorrow_night_eighties') : (~/editor.lightTheme || 'tomorrow'), wrap: ~/editor.wrap, highlightActive: ~/editor.highlightActive, fontSize: '1em', font: 'monospace', printMargin: ~/editor.printMargin, keymode: ~/editor.keymode, lineNumbers: ~/editor.lineNumbers, relativeLineNumbers: ~/editor.relativeLineNumbers, highlightSelected: ~/editor.highlightSelected, softTabs: ~/editor.softTabs, tabSize: ~/editor.tabSize, lazy: 300 }" on-save="@.save()" />
+          </div>
+        </tab>
+        <tab right button title="Add Endpoint" on-click="@.push('postman.item', { name: 'New Endpoint' })" hidden="{{~/activeTab !== 3}}" />
+        <tab right button on-click="@.push('postman.variable', { key: '', value: '' })" title="Add Variable" hidden="{{~/activeTab !== 4}}" />
+        <tab right button on-click="@.set('history', [])" title="Clear" hidden="{{~/activeTab !== 5}}" />
       </tabs>
     {{elseif pad && 'text' in pad}}
       <div style="flex-grow: 1; display: flex; flex-direction: column;">

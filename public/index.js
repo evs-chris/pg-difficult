@@ -2,7 +2,7 @@ const { evaluate, template, registerOperator, parse, parseTemplate, parsePath, r
 const { docs } = Raport.Design;
 const { Window } = RauiWindow;
 
-Ractive.use(RauiButton.plugin(), RauiForm.plugin({ includeStyle: true }), RauiShell.plugin(), RauiSplit.plugin(), RauiMenu.plugin(), RauiWindow.plugin(), RauiAppBar.plugin(), RauiTabs.plugin(), RauiTable.plugin({ includeGrid: true }), RauiVirtualList.plugin());
+Ractive.use(RauiButton.plugin(), RauiForm.plugin({ includeStyle: true }), RauiShell.plugin(), RauiSplit.plugin(), RauiMenu.plugin(), RauiWindow.plugin(), RauiAppBar.plugin(), RauiTabs.plugin(), RauiTable.plugin({ includeGrid: true }), RauiVirtualList.plugin(), RauiCard.plugin());
 
 Ractive.perComponentStyleElements = true;
 
@@ -859,8 +859,9 @@ const app = globalThis.app = new App({
     render() {
       // set up mobile resize
       const resize = size => {
+        size = size?.center || size;
         if (!size || !size.width || !size.height) return;
-        if (size.width > 100 && size.height > 60) this.host.set('userMax', false);
+        if (size.width > 80 && size.height > 65) this.host.set('userMax', false);
         else this.host.set('userMax', true);
       };
 
@@ -2311,7 +2312,7 @@ const renderMD = (function() {
   let id = 1;
   let widgets = {};
   let timer = false;
-  return async function(str, opts = {}) {
+  const res = async function(str, opts = {}) {
     theme = opts.theme || Ractive.styleGet('theme');
     widgets = {};
     timer = false;
@@ -2404,6 +2405,8 @@ const renderMD = (function() {
     html = html.replace(/\<a (href="https?:\/\/)/g, '<a target="_blank" $1');
     return { html, timer };
   };
+  res.checkLanguage = checkLanguage;
+  return res;
 })();
 
 class ScratchPad extends Window {
@@ -2434,6 +2437,11 @@ class ScratchPad extends Window {
     }
     if (old?._id) store.release('scratch', old._id);
     this.lock = false;
+    if (this.get('pad.syntax') === 'postman') {
+      this.lockPostman = true;
+      this.set('postman', JSON.parse(this.get('pad.text')));
+      this.lockPostman = false;
+    }
   }
   async loadQuery(id) {
     this.lock = true;
@@ -2534,6 +2542,84 @@ class ScratchPad extends Window {
   }
   string(v) {
     return v === undefined ? 'undefined' : JSON.stringify(v);
+  }
+
+  buildRequest() {
+    const req = this.get('activePostman.request');
+    const opts = app.get('scratchroot') || {};
+    const ctx = new Root(Object.assign({}, globalContext), opts);
+    const vars = (this.get('postman.variable') || []).reduce((a, c) => (a[c.key] = template(ctx, a.value), a), {});
+    ctx.value = Object.assign(ctx.value, vars);
+    ctx.sources = Object.assign({}, opts.sources);
+    ctx.log = this.log;
+    const r = { url: template(ctx, req.url.raw), method: req.method || 'GET', headers: req.header.reduce((a, c) => (a[template(ctx, c.key)] = template(ctx, c.value), a), {}) };
+    if (req.body?.mode === 'raw' && req.body?.raw && !['GET', 'OPTIONS', 'HEAD'].includes(req.method || 'GET')) r.body = template(ctx, req.body.raw);
+    return r;
+  }
+  renderFetchRequest() {
+    const req = this.buildRequest();
+    renderMD.checkLanguage('js');
+    const res = `<pre><code class="hljs javascript">${hljs.highlight(`fetch(${JSON.stringify(req.url)}, {
+  method: ${JSON.stringify(req.method)}, ${Object.keys(req.headers || {}).length > 0 ? `
+  headers: ${JSON.stringify(req.headers, null, '  ').replace(/^(  |})/gm, '  $1')},` : ''}${req.body ? `
+  body: ${JSON.stringify(req.body)},` : ''}
+});`, { language: 'javascript', ignoreIllegals: true }).value}</code></pre>`;
+    return res;
+  }
+  renderCurlRequest() {
+    const req = this.buildRequest();
+    renderMD.checkLanguage('sh');
+    const res = `<pre><code class="hljs bash">${hljs.highlight(`curl --request ${req.method} \\${Object.keys(req.headers || {}).length > 0 ? `
+  ${Object.entries(req.headers).map(([k, v]) => `-H "${k}: ${v}" \\`).join('\n  ')}` : ''}${req.body ? `
+  -d '${req.body.replace(/'/g, '\\\'').replace(/\r/g, '\\r').replace(/\n/g, '\\n')}' \\` : ''}
+  ${req.url}`, { language: 'bash' }).value}</code></pre>`;
+    return res;
+  }
+  reloadRequest(req) {
+    this.set('_activePostman', undefined)
+    this.set('activePostman', {
+      name: 'Replay',
+      request: {
+        url: { raw: req.url },
+        method: req.method,
+        body: req.body ? { mode: 'raw', raw: req.body } : undefined,
+        header: Object.entries(req.headers).map(([k, v]) => ({ key: k, value: v, type: 'text' })),
+      }
+    });
+  }
+  loadPostmanResult(res) {
+    this.set('postmanResult', JSON.parse(JSON.stringify(res)));
+    let tree;
+    if (res.headers['content-type'].includes('json')) tree = treeify(tryJSONParse(res.body));
+    else if (res.headers['content-type'].includes('xml')) tree = treeify(evaluate({ txt: res.body }, 'parse(txt xml:1)'));
+
+    this.set('_resultTree', tree);
+    if (tree) {
+      this.set('visited.tree', 1);
+      this.set('activeTab', 2);
+    } else {
+      this.set('activeTab', 1);
+    }
+  }
+  async makeRequest(req) {
+    const r = req || this.buildRequest();
+    if (globalThis.clientOnly || this.get('forceClient')) {
+      const res = await fetch(r.url, r);
+      const headers = {};
+      for (const [k, v] of res.headers) headers[k] = v;
+      const rr = { body: await res.text(), status: res.status, statusText: res.statusText, headers };
+      this.loadPostmanResult(rr);
+      this.unshift('history', { request: r, result: rr, stamp: new Date() });
+    } else {
+      r.action = 'fetch';
+      const res = await request(r);
+      const rr = { body: res.result, status: res.status, statusText: res.statusText, headers: res.headers };
+      this.loadPostmanResult(rr);
+      this.unshift('history', { request: r, result: rr, stamp: new Date() });
+    }
+  }
+  lineCount(str) {
+    return (str || '').split('\n').length;
   }
 
   findWidget(el) {
@@ -2864,8 +2950,12 @@ thead th { top: -1em; }
 tbody th { left: 0; }
 tbody tr:nth-child(2n+1) td { background-color: rgba(128, 128, 128, 0.1); }
 tbody tr:hover td { background-color: rgba(128, 128, 128, 0.25); }
-
 span.counter { margin-right: 1em; }
+.postman fieldset { margin: 0.5em 0; }
+.rcard-with-tabs { max-width: calc(100% - 15em); box-sizing: border-box; }
+button.ghost { opacity: 0.05; transition: opacity 0.2s ease; }
+button.ghost:hover { opacity: 1; }
+code.hljs { border-radius: 0.5em; }
 `; },
   use: [RauiPopover.default({ name: 'pop' })],
   options: { flex: true, resizable: true, minimize: false, width: '50em', height: '35em' },
@@ -2970,6 +3060,22 @@ span.counter { margin-right: 1em; }
       else if (typ === 'raport') v = this.get('evalresult');
       return run({ type: 'delimited', source: 'data', sources: [{ source: 'data' }] }, { data: { value: v } }, {}, { table: 1 });
     },
+    endpoints() {
+      const res = {};
+      function walk(i, p) {
+        const pp = `${p ? `${p} \u232a ` : ''}${i.name || (p ? 'Unnamed' : '')}`;
+        if (i.request) {
+          res[pp] = i;
+        }
+        if (Array.isArray(i.item)) {
+          for (const ii of i.item) {
+            walk(ii, pp);
+          }
+        }
+        return res;
+      }
+      return walk(this.get('postman'), '');
+    },
   },
   observe: {
     'pad.name'(n) {
@@ -2985,6 +3091,18 @@ span.counter { margin-right: 1em; }
     'pad.text'(v) {
       if (typeof v === 'string') this.saveDebounced && this.saveDebounced();
       this.set('visited', { tree: 0, table: 0 });
+      if (!this.lockPostman && this.get('pad.syntax') === 'postman') {
+        this.lockPostman = true;
+        this.set('postman', JSON.parse(v));
+        this.lockPostman = false;
+      }
+    },
+    postman(v) {
+      if (v && !this.lockPostman) {
+        this.lockPostman = true;
+        this.set('pad.text', JSON.stringify(v, null, '  '));
+        this.lockPostman = false;
+      }
     },
     'editor.autosave'(v) {
       if (this.saveDebounced) this.saveDebounced.timeout = v ?? 15000;
