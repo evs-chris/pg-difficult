@@ -955,14 +955,15 @@ const app = globalThis.app = new App({
     try {
       if (file) file = await app.pickFile();
       let m;
-      if ((m = /\.\w+$/.exec(file.name))) {
+      if (file && (m = /\.\w+$/.exec(file.name))) {
         const ext = m[0].slice(1);
         if (ScratchSyntax.concat(['txt', 'md', 'js', 'ts', 'go', 'hbs', 'wiki', 'py', 'cpp']).includes(ext)) {
           file.name = file.name.slice(0, file.name.length - ext.length - 1);
           file.syntax = { md: 'markdown', js: 'javascript', ts: 'typescript', go: 'golang', hbs: 'handlebars', txt: 'plain_text', wiki: 'mediawiki', py: 'python', cpp: 'c_cpp' }[ext] || ext;
         }
       }
-    } catch {
+    } catch (e) {
+      console.warn(e);
       return;
     }
     const win = new ScratchPad();
