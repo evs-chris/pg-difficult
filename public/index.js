@@ -2356,8 +2356,12 @@ const renderMD = (function() {
           return evaluate(globalContext, code);
         } else if (lang === 'raport-template+html' || lang === 'raport-tpl+html' || lang === 'rptpl+html') {
           return template(globalContext, code);
-        } else if (lang === 'raport+text') {
-          return `<pre><code class="hljs text">${evaluate(globalContext, code)}</code></pre>`;
+        } else if (lang.startsWith('raport+text') || lang.startsWith('raport+code')) {
+          const idx = lang.indexOf(' ');
+          const args = ~idx ? evaluate(globalContext, `{${lang.slice(idx)}}`) : {};
+          let txt = evaluate(globalContext, code);
+          if (args.lang || args.language) txt = hljs.highlight(txt, { language: args.lang || args.language, ignoreIllegals: true }).value;
+          return `<pre><code class="hljs ${args.lang || args.language || 'text'}">${txt}</code></pre>`;
         } else if (lang.startsWith('csv+table')) {
           if (!('header' in opts) && lang.includes('nohead')) opts.header = 0;
           if (!('order' in opts) && lang.includes('noorder')) opts.order = 0;
