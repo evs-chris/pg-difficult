@@ -857,12 +857,16 @@ const app = globalThis.app = new App({
   },
   on: {
     render() {
+      let maxLock = false, userMax = false;
       // set up mobile resize
       const resize = size => {
         size = size?.center || size;
         if (!size || !size.width || !size.height) return;
-        if (size.width > 80 && size.height > 65) this.host.set('userMax', false);
+
+        maxLock = true;
+        if (size.width > 80 && size.height > 65) this.host.set('userMax', userMax);
         else this.host.set('userMax', true);
+        maxLock = false;
       };
 
       resize(this.shell.shellSize());
@@ -871,6 +875,12 @@ const app = globalThis.app = new App({
       this.host.toastDefaults.top = false;
       this.host.toastDefaults.bottom = true;
       this.host.toastDefaults.stack = true;
+
+      this.host.observe('userMax', v => {
+        if (!maxLock) userMax = v;
+      }, { init: false });
+
+      if (window.location.hash) setTimeout(() => hashChangeHandler(window.location.hash), 100);
     },
   },
   notify,
@@ -950,7 +960,10 @@ const app = globalThis.app = new App({
     if (pad?.id && !copy) {
       const wid = `scratch-${pad.id}`;
       const win = this.host.getWindow(wid);
-      if (win) return win.raise(true);
+      if (win) {
+        win.raise(true);
+        return win;
+      }
     }
     try {
       if (file) file = await app.pickFile();
@@ -970,6 +983,7 @@ const app = globalThis.app = new App({
     if (pad?.id) win.load(pad.id, copy);
     this.host.addWindow(win, { title: pad?.id ? `Loading scratch pad...` : 'New Scratch Pad' });
     if (file) win.set('pad', file, { deep: true });
+    return win;
   },
   async scratchQuery(id) {
     if (id) {
@@ -4362,21 +4376,26 @@ function notificate(details) {
 window.addEventListener('beforeunload', unload);
 window.addEventListener('unload', unloading);
 window.addEventListener('storage', debounce(readSync, 5000));
-window.addEventListener('hashchange', async () => {
-  const loc = window.location;
-  if (loc.hash && loc.hash.startsWith('#scratch/')) {
-    const name = loc.hash.slice(9);
+async function hashChangeHandler(hash) {
+  if (hash && hash.startsWith('#scratch')) {
+    const start = hash.indexOf('/');
+    const init = hash.slice(0, start);
+    const name = hash.slice(start + 1);
     const list = await store.list('scratch');
     for (const s of list) {
       if (s.name === name) {
-        app.openScratch(s);
+        const win = await app.openScratch(s);
+        if (win && ~init.indexOf('max')) setTimeout(() => win.maximize(), 100);
         break;
       }
     }
   }
   window.location.hash = '';
+}
+window.addEventListener('hashchange', async () => {
+  const loc = window.location;
+  hashChangeHandler(loc.hash);
 });
-if (window.location.hash) window.location.hash = '';
 
 // Set up debug helper
 let el;
