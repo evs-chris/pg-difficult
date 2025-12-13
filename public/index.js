@@ -668,6 +668,9 @@ Ractive.extendWith(App, {
       label.field svg.icon:hover { opacity: 1; }
       label.field select:focus { background-color: ${data('raui.primary.bg') || '#fff'}; }
       .mermaid { background-color: ${data('theme') === 'dark' ? '#191919' : '#f7f7f7'}; }
+      .html-log.warn { ${data('theme') === 'dark' ? '' : 'background-'}color: rgb(255, 255, 210); ${data('theme') === 'dark' ? 'background-' : ''}color: rgb(142, 134, 62); }
+      .html-log.error { ${data('theme') === 'dark' ? '' : 'background-'}color: rgb(255, 215, 215); ${data('theme') === 'dark' ? 'background-' : ''}color: rgb(113, 59, 59); }
+      .html-log.info { ${data('theme') === 'dark' ? '' : 'background-'}color: rgb(217, 235, 255); ${data('theme') === 'dark' ? 'background-' : ''}color: rgb(76, 95, 172); }
     `;
   },
 });
@@ -2474,15 +2477,17 @@ class ScratchPad extends Window {
     if (query) {
       await store.save(this.get('query'));
     } else {
+      this._buildlock = true;
       const pad = Object.assign({}, this.get('pad'));
       if (!this.get('ephemeral')) {
-        if (pad._id) store.save(pad);
+        if (pad._id) await store.save(pad);
         else {
           pad.type = 'scratch';
           const res = await store.save(pad);
           await this.load(res._id);
         }
       }
+      setTimeout(() => this._buildlock = false, 50);
     }
     this.saveDebounced.cancel();
     this.set('unsaved', false);
@@ -2561,6 +2566,94 @@ class ScratchPad extends Window {
   }
   string(v) {
     return v === undefined ? 'undefined' : JSON.stringify(v);
+  }
+
+  renderHTML() {
+    if (!this.get('_html')) {
+      const pad = this.get('pad');
+      let txt = pad.text;
+      let wrapHead = false;
+      let headIdx = txt.indexOf('</head>');
+      if (!~headIdx) {
+        wrapHead = true;
+        headIdx = txt.indexOf('<html');
+        if (~headIdx) headIdx = txt.indexOf('>', headIdx) + 1;
+        else headIdx = 0;
+      }
+      let bodyIdx = txt.indexOf('</body>');
+      if (!~bodyIdx) bodyIdx = txt.indexOf('</html>');
+      if (!~bodyIdx) bodyIdx = txt.length;
+
+      const processScripts = s => {
+        if (s.type === 'unpkg') return `<script src="https://unpkg.com/${s.value}"></script>`;
+        else if (s.type === 'jsdelivr') return `<script src="https://cdn.jsdelivr.net/npm/${s.value}"></script>`;
+        else if (s.type === 'src') return `<script src="${s.src}"></script>`;
+        else if (s.type === 'script') return `<script${s.scriptType ? ` type="${s.scriptType}"` : ''}${s.id ? ` id="${s.id}"` : ''}>${s.value}</script>`;
+        else return '';
+      };
+      let head = `<script>(function() {
+  var orig = { log: console.log, error: console.error, warn: console.warn, info: console.info };
+  var frameId = ${this.frameId};
+  var fn = function(name) {
+    orig[name].apply(this, Array.prototype.slice.call(arguments, 1));
+    if (window.parent) window.parent.postMessage({ frameId: frameId, action: 'log', name: name, args: Array.prototype.slice.call(arguments, 1).map(function(a) {
+      if (a instanceof Error) return a.message + '\\n\\n' + a.stack;
+      return a;
+    }) }, '*');
+  }
+  function partial(fn) { var args = Array.prototype.slice.call(arguments, 1); return function() { return fn.apply(this, [].concat(args, Array.prototype.slice.call(arguments))); } }
+  ['log', 'error', 'warn', 'info'].forEach(function(n) { console[n] = partial(fn, n); });
+  window.addEventListener('message', function(msg) {
+    if (msg.data.action === 'expr') eval(msg.data.expr);
+  });
+  window.addEventListener('error', function(ev) { console.error(ev.error); });
+  window.addEventListener('unhandledrejection', function(ev) { console.error('Unhandled Rejection: ', ev.reason); });
+})();</script>`;
+      head = head + (pad.scripts || []).filter(s => !s.foot).map(processScripts).join('\n');
+      head = head + (pad.styles || []).map(s => {
+        if (s.type === 'href') return `<style rel="stylesheet" href="${s.value}" />`;
+        else if (s.type === 'style') return `<style>${s.value}</style>`;
+        else return '';
+      }).join('\n');
+      if (wrapHead) head = `<head>${head}</head>`;
+
+      let body = (pad.scripts || []).filter(s => s.foot).map(processScripts).join('\n');
+
+      if (headIdx < bodyIdx) {
+        txt = txt.slice(0, bodyIdx) + body + txt.slice(bodyIdx);
+        txt = txt.slice(0, headIdx) + head + txt.slice(headIdx);
+      } else {
+        txt = txt.slice(0, headIdx) + head + txt.slice(headIdx);
+        txt = txt.slice(0, bodyIdx) + body + txt.slice(bodyIdx);
+      }
+
+      console.log(txt)
+      if (!~txt.indexOf('</html>')) txt = `<html>${txt}</html>`;
+
+      this.set('_html', txt);
+    }
+  }
+
+  htmlEval(expr) {
+    const frame = this.find('iframe');
+    if (frame && frame.contentWindow) {
+      frame.contentWindow.postMessage({ action: 'expr', expr }, '*');
+      this.set('expr', '');
+      this.find('.html-expr')?.querySelector('textarea')?.focus();
+    }
+  }
+
+  handleMessage(msg) {
+    if (!msg.data || msg.data.frameId !== this.frameId) return;
+    if (msg.data.action === 'log') {
+      let scroll = false;
+      const tab = this.find('.html-console-logs');
+      if (tab && tab.scrollTop + tab.clientHeight + 20 > tab.scrollHeight) scroll = true;
+      this.push('logs', msg.data);
+      this.set('flash', true);
+      setTimeout(() => this.set('flash', false), 16);
+      if (scroll) this.find('.html-console-end')?.scrollIntoView({ behavior: 'smooth' });
+    }
   }
 
   buildRequest() {
@@ -2975,6 +3068,8 @@ span.counter { margin-right: 1em; }
 button.ghost { opacity: 0.05; transition: opacity 0.2s ease; }
 button.ghost:hover { opacity: 1; }
 code.hljs { border-radius: 0.5em; }
+.console-tab { transition: color 1s ease, background-color 1s ease; color: ${data('raui.primary.fg', '#000')}; background-color: ${data('raui.primary.bg', '#fff')}; display: inline-block; border-radius: 0.5em; padding: 0.2em; margin: -0.2em; }
+.console-tab.flash { color: ${data('raui.primary.bga', '#fff')}; background-color: ${data('raui.primary.fga', '#000')}; transition: none; }
 `; },
   use: [RauiPopover.default({ name: 'pop' })],
   options: { flex: true, resizable: true, minimize: false, width: '50em', height: '35em' },
@@ -3001,7 +3096,9 @@ code.hljs { border-radius: 0.5em; }
       setTimeout(() => {
         const el = this.find('.editor-el');
         const tabs = this.findComponent('tabs');
-        if (el && !this.get('query') && (!tabs || this.get('pad.syntax') !== 'markdown' || tabs.get('selected') === 0)) {
+        const sel = tabs?.get('selected') || 0;
+        const syntax = this.get('pad.syntax');
+        if (el && !this.get('query') && (!tabs || !['markdown', 'html'].includes(syntax) || sel === 0 || (syntax === 'postman' && sel === 3))) {
           const ctx = this.getContext(el);
           ctx.decorators?.ace?.focus();
         }
@@ -3014,6 +3111,11 @@ code.hljs { border-radius: 0.5em; }
     },
     render() {
       this.saveDebounced.timeout = this.get('editor.autosave') ?? 15000;
+      this.frameId = reportFrameId++;
+      window.addEventListener('message', (this._messageHandler = this.handleMessage.bind(this)));
+    },
+    unrender() {
+      window.removeEventListener('message', this._messageListener);
     },
   },
   data() {
@@ -3110,11 +3212,16 @@ code.hljs { border-radius: 0.5em; }
     'pad.text'(v) {
       if (typeof v === 'string') this.saveDebounced && this.saveDebounced();
       this.set('visited', { tree: 0, table: 0 });
+      if (!this._buildlock) this.set('_html', undefined);
       if (!this.lockPostman && this.get('pad.syntax') === 'postman') {
         this.lockPostman = true;
         this.set('postman', JSON.parse(v));
         this.lockPostman = false;
       }
+    },
+    'pad.scripts pad.styles'(v) {
+      if (!this._buildlock) this.set('_html', undefined);
+      if (v) this.saveDebounced && this.saveDebounced();
     },
     postman(v) {
       if (v && !this.lockPostman) {
