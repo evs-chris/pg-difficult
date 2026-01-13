@@ -601,6 +601,32 @@
             }
         };
     }
+    function readToParser(chars, parser, name) {
+        let ps;
+        const stop = readTo(chars, true);
+        return lazy(() => ps = unwrap(parser), function parse(s, p, res, tree) {
+            const node = tree && openNode(p, name);
+            const len = s.length;
+            let l = p;
+            let sub;
+            while (l < len) {
+                sub = stop.parse(s, l, res);
+                l = sub[1];
+                sub = ps.parse(s, l, res);
+                if (!sub.length) {
+                    l++;
+                }
+                else {
+                    break;
+                }
+            }
+            res[0] = s.substring(p, l);
+            res[1] = l;
+            if (node)
+                closeNode(node, tree, res);
+            return res;
+        });
+    }
 
     function opt(parser, name) {
         let ps;
@@ -1188,7 +1214,7 @@
     const endSym = space$2 + '():{}[]<>,"\'`\\;&#';
     const endRef = endSym + '.+/*|^%=!?';
     const _comment = map(seq(ws$2, str('//'), opt(str(' ')), readTo('\n'), str('\n')), ([, , , c]) => ({ c }), { name: 'comment', primary: true });
-    function comment(prop, p) {
+    function comment$1(prop, p) {
         return map(seq(rep(_comment), ws$2, p), ([c, , v]) => {
             if (c && c.length)
                 v[prop] = c.map(c => c.c);
@@ -1561,7 +1587,7 @@
     }
     object.parser = map(bracket(check(str('{'), ws$2), repsep(pair, read1(space$2 + ','), 'allow'), check(ws$2, str('}'))), objectOp, { primary: true, name: 'object' });
     block.parser = map(bracket(check(str('{'), ws$2), rep1sep(value, read1(space$2 + ';'), 'allow'), check(ws$2, str('}'))), args => ({ op: 'block', args }), { primary: true, name: 'block' });
-    value.parser = unwrap(comment('c', operation));
+    value.parser = unwrap(comment$1('c', operation));
     const namedArg = map(seq(ident, str(':'), ws$2, value), ([k, , , v]) => [{ v: k }, v], 'named-arg');
     application.parser = map(seq(opt(bracket(check(str('|'), ws$2), rep1sep(opName, read1(space$2 + ','), 'allow'), seq(str('|'), ws$2))), str('=>', '=\\'), ws$2, value), ([names, , , value]) => {
         const res = { a: value };
@@ -1589,7 +1615,7 @@
         const type = {};
         const conditions = opt(seq(ws$2, rep1sep(map(seq(name$1(str('?'), { name: 'condition', primary: true }), ws$2, application), ([, , a]) => a), rws, 'disallow')));
         const value = map(seq(str('any[]', 'string[]', 'number[]', 'boolean[]', 'date[]', 'object[]', 'value[]', 'any', 'string', 'number', 'boolean', 'date', 'object', 'value'), not(read1To(endRef))), ([s]) => ({ type: s === 'any[]' ? 'array' : s }), { name: 'type', primary: true });
-        const typedef = comment('c', map(seq(str('type'), ws$2, name$1(ident, { name: 'type', primary: true }), ws$2, str('='), ws$2, type), ([, , name, , , , type]) => ({ name, type })));
+        const typedef = comment$1('c', map(seq(str('type'), ws$2, name$1(ident, { name: 'type', primary: true }), ws$2, str('='), ws$2, type), ([, , name, , , , type]) => ({ name, type })));
         const typedefs = map(rep1sep(typedef, read1(' \t\n;'), 'allow'), defs => defs.reduce((a, c) => (c.type.desc = c.c, a[c.name] = c.type, a), {}));
         const ref = map(seq(ident, opt(str('[]'))), ([ref, arr]) => ({ type: arr ? 'array' : 'any', ref }), { name: 'type', primary: true });
         const key = map(seq(name$1(ident, { name: 'key', primary: true }), opt(str('?')), ws$2, str(':'), ws$2, type), ([name, opt, , , , type]) => {
@@ -1607,7 +1633,7 @@
         const rest = map(seq(str('...'), ws$2, str(':'), ws$2, type), ([, , , , type]) => {
             return Object.assign({ name: '...' }, type);
         });
-        const object = map(seq(str('{'), ws$2, repsep(comment('desc', alt('interface parts', key, rest)), read1(' \t\n,;'), 'allow'), ws$2, str('}'), opt(str('[]'))), ([, , keys, , , arr], fail) => {
+        const object = map(seq(str('{'), ws$2, repsep(comment$1('desc', alt('interface parts', key, rest)), read1(' \t\n,;'), 'allow'), ws$2, str('}'), opt(str('[]'))), ([, , keys, , , arr], fail) => {
             const rests = keys.filter(k => k.name === '...');
             if (rests.length > 1)
                 fail('only one object rest can be specified');
@@ -1703,7 +1729,7 @@
         }
         return op;
     }, { primary: true, name: 'case-block' });
-    const interpolator = map(seq(str('{{'), ws$2, value, ws$2, str('}}')), ([, , value]) => ({ op: 'string', args: [value] }), { primary: true, name: 'interpolator' });
+    const interpolator = map(seq(str('{{'), ws$2, value, ws$2, str('}}')), ([, , value]) => ({ op: 'string', args: [value], opts: { v: { interp: 1 } } }), { primary: true, name: 'interpolator' });
     content$1.parser = alt({ primary: true, name: 'content' }, text$1, each_op, if_op, with_op, case_op, unless_op, interpolator);
     function apply_first(content) {
         if (content.length)
@@ -1742,9 +1768,9 @@
             return values[0];
         return { op: 'cat', args: values, meta: { q: '$$$' } };
     }
-    const _parse$1 = parser$1(alt(map(rep1(content$1), args => concat(args)), map(ws$2, () => ({ v: '' }))), { trim: true });
-    _parse$1.namespace = 'template';
-    const parse$2 = _parse$1;
+    const _parse = parser$1(alt(map(rep1(content$1), args => concat(args)), map(ws$2, () => ({ v: '' }))), { trim: true });
+    _parse.namespace = 'template';
+    const parse$2 = _parse;
     inlineTemplate.parser = map(rep1(alt({ name: 'inline-template' }, nestedText, each_op, if_op, with_op, case_op, unless_op, interpolator)), args => concat(args));
 
     function toDataSet(value) {
@@ -1997,9 +2023,6 @@
     }
     /**
      * Evaluate an applicative with the given locals, naming them if the applicative declares named arguments.
-     * If swap is not true, then a new context extension will be used. Otherwise, the context locals will be
-     * swapped for the evaluation and replaced afterwards. Swap should only be used for applications that are
-     * passing the context value as the first local.
      */
     function evalApply(ctx, value, locals, special) {
         if (isApplication(value)) {
@@ -2352,15 +2375,20 @@
         };
     }
     function extend$1(context, opts) {
-        return {
+        const res = {
             parent: opts.fork && (!opts.value || opts.value === context.value) ? (context.parent || context.root) : context,
             root: context.root,
             path: opts.path || '',
             value: 'value' in opts ? opts.value : context.value,
             special: opts.fork ? Object.assign({}, context.special, { pipe: undefined }, opts.special) : (opts.special || {}),
-            parser: opts.parser,
-            locals: opts.locals,
         };
+        if (opts.parser)
+            res.parser = opts.parser;
+        if (opts.stringifier || context.stringifier)
+            res.stringifier = opts.stringifier || context.stringifier;
+        if (opts.locals)
+            res.locals = opts.locals;
+        return res;
     }
     const formats = {};
     const virtualFormats = {};
@@ -3266,7 +3294,7 @@
         let headers = report.headers;
         if ((!fields || !fields.length) && values.length && typeof values[0] === 'object' && values[0]) {
             if (Array.isArray(values[0]))
-                fields = fields.map(i => `_.${i}`);
+                fields = Object.keys(values[0]).map(i => `_.${i}`);
             else {
                 fields = Object.keys(values[0]).map(k => `_[${JSON.stringify(k)}]`);
                 if (!headers || !headers.length)
@@ -5317,6 +5345,10 @@
             }
         }
         else {
+            if (v1 && !v2 || !v1 && v2) {
+                diff[path] = [v1, v2];
+                return diff;
+            }
             const _v1 = v1 || {};
             const _v2 = v2 || {};
             const ks = [];
@@ -5330,6 +5362,13 @@
                 for (const k of Object.keys(_v2))
                     if (!~ks.indexOf(k))
                         ks.push(k);
+            }
+            if (!ks.length) {
+                let _v1 = v1.toString();
+                let _v2 = v2.toString();
+                if (_v1 !== _v2 && ((_v1[0] && _v1[0] !== '[') || (_v2[0] && _v2[0] !== '[')))
+                    diff[path] = [v1, v2];
+                return diff;
             }
             for (const k of ks) {
                 const vv1 = _v1[k];
@@ -5803,14 +5842,49 @@
     const entity = map(seq(str('&'), str('amp', 'gt', 'lt'), str(';')), ([, which]) => entities[which] || '', 'entity');
     const name = read1('abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-_:$', 'name');
     const attr = map(seq(name, opt(seq(ws, str('='), ws, alt(name, quoted('"'), quoted("'"))))), ([name, rest]) => ({ name, value: rest ? rest[3] : true }), 'attr');
+    const content = map(rep1(alt(read1To(endTxt, true), entity), 'content'), txts => txts.join('').trim());
+    const comment = map(seq(str('<!--'), readToParser('-', str('-->')), str('-->')), ([, text]) => ({ text }));
+    const cdata = map(seq(str('<![CDATA['), readToParser(']', str(']]>')), str(']]>')), ([, chars]) => chars);
     function quoted(quote) {
         return map(seq(str(quote), readTo(quote), str(quote)), ([, str]) => str);
     }
-    const open = map(seq(str('<'), ws, name, ws, repsep(attr, ws, 'allow'), opt(str('/')), str('>')), ([, , name, , attrs, close]) => ({ open: true, name, attrs, empty: !!close }), 'open');
-    const close = map(seq(str('</'), ws, name, ws, str('>')), ([, , name]) => ({ close: true, name }), 'close');
-    const content = map(rep1(alt(read1To(endTxt, true), entity), 'content'), txts => txts.join('').trim());
-    const stream = rep(alt(open, content, close));
-    const _parse = parser$1(stream, { trim: true, consumeAll: true, undefinedOnError: true });
+    const parseJson = (function () {
+        const decl = map(seq(str('<?'), name, ws, repsep(attr, ws, 'allow'), ws, str('?>')), ([, name, , attrs]) => ({ name, attrs }));
+        const open = map(seq(str('<'), ws, name, ws, repsep(attr, ws, 'allow'), opt(str('/')), str('>')), ([, , name, , attrs, close]) => ({ open: true, name, attrs, empty: !!close }), 'open');
+        const close = map(seq(str('</'), ws, name, ws, str('>')), ([, , name]) => ({ close: true, name }), 'close');
+        const stream = rep(alt(comment, decl, cdata, open, content, close));
+        return parser$1(stream, { trim: true, consumeAll: true, undefinedOnError: true });
+    })();
+    const parseDoc = (function () {
+        const _attr = map(attr, (a) => {
+            if (~a.name.indexOf(':')) {
+                a.tag = a.name;
+                [a.ns, a.name] = a.tag.split(':');
+            }
+            return a;
+        });
+        const decl = map(seq(str('<?'), name, ws, repsep(_attr, ws, 'allow'), ws, str('?>')), ([, name, , attributes]) => ({ name, attributes }));
+        const open = map(seq(str('<'), ws, name, ws, repsep(_attr, ws, 'allow'), opt(str('/')), str('>')), ([, , name, , attributes, close]) => {
+            const el = { name };
+            if (attributes.length)
+                el.attributes = attributes;
+            if (~el.name.indexOf(':')) {
+                el.tag = el.name;
+                [el.ns, el.name] = el.tag.split(':');
+            }
+            return { close: !!close, open: true, el };
+        }, 'open');
+        const close = map(seq(str('</'), ws, name, ws, str('>')), ([, , name]) => {
+            const a = { close: true, name };
+            if (~a.name.indexOf(':')) {
+                a.tag = a.name;
+                [a.ns, a.name] = a.tag.split(':');
+            }
+            return a;
+        }, 'close');
+        const stream = rep(alt(comment, decl, cdata, open, content, close));
+        return parser$1(stream, { trim: true, consumeAll: true, undefinedOnError: true });
+    })();
     function put(target, prop, value) {
         if (prop in target) {
             if (Array.isArray(target[prop]))
@@ -5822,59 +5896,130 @@
             target[prop] = value;
         }
     }
-    function parse(str, strict) {
-        const stack = [];
-        const names = [];
-        const res = [];
-        let content = '';
-        const stream = _parse(str);
-        if (!stream || 'error' in stream)
-            return undefined;
-        function close(end) {
-            const val = stack.pop();
-            if (!val)
-                return;
-            const name = names.pop();
-            if (!stack.length) {
-                res.push(val);
-            }
-            else {
-                if (!Object.keys(val).length)
-                    put(stack[stack.length - 1], name, content || '');
-                else
-                    put(stack[stack.length - 1], name, val);
-            }
-            if (end !== name)
-                close(end);
-        }
-        for (const p of stream) {
-            if (typeof p === 'string') {
-                if (p)
-                    content += p;
-            }
-            else if ('open' in p) {
-                content = '';
-                const val = p.attrs.reduce((a, c) => (put(a, c.name, c.value), a), {});
-                if (p.empty) {
-                    if (stack.length)
-                        put(stack[stack.length - 1], p.name, val);
-                    else
-                        res.push(val);
+    function parse(str, opts) {
+        const o = typeof opts === 'boolean' ? { result: 'json', strict: opts } : (opts || { result: 'json' });
+        if (o.result === 'doc') {
+            const stack = [];
+            let top;
+            const stream = parseDoc(str);
+            let content = '';
+            const doc = { root: undefined };
+            for (const n of stream) {
+                if (typeof n === 'string') {
+                    if (n)
+                        content += n;
+                }
+                else if ('open' in n) {
+                    const el = n.el;
+                    if (top) {
+                        if (!top.children)
+                            top.children = [];
+                        if (content) {
+                            top.children.push(content);
+                            content = '';
+                        }
+                        top.children.push(el);
+                    }
+                    else {
+                        if (o.strict && doc.root)
+                            return;
+                        doc.root = el;
+                    }
+                    stack.push(el);
+                    top = el;
+                }
+                else if ('close' in n) {
+                    if (top && content) {
+                        if (!top.children)
+                            top.children = [];
+                        top.children.push(content);
+                    }
+                    content = '';
+                    if ((top.tag || top.name) === (n.tag || n.name)) {
+                        stack.pop();
+                    }
+                    else {
+                        if (o.strict)
+                            return;
+                        if (~stack.slice().reverse().find(t => (t.tag || t.name) === (n.tag || n.name))) {
+                            let t;
+                            while (t = stack.pop()) {
+                                if ((n.tag || n.name) === (t.tag || t.name))
+                                    break;
+                            }
+                        }
+                    }
+                    top = stack[stack.length - 1];
+                }
+                else if ('name' in n) {
+                    doc.decl = n;
                 }
                 else {
-                    names.push(p.name);
-                    stack.push(val);
+                    if (top) {
+                        if (!top.children)
+                            top.children = [];
+                        top.children.push(n);
+                    }
                 }
             }
-            else if ('close' in p) {
-                if (strict && p.name !== names[names.length - 1])
-                    return;
-                close(p.name);
-            }
+            if (stack.length > 1 && o.strict)
+                return;
+            return doc;
         }
-        if (names.length && !strict)
-            close(names[0]);
-        return res.length > 1 ? res : res.length === 1 ? res[0] : undefined;
+        else {
+            const stack = [];
+            const names = [];
+            const res = [];
+            let content = '';
+            const stream = parseJson(str);
+            if (!stream)
+                return;
+            function close(end) {
+                const val = stack.pop();
+                if (!val)
+                    return;
+                const name = names.pop();
+                if (!stack.length) {
+                    res.push(val);
+                }
+                else {
+                    if (!Object.keys(val).length)
+                        put(stack[stack.length - 1], name, content || '');
+                    else
+                        put(stack[stack.length - 1], name, val);
+                }
+                if (end !== name)
+                    close(end);
+            }
+            for (const p of stream) {
+                if (typeof p === 'string') {
+                    if (p)
+                        content += p;
+                }
+                else if ('open' in p) {
+                    content = '';
+                    const val = p.attrs.reduce((a, c) => (put(a, c.name, c.value), a), {});
+                    if (p.empty) {
+                        if (stack.length)
+                            put(stack[stack.length - 1], p.name, val);
+                        else
+                            res.push(val);
+                    }
+                    else {
+                        names.push(p.name);
+                        stack.push(val);
+                    }
+                }
+                else if ('close' in p) {
+                    if (o.strict && p.name !== names[names.length - 1])
+                        return;
+                    close(p.name);
+                }
+            }
+            if (names.length && !o.strict)
+                close(names[0]);
+            return res.length > 1 ? res : res.length === 1 ? res[0] : undefined;
+        }
     }
 
     function simple(names, apply) {
@@ -6685,11 +6830,13 @@
             else
                 return span;
         }
-    }), simple(['string', 'unparse'], (name, args, opts) => {
+    }), simple(['string', 'unparse'], (name, args, opts, ctx) => {
         const [value] = args;
         opts = opts || args[1] || {};
         if (!opts || typeof opts !== 'object')
             opts = {};
+        if (opts.interp && ctx.stringifier)
+            return ctx.stringifier(args[0]);
         if (name === 'unparse')
             opts = Object.assign({}, opts, { raport: 1 });
         if (opts.raport && opts.tpl)
@@ -7247,6 +7394,12 @@
         else if (type === 'generate') {
             Object.assign(generateDefaults, opts);
         }
+        else if (type === 'stringifier') {
+            if (opts === null || opts === void 0 ? void 0 : opts.unset)
+                ctx.stringifier = undefined;
+            else if (isApplication(name))
+                ctx.stringifier = (v) => evalApply(ctx, name, [v]);
+        }
     }), simple(['parse'], (_name, args, opts) => {
         opts = opts || args[1] || {};
         if (!opts || typeof opts !== 'object')
@@ -7267,7 +7420,7 @@
         else if (opts.range)
             return range(v, opts);
         else if (opts.xml)
-            return parse(v, opts.strict);
+            return parse(v, opts);
         else if (opts.csv || opts.delimited) {
             if (opts.detect || !opts.field || !opts.record)
                 opts = Object.assign(detect(v, opts.context), opts);

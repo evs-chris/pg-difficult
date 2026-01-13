@@ -65,6 +65,13 @@
           ctx.raise('save');
         }
       });
+      editor.commands.addCommand({
+        name: 'run',
+        bindKey: { win: 'Ctrl-Enter', mac: 'Command-Enter', sender: 'editor|cli' }, 
+        exec: function() {
+          ctx.raise('run');
+        }
+      });
 
       handle.update = function(options) {
         if (!options) { return; }
@@ -80,6 +87,7 @@
         if ('printMargin' in options) { editor.setOption('showPrintMargin', options.printMargin); }
         if (typeof options.lineNumbers === 'boolean') { editor.setOption('showLineNumbers', options.lineNumbers); }
         if (typeof options.relativeLineNumbers === 'boolean') { editor.setOption('relativeLineNumbers', options.relativeLineNumbers); }
+        if ('showGutter' in options) editor.setOptions({ showGutter: options.showGutter });
         lazy = options.lazy;
 
 
