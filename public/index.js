@@ -3426,9 +3426,11 @@ class HostExplore extends Window {
       }
       return { value: set };
     } else if (source.type === 'json') {
-      return { value: JSON.parse(source.json) };
+      return { value: tryJSONParse(source.json) };
     } else if (source.type === 'pg-fetch') {
       return { value: await makeRequest(source, params) };
+    } else if (source.type === 'scratch') {
+      return loadScratchReportSource(source);
     }
   }
   
@@ -3541,8 +3543,12 @@ class HostExplore extends Window {
         }
         if (src.type === 'query') {
           data[src.name] = (await request({ action: 'query', query: [src.query], params: [queryParams(report.definition, src, params)], client })).result;
+        } else if (srouce.type === 'json') {
+          data[src.name] = { value: tryJSONParse(src.json) };
         } else if (src.type === 'pg-fetch') {
           data[src.name] = { value: await makeRequest(src, params) };
+        } else if (src.type === 'scratch') {
+          data[src.name] = await loadScratchReportSource(src);
         }
       } // TODO: other sources?
 
@@ -3929,7 +3935,7 @@ class Report extends Window {
         this.respond({ data: [] }, msg);
       }
     } else if (src.type === 'json') {
-      this.respond({ data: JSON.parse(src.json) }, msg);
+      this.respond({ data: tryJSONParse(src.json) }, msg);
     } else if (src.type === 'pg-fetch') {
       this.respond({ data: await makeRequest(src, msg.params) }, msg);
     } else if (src.type === 'query-all') {
@@ -3946,6 +3952,8 @@ class Report extends Window {
       } catch (e) {
         this.respond({ error: e.message }, msg);
       }
+    } else if (src.type === 'scratch') {
+      this.respond({ data: await loadScratchReportSource(src) }, msg);
     } else {
       this.respond({ error: `Invalid source ${src.type}` }, msg);
     }
@@ -3980,7 +3988,7 @@ class Report extends Window {
     report.definition = (await this.request({ action: 'get', get: 'report' })).get;
     report.sources = (await this.request({ action: 'get', get: 'sources' })).get;
     for (const s of (report.sources || [])) {
-      if (['pg-fetch', 'query', 'query-all'].includes(s.type) && s.data) {
+      if (['pg-fetch', 'query', 'query-all', 'scratch'].includes(s.type) && s.data) {
         delete s.cached;
         delete s.data;
       }
@@ -4393,6 +4401,17 @@ function processQueryParams(params) {
     });
   }
   return params ? [params] : undefined;
+}
+
+async function loadScratchReportSource(source) {
+  let id = source.id;
+  if (!id && source.path) id = (await store.list('scratch')).find(s => s.name === source.path)?.id;
+  if (!id) return;
+  const pad = await store.get(id);
+  if (!pad) return;
+  if (pad.syntax === 'json') return { value: tryJSONParse(pad.text) };
+  else if (pad.syntax === 'raport') return { value: evaluate(makeContext({}, { parameters: params }), pad.text) };
+  // TODO: csv, xml, others?
 }
 
 function csvToHtml(text) {

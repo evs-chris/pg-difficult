@@ -2094,6 +2094,7 @@
         {{/if}}
         <option value="json">JSON</option>
         <option value="pg-fetch">Fetch</option>
+        <option value="scratch">Scratch Pad</option>
       </select></label>
       {{#if source.type === 'query'}}<label as-field><input type=checkbox checked="{{source.config !== undefined}}" twoway=false on-change="@.set('source.config', @node.checked ? {} : undefined)" /> Custom connection?</label>{{/if}}
     </div>
@@ -2166,6 +2167,8 @@
           <label as-field>Parameter ${{@index + 1}}<input value="{{source.parameters[@index]}}" /></label>
         {{/each}}
       </div>
+    {{elseif source.type === 'scratch'}}
+      <label as-field>Path<input value="{{source.path}}" /></label>
     {{/if}}
   </div>
   <buttons>
