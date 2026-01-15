@@ -420,6 +420,7 @@
     padding: 0.25em;
     border-bottom: 2px solid rgba(128, 128, 128, 0.2);
     white-space: pre-wrap;
+    position: relative;
   }
   .html-expr {
     display: flex;
@@ -913,13 +914,13 @@
       </div>
     {{/if}}
     {{#if ~/result.length}}
-      <button title="Download this query result as delimited text (csv/tsv). shit+click to make this result data available to raport scratch pads as *query" on-click="@event.shiftKey ? [appSet('scratchroot.sources.query', { value: ~/result }), @.host.toast('Results are now available to raport scratch pads as *query.', { type: 'info', timeout: 3000 })] : @.downloadQuery(~/result)">Download</button>
+      <button title="Download this query result as delimited text (csv/tsv). shift+click to make this result data available to raport expressions as *query. right-click to make this result data available to raport expressions with a custom name." on-click="@event.shiftKey ? @.provideSource('query', ~/result) : @.downloadQuery(~/result)" on-contextmenu="@.provideSource(false, ~/result), @event.preventDefault()">Download</button>
     {{/if}}
   </div>
   <div class="query" style="position: relative;">
     <split>
       <div size=30 style="display: flex; flex-direction: column; height: 100%;">
-        <div style="min-height: 1.5em;" class="query-text" as-tracked=`ace` as-ace="{ bind: '~/query', syntax: 'pgsql', theme: @style.theme == 'dark' ? (~/editor.darkTheme || 'tomorrow_night_eighties') : (~/editor.lightTheme || 'tomorrow'), wrap: ~/editor.wrap, highlightActive: ~/editor.highlightActive, fontSize: '1em', font: 'monospace', printMargin: ~/editor.printMargin, keymode: ~/editor.keymode, lineNumbers: ~/editor.lineNumbers, relativeLineNumbers: ~/editor.relativeLineNumbers, highlightSelected: ~/editor.highlightSelected, softTabs: ~/editor.softTabs, tabSize: ~/editor.tabSize }" on-keydown="@event.ctrlKey && @event.key === 'Enter' ? @.runQuery(~/query) : true" />
+        <div style="min-height: 1.5em;" class="query-text" as-tracked=`ace` as-ace="{ bind: '~/query', syntax: 'pgsql', theme: @style.theme == 'dark' ? (~/editor.darkTheme || 'tomorrow_night_eighties') : (~/editor.lightTheme || 'tomorrow'), wrap: ~/editor.wrap, highlightActive: ~/editor.highlightActive, fontSize: '1em', font: 'monospace', printMargin: ~/editor.printMargin, keymode: ~/editor.keymode, lineNumbers: ~/editor.lineNumbers, relativeLineNumbers: ~/editor.relativeLineNumbers, highlightSelected: ~/editor.highlightSelected, softTabs: ~/editor.softTabs, tabSize: ~/editor.tabSize }" on-run="@.runQuery(~/query)" />
         {{#if parameters}}
           <div class="query-parameters" style="display: flex; overflow-x: auto; flex-shrink: 0;">
           {{#each parameters}}<label as-field>{{(parametersLabels || {})[@index] || `Parameter ${@index + 1}`}}<input value="{{.}}" on-keydown="@event.key === 'Enter' && (@event.ctrlKey || @event.cmdKey) ? @.runQuery(~/query) : true" /></label>{{/each}}
@@ -1152,7 +1153,7 @@
                 {{else}}
                   <label as-field style="flex-grow: 0;"><button on-click="@.set('compareSchema', undefined)" title="Cancel waiting for another schema to be selected to compare to this schema.">Cancel</button></label>
                 {{/if}}
-                <label as-field style="flex-grow: 0;"><button on-click="@event.shiftKey ? [appSet('scratchroot.sources.schema', { value: _schema }), @.host.toast('This schema is now available to raport scratch pads as *schema.', { type: 'info', timeout: 3000 })] : @.downloadSchema(_schema)" title="Download a file containing this schema. shift+click to expose this schema as *schema to any raport scratch pads.">Download</button></label>
+                <label as-field style="flex-grow: 0;"><button on-click="@event.shiftKey ? @.provideSource('schema', _schema) : @.downloadSchema(_schema)" on-contextmenu="@.provideSource(false, _schema), @event.preventDefault()" title="Download a file containing this schema. shift+click to provide this schema as *schema to any raport expression. right-click to provide this schema as a source with a custom name to any raport expression.">Download</button></label>
               </div>
               <div class="schema-row" style="font-weight: bold;">
                 <div class="name" style="cursor: pointer;" title="Click to sort columns by {{~/schemasort === 'position' ? 'name' : 'position'}}" on-click="@.set('schemasort', ~/schemasort === 'position' ? 'name' : 'position')">Name ({{~/schemasort === 'position' ? '#' : 'A'}})</div>
@@ -1479,7 +1480,7 @@
           {{>header}}
           <div style="flex-grow: 1;" class="editor-el" as-tracked=`ace` as-ace="{ bind: 'pad.text', syntax: pad.syntax || 'plain_text', theme: @style.theme == 'dark' ? (~/editor.darkTheme || 'tomorrow_night_eighties') : (~/editor.lightTheme || 'tomorrow'), wrap: ~/editor.wrap, highlightActive: ~/editor.highlightActive, fontSize: '1em', font: 'monospace', printMargin: ~/editor.printMargin, keymode: ~/editor.keymode, lineNumbers: ~/editor.lineNumbers, relativeLineNumbers: ~/editor.relativeLineNumbers, highlightSelected: ~/editor.highlightSelected, softTabs: ~/editor.softTabs, tabSize: ~/editor.tabSize, lazy: 300 }" on-save="@.save()" on-run="@.evaluate(pad.text, pad.context)" />
         </div>
-        <tabs pad flex size=0 style="height: 100%;">
+        <tabs pad flex bind-selected="~/activeTab" size=0 style="height: 100%;">
           <tab>
             <title>{{~/evalerror ? 'Error' : 'Result'}}</title>
             <pre><code on-click="copyToClipboard(~/evalresult)" title="click to copy result to the clipboard">{{~/evalerror || ~/evaltext}}</code></pre>
@@ -1502,13 +1503,13 @@
               {{{~/resultTable}}}
             {{/if}}
           </tab>
-          <tab no-pad title="Logs">
-            <button class="flat round clear-logs" on-click="@.set('logs', [])" title="Clear log entries" style="position: absolute; bottom: 0.5em; right: 0.5em; z-index: 10;">{{>delete}}</button>
+          <tab no-pad>
+            <title><span class="console-tab" class-flash="~/flash">Logs</span></title>
             <div style="overflow: auto; height: 100%;">
               {{#if ~/logs.length}}<div style="margin-top: 0.2em; border-bottom: 1px dotted rgba(128, 128, 128, 0.5);" />{{/if}}
               {{#each ~/logs}}
                 <div class=log-entry>
-                  <pre><code>{{this.0}}</code></pre>
+                  <pre><code>{{#each this.0}}<span title="click to copy to clipboard. shift+click to provide as a source named *log to raport expressions. right-click to provide as a custom named source to raport expressions." class="log-part" on-click="@event.shiftKey ? @.provideSource('log', .) : copyToClipboard(., 'Copied value JSON to clipboard.')" on-contextmenu="@.provideSource(false, ., 'log'), @event.preventDefault()">{{@.stringifyLog(.)}}</span>&nbsp;{{/each}}</code></pre>
                   <div class=time>{{this.1}}</div>
                 </div>
               {{else}}
@@ -1518,7 +1519,7 @@
           </tab>
           <tab title="Context" center no-pad>
             <div style="height: 100%; display: flex; flex-direction: column;">
-              <div style="flex-grow: 1;" class="editor-el" as-ace="{ bind: 'pad.context', syntax: 'raport', theme: @style.theme == 'dark' ? (~/editor.darkTheme || 'tomorrow_night_eighties') : (~/editor.lightTheme || 'tomorrow'), wrap: ~/editor.wrap, highlightActive: ~/editor.highlightActive, fontSize: '1em', font: 'monospace', printMargin: ~/editor.printMargin, keymode: ~/editor.keymode, lineNumbers: ~/editor.lineNumbers, relativeLineNumbers: ~/editor.relativeLineNumbers, highlightSelected: ~/editor.highlightSelected, softTabs: ~/editor.softTabs, tabSize: ~/editor.tabSize }" on-save="@.save()" on-keydown="@event.ctrlKey && @event.key === 'Enter' ? @.evaluate(pad.text, pad.context) : true" />
+              <div style="flex-grow: 1;" class="editor-el" as-ace="{ bind: 'pad.context', syntax: 'raport', theme: @style.theme == 'dark' ? (~/editor.darkTheme || 'tomorrow_night_eighties') : (~/editor.lightTheme || 'tomorrow'), wrap: ~/editor.wrap, highlightActive: ~/editor.highlightActive, fontSize: '1em', font: 'monospace', printMargin: ~/editor.printMargin, keymode: ~/editor.keymode, lineNumbers: ~/editor.lineNumbers, relativeLineNumbers: ~/editor.relativeLineNumbers, highlightSelected: ~/editor.highlightSelected, softTabs: ~/editor.softTabs, tabSize: ~/editor.tabSize }" on-save="@.save()" on-run="@.evaluate(pad.text, pad.context)" />
             </div>
           </tab>
           <tab title="Language Reference" right no-pad>
@@ -1534,7 +1535,7 @@
                 <h2 style="text-align: center;">Raport Operators</h2>
                 <dl>
                   {{#each operators as op}}{{#if (!~/opDoc || op.0.includes(~/opDoc)) && (!~/opDocSearch || JSON.stringify(op.1).toLowerCase().includes(~/opDocSearch.toLowerCase()))}}
-                  <dt style="border-bottom: 1px dotted; margin-bottom: 0.25rem; margin-top: 2rem;"><h3>{{op.0.0 === '#' ? 'Format ' + op.0.slice(1) : op.0}}{{#if op.1.alias}} <em style="font-size: 0.8em;"> - (alias for <strong>{{op.1.alias}}</strong>)</em>{{/if}}</h3></dt>
+                  <dt style="border-bottom: 1px dotted; margin-bottom: 0.25rem; margin-top: 2rem;"><h3 style="display: flex; justify-content: space-between;"><span>{{op.0.0 === '#' ? 'Format ' + op.0.slice(1) : op.0}}{{#if op.1.alias}} <em style="font-size: 0.8em;"> - (alias for <strong>{{op.1.alias}}</strong>)</em>{{/if}}</span><em>({{op.1.builtin ? 'builtin' : 'custom'}})</em></h3></dt>
                     <dd>
                       <dl>
                         {{#each op.1.sig}}
@@ -1560,6 +1561,7 @@
               </div>
             </div>
           </tab>
+          <tab right button title="Clear" on-click="@.set('logs', [])" hidden="{{~/activeTab !== 3 || !logs || logs.length < 1}}" />
         </tabs>
       </split>
     {{elseif pad.syntax === 'markdown'}}
@@ -1667,7 +1669,7 @@
           <title><span class="console-tab" class-flash="~/flash">Console</span></title>
           <div style="flex-grow: 1; overflow: auto;" class="html-console-logs">
             {{#each logs}}
-              <div class="html-log {{.name}}">{{#each .args}}{{.}}{{/each}}</div>
+              <div class="html-log {{.name}}">{{#each .args}}<span title="click to copy to clipboard. shift+click to provide as a source named *log to raport expressions. right-click to provide as a custom named source to raport expressions." class="log-part" on-click="@event.shiftKey ? @.provideSource('log', .) : copyToClipboard(., 'Copied value JSON to clipboard.')" on-contextmenu="@.provideSource(false, ., 'log'), @event.preventDefault()">{{@.stringifyLog(.)}}</span>&nbsp;{{/each}}<div class=time>{{.when}}</div></div>
             {{/each}}
             <div class="html-console-end"></div>
           </div>
@@ -1678,7 +1680,7 @@
         <tab right button title="Refresh" on-click="@.set('_html', ''), @.renderHTML()" hidden="{{~/activeTab !== 1}}" />
         <tab right button title="Add Script" on-click="@.push('pad.scripts', {})" hidden="{{~/activeTab !== 2}}" />
         <tab right button title="Add Style" on-click="@.push('pad.styles', {})" hidden="{{~/activeTab !== 3}}" />
-        <tab right button title="Clear" on-click="@.set('logs', [])" hidden="{{~/activeTab !== 4 || logs.length < 1}}" />
+        <tab right button title="Clear" on-click="@.set('logs', [])" hidden="{{~/activeTab !== 4 || !logs || logs.length < 1}}" />
       </tabs>
     {{elseif pad.syntax === 'postman'}}
       {{#if ~/unsaved}}<div style="position: absolute; left: 50%; top: 0; padding: 0.5em; opacity: 0.7; background-color: rgba(128, 128, 128, 0.5); border-radius: 0 0 0.5em 0.5em; height: 1em; z-index: 100; cursor: pointer;" title="There are unsaved changes in this pad. The changes will automatically save after your autosave timeout, or you can click here to save now." on-click="@.save()">unsaved</div>{{/if}}
@@ -1836,7 +1838,7 @@
 <script type=text/ractive id=host-explore>
   <div style="display: flex; height: 100%;">
     <div style="width: 22em; flex-shrink: 0; flex-grow: 0; border-right: 1px solid; padding: 0.5em; overflow: auto;">
-      <div class=filter-pane style="position: sticky; top: -0.5em; border-bottom: 1px solid; padding: 0.5em; margin: -0.5em -0.5em 0.5em -0.5em; display: flex;" title="Filter visible databases using a raport expression. Visible databases will be condidates to query all, so collapsing a host node will prevent any databases on that node from being queried.{{'\n\n'}}Available fields are connection: { host, port, username, password, database, ssl, label }, entry: { access, collate, ctype, data, encoding, owner }, constr, db, index, query, last-query{{'\n\n'}}Any applied query results are also available here by their applied name as a property of query e.g. query.appliedname with the type { error: string } or { rows: any[], count: number }. If a query is run and not applied or saved as a result, it will be available as last-query.">
+      <div class=filter-pane style="position: sticky; top: -0.5em; border-bottom: 1px solid; padding: 0.5em; margin: -0.5em -0.5em 0.5em -0.5em; display: flex;" title="Filter visible databases using a raport expression. Visible databases will be candidates to query all, so collapsing a host node will prevent any databases on that node from being queried.{{'\n\n'}}Available fields are connection: { host, port, username, password, database, ssl, label }, entry: { access, collate, ctype, data, encoding, owner }, constr, db, index, query, last-query{{'\n\n'}}Any applied query results are also available here by their applied name as a property of query e.g. query.appliedname with the type { error: string } or { rows: any[], count: number }. If a query is run and not applied or saved as a result, it will be available as last-query.">
         <label as-field class=inline style="width: 100%;">
           <input value="{{~/filter}}" style="flex-grow: 1; padding: 0.25em;" lazy=1000 placeholder="Filter Expression" />
         </label>

@@ -1,5 +1,5 @@
 const { evaluate, template, registerOperator, parse, parseTemplate, parsePath, run, Root, stringify } = Raport;
-const { docs } = Raport.Design;
+const { docs, registerOperatorDoc } = Raport.Design;
 const { Window } = RauiWindow;
 
 Ractive.use(RauiButton.plugin(), RauiForm.plugin({ includeStyle: true }), RauiShell.plugin(), RauiSplit.plugin(), RauiMenu.plugin(), RauiWindow.plugin(), RauiAppBar.plugin(), RauiTabs.plugin(), RauiTable.plugin({ includeGrid: true }), RauiVirtualList.plugin(), RauiCard.plugin());
@@ -587,6 +587,38 @@ let reportId = 0;
 let localDiffId = 0;
 let contextScratch;
 let globalContext = {};
+const globalSources = {};
+
+globalThis.provideSource = function(name, value) {
+  if (typeof name !== 'string') return;
+  value = typeof value === 'object' && 'value' in value ? value : { value };
+  return globalSources[name] = value;
+}
+globalThis.removeSource = function(name) {
+  if (typeof name === 'string') return;
+  const v = globalSources[name];
+  delete globalSources[name];
+  return v;
+}
+globalThis.makeContext = function(value, opts) {
+  opts = opts || {};
+  opts.sources = Object.assign({}, globalSources, opts.sources);
+  return new Root(Object.assign({}, globalContext, value), opts);
+}
+registerOperator({ type: 'value', names: ['provide-source'], apply(name, values, opts, ctx) {
+  return provideSource(opts?.name || values[0], opts?.value || opts?.source || values[1]);
+} });
+registerOperatorDoc({
+  op: 'provide-source',
+  sig: [{ proto: '(string, any) => any', desc: 'Registers the given second argument value as a global data source with the given string name and returns the value.' }],
+});
+registerOperator({ type: 'value', names: ['unprovide-source', 'remove-source'], apply(name, values, opts, ctx) {
+  return removeSource(opts?.name || values[0]);
+} });
+registerOperatorDoc({
+  op: ['unprovide-source', 'remove-source'],
+  sig: [{ proto: '(string) => any', desc: 'Unregisters the given name as a global data source and returns the value that was registered, if any.' }],
+});
 
 class App extends Ractive {
   constructor(opts) { super(opts); }
@@ -668,9 +700,6 @@ Ractive.extendWith(App, {
       label.field svg.icon:hover { opacity: 1; }
       label.field select:focus { background-color: ${data('raui.primary.bg') || '#fff'}; }
       .mermaid { background-color: ${data('theme') === 'dark' ? '#191919' : '#f7f7f7'}; }
-      .html-log.warn { ${data('theme') === 'dark' ? '' : 'background-'}color: rgb(255, 255, 210); ${data('theme') === 'dark' ? 'background-' : ''}color: rgb(142, 134, 62); }
-      .html-log.error { ${data('theme') === 'dark' ? '' : 'background-'}color: rgb(255, 215, 215); ${data('theme') === 'dark' ? 'background-' : ''}color: rgb(113, 59, 59); }
-      .html-log.info { ${data('theme') === 'dark' ? '' : 'background-'}color: rgb(217, 235, 255); ${data('theme') === 'dark' ? 'background-' : ''}color: rgb(76, 95, 172); }
     `;
   },
 });
@@ -1607,6 +1636,12 @@ class Query extends Window {
     const str = val && typeof val === 'object' ? JSON.stringify(val) : val;
     Ractive.helpers.copyToClipboard(str, msg);
   }
+  async provideSource(getname, value) {
+    getname = getname || await app.ask('Provide query result as source named:', 'Name Source', 'query');
+    if (getname === undefined) return;
+    provideSource(getname, value);
+    this.host.toast(`Query result is now available to raport expressions as *${getname}.`, { type: 'info', timeout: 3000 });
+  }
   downloadQuery = downloadQuery;
 }
 Window.extendWith(Query, {
@@ -2231,6 +2266,12 @@ class Schema extends Window {
     const db = this.config ? `${this.config.host || 'localhost'}-${this.config.port || 5432}-${this.config.database || 'postgres'}` : `Local File`;
     download(`schema ${db} ${evaluate(`#now##date,'yyyy-MM-dd HH mm'`)}.pgds`, JSON.stringify(schema), 'application/pg-difficult-schema');
   }
+  async provideSource(getname, value) {
+    getname = getname || await app.ask('Provide schema as source named:', 'Name Source', 'schema');
+    if (getname === undefined) return;
+    provideSource(getname, value);
+    this.host.toast(`Schema is now available to raport expressions as *${getname}.`, { type: 'info', timeout: 3000 });
+  }
 }
 Window.extendWith(Schema, {
   template: '#schema',
@@ -2343,7 +2384,7 @@ const renderMD = (function() {
         let optstr = '';
         if (~l.indexOf(' ')) {
           optstr = l.slice(l.indexOf(' '));
-          opts = evaluate(globalContext, `{${optstr}}`) || {};
+          opts = evaluate(makeContext(), `{${optstr}}`) || {};
         }
         if (lang === 'mermaid') {
           if (typeof subs[code] === 'string') return subs[code];
@@ -2356,13 +2397,13 @@ const renderMD = (function() {
         } else if (lang === 'jpeg+base64') {
           return `<img src="data:image/jpeg;base64,${code}" />`;
         } else if (lang === 'raport+html') {
-          return evaluate(globalContext, code);
+          return evaluate(makeContext(), code);
         } else if (lang === 'raport-template+html' || lang === 'raport-tpl+html' || lang === 'rptpl+html') {
-          return template(globalContext, code);
+          return template(makeContext(), code);
         } else if (lang.startsWith('raport+text') || lang.startsWith('raport+code')) {
           const idx = lang.indexOf(' ');
-          const args = ~idx ? evaluate(globalContext, `{${lang.slice(idx)}}`) : {};
-          let txt = evaluate(globalContext, code);
+          const args = ~idx ? evaluate(makeContext(), `{${lang.slice(idx)}}`) : {};
+          let txt = evaluate(makeContext(), code);
           if (args.lang || args.language) txt = hljs.highlight(txt, { language: args.lang || args.language, ignoreIllegals: true }).value;
           return `<pre><code class="hljs ${args.lang || args.language || 'text'}">${txt}</code></pre>`;
         } else if (lang.startsWith('csv+table')) {
@@ -2371,7 +2412,7 @@ const renderMD = (function() {
           const data = evaluate({ code }, `parse(code csv:1 ${evaluate({ opts }, 'unparse(opts noIndent:1)[1 1<]')})`);
           return `<div class="table-wrap${opts.contain ? ' contain' : ''}">${run({ type: 'delimited', source: 'data', sources: [{ source: 'data' }] }, { data: { value: data } }, {}, { table: 1 })}</div>`;
         } else if (lang.startsWith('raport+table')) {
-          const data = evaluate(globalContext, code);
+          const data = evaluate(makeContext(), code);
           return `<div class="table-wrap${opts.contain ? ' contain' : ''}">${run({ type: 'delimited', source: 'data', sources: [{ source: 'data' }] }, { data: { value: data } }, {}, { table: 1 })}</div>`;
         } else if (lang.startsWith('json')) {
           try {
@@ -2383,7 +2424,7 @@ const renderMD = (function() {
           if (!~end) end = lang.length;
           const start = lang.indexOf('+') + 1;
           const widget = lang.slice(start, end);
-          const args = evaluate(globalContext, `{${lang.slice(end)}}`);
+          const args = evaluate(makeContext(), `{${lang.slice(end)}}`);
           let idx;
           if (!widgets[widget]) widgets[widget] = 0;
           switch (widget) {
@@ -2396,12 +2437,12 @@ const renderMD = (function() {
               return `<div class="clock widget" data-index="${widgets.clock++}"><span class=time>${evaluate('@date#time')}</span></div>`;
             case 'timer': {
               timer = true;
-              const bits = evaluate(globalContext, code) || {};
+              const bits = evaluate(makeContext(), code) || {};
               return `<div class="timer widget" data-index="${widgets.timer++}"><span class=time>${bits.end > Date.now() ? evaluate({ bits }, '(bits.end - #now#)#timespan(precision::s fmt::timer)') : bits.remain ? evaluate({ bits }, 'bits.remain#timespan(precision::s fmt::timer)') : ''}</span><label class="field inline"><input placeholder="duration" /></label><button disabled>Start</button><button disabled>Pause</button><button disabled>Reset</button></div>`;
             }
             case 'pomodoro': {
               timer = true;
-              const bits = evaluate(globalContext, code) || {};
+              const bits = evaluate(makeContext(), code) || {};
               return `<div class="pomodoro widget" data-index="${widgets.pomodoro++}"><span class=time>${bits.end > Date.now() ? evaluate({ bits }, '(bits.end - #now#)#timespan(precision::s fmt::timer)') : bits.remain ? evaluate({ bits }, 'bits.remain#timespan(precision::s fmt::timer)') : ''}</span><span class=text>${bits.status || ''}</span><button disabled>Start</button><button disabled>Pause</button><button disabled>Next</button><button>Reset</button></div>`;
             }
           }
@@ -2436,12 +2477,9 @@ class ScratchPad extends Window {
     super(opts);
     this.log = arr => {
       console.log(...arr);
-      this.push('logs', [arr.map(v => {
-        if (Array.isArray(v)) return JSON.stringify(v);
-        const str = `${v}`;
-        if (str.startsWith('[object ')) return JSON.stringify(v);
-        else return v;
-      }).join(' '), evaluate(`#now##date,'HH:mm:ss yyyy-MM-dd'`)]);
+      this.set('flash', true);
+      setTimeout(() => this.set('flash', false), 16);
+      this.push('logs', [arr, evaluate(`#now##date,'HH:mm:ss yyyy-MM-dd'`)]);
     }
   }
   async load(id, copy) {
@@ -2530,7 +2568,7 @@ class ScratchPad extends Window {
         });
       } else {
         const opts = app.get('scratchroot') || {};
-        const root = new Root(Object.assign({}, globalContext), opts);
+        const root = makeContext({}, opts);
         root.sources = Object.assign({}, opts.sources);
         const ephem = this.get('ephemeral');
         if (ephem) root.sources.data = { value: ephem };
@@ -2561,8 +2599,8 @@ class ScratchPad extends Window {
       } else if (sp.curSize < 0.5) split.set('splits.1', { curSize: 40, lastSize: 40, min: false }, { deep: true });
     }
     const tabs = this.findComponent('tabs');
-    if (tabs && tabs.selection > 1) tabs.select(0);
-    this.set('visited', { table: 0, tree: 0 });
+    if (tabs && tabs.selection > 2) tabs.select(0);
+    this.set('visited', { table: tabs?.selection === 2 ? 1 : 0, tree: tabs?.selection === 1 ? 1 : 0 });
   }
   string(v) {
     return v === undefined ? 'undefined' : JSON.stringify(v);
@@ -2627,7 +2665,6 @@ class ScratchPad extends Window {
         txt = txt.slice(0, bodyIdx) + body + txt.slice(bodyIdx);
       }
 
-      console.log(txt)
       if (!~txt.indexOf('</html>')) txt = `<html>${txt}</html>`;
 
       this.set('_html', txt);
@@ -2649,6 +2686,7 @@ class ScratchPad extends Window {
       let scroll = false;
       const tab = this.find('.html-console-logs');
       if (tab && tab.scrollTop + tab.clientHeight + 20 > tab.scrollHeight) scroll = true;
+      msg.data.when = evaluate(`#now##date,'HH:mm:ss yyyy-MM-dd'`);
       this.push('logs', msg.data);
       this.set('flash', true);
       setTimeout(() => this.set('flash', false), 16);
@@ -2659,8 +2697,8 @@ class ScratchPad extends Window {
   buildRequest() {
     const req = this.get('activePostman.request');
     const opts = app.get('scratchroot') || {};
-    const ctx = new Root(Object.assign({}, globalContext), opts);
-    const vars = (this.get('postman.variable') || []).reduce((a, c) => (a[c.key] = template(ctx, a.value), a), {});
+    const ctx = makeContext({}, opts);
+    const vars = (this.get('postman.variable') || []).reduce((a, c) => (a[c.key] = template(ctx, c.value), a), {});
     ctx.value = Object.assign(ctx.value, vars);
     ctx.sources = Object.assign({}, opts.sources);
     ctx.log = this.log;
@@ -2756,7 +2794,7 @@ class ScratchPad extends Window {
       const eof = text.indexOf('\n', pos);
       const eob = text.indexOf('```', pos + 1);
       if (!~eof || !~eob) return;
-      const opts = evaluate(globalContext, `{${text.slice(pos + fence.length, eof)}}`);
+      const opts = evaluate(makeContext(), `{${text.slice(pos + fence.length, eof)}}`);
       return { code: text.slice(eof, eob), opts, from: eof + 1, to: eob - 1 };
     }
   }
@@ -3039,6 +3077,16 @@ ${md}</body></html>`
       }
     }
   }
+  async provideSource(getname, value, def) {
+    getname = getname || await app.ask('Provide value as source named:', 'Name Source', def || 'log');
+    if (getname === undefined) return;
+    provideSource(getname, value);
+    this.host.toast(`Value is now available to raport expressions as *${getname}.`, { type: 'info', timeout: 3000 });
+  }
+  stringifyLog(v) {
+    if (v === undefined) return 'undefined';
+    return evaluate({ v }, 'string(v)');
+  }
 }
 Window.extendWith(ScratchPad, {
   template: '#scratch-pad',
@@ -3049,8 +3097,16 @@ dd { margin: 0.5em 0 1em 2em; white-space: pre-wrap; }
 .ops-search { opacity: 0.2; }
 .ops-search:hover { opacity: 1; }
 .log-entry { padding: 0.5em; border-bottom: 1px dotted rgba(128, 128, 128, 0.5); position: relative; }
-.log-entry .time { position: absolute; top: 0; right: 0; width: 10em; background-color: rgba(128, 128, 128, 0.5); opacity: 0.2; transition: opacity 0.2s ease; padding: 0.2em; border-radius: 0 0 0 0.5em; }
-.log-entry .time:hover { opacity: 1; }
+.log-entry .time, .html-log .time { position: absolute; top: 0; right: 0; width: 10em; background-color: rgb(128, 128, 128); opacity: 0.2; transition: opacity 0.2s ease; padding: 0.2em; border-radius: 0 0 0 0.5em; color: #fff; }
+.log-entry .time:hover, .html-log .time:hover { opacity: 1; }
+.log-part { text-decoration-color: transparent; transition: text-decoration-color 0.2s ease; text-decoration-line: underline; }
+.log-part:hover { text-decoration-color: rgb(128, 128, 128, 0.75); }
+.html-log.warn { ${data('theme') === 'dark' ? '' : 'background-'}color: rgb(255, 255, 210); ${data('theme') === 'dark' ? 'background-' : ''}color: rgb(142, 134, 62); }
+.html-log.error { ${data('theme') === 'dark' ? '' : 'background-'}color: rgb(255, 215, 215); ${data('theme') === 'dark' ? 'background-' : ''}color: rgb(113, 59, 59); }
+.html-log.info { ${data('theme') === 'dark' ? '' : 'background-'}color: rgb(217, 235, 255); ${data('theme') === 'dark' ? 'background-' : ''}color: rgb(76, 95, 172); }
+.warn .log-part:hover { text-decoration-color: ${data('theme') !== 'dark' ? 'rgb(142, 134, 62)' : 'rgb(255, 255, 210)'}; }
+.error .log-part:hover { text-decoration-color: ${data('theme') !== 'dark' ? 'rgb(113, 59, 59)' : 'rgb(255, 215, 215)'}; }
+.info .log-part:hover { text-decoration-color: ${data('theme') !== 'dark' ? 'rgb(76, 95, 172)' : 'rgb(217, 235, 255)'}; }
 .clear-logs { transition: opacity 0.2s ease; opacity: 0.2; }
 .clear-logs:hover { opacity: 1; }
 table { margin: 0; border-collapse: collapse; border: 1px solid rgba(128, 128, 128, 0.5); }
@@ -3098,7 +3154,7 @@ code.hljs { border-radius: 0.5em; }
         const tabs = this.findComponent('tabs');
         const sel = tabs?.get('selected') || 0;
         const syntax = this.get('pad.syntax');
-        if (el && !this.get('query') && (!tabs || !['markdown', 'html'].includes(syntax) || sel === 0 || (syntax === 'postman' && sel === 3))) {
+        if (el && !this.get('query') && (!tabs || !['markdown', 'html', 'postman'].includes(syntax) || (sel === 0 && syntax !== 'postman') || (syntax === 'postman' && sel === 6))) {
           const ctx = this.getContext(el);
           ctx.decorators?.ace?.focus();
         }
@@ -3119,23 +3175,12 @@ code.hljs { border-radius: 0.5em; }
     },
   },
   data() {
-    return { docs, ops: evaluate(docs.operators), fmts: evaluate(docs.formats), expand: {}, pad: { name: '', syntax: 'markdown', text: '' }, visited: { table: 0 } };
+    return { docs, expand: {}, pad: { name: '', syntax: 'markdown', text: '' }, visited: { tree: 0, table: 0 } };
   },
   computed: {
     operators() {
-      const map = this.get('ops').reduce((a, c) => (Array.isArray(c.op) ? c.op.forEach(o => a.push([o, c])) : a.push([c.op, c]), a), []);
-      let fmts = this.get('fmts');
-      for (const f of fmts) {
-        const all = Array.isArray(f.name) ? f.name : [f.name];
-        all.forEach((n, i) => {
-          const op = `#${n}`;
-          const val = { op, sig: [{ fmt: 1, proto: op, desc: f.desc }], opts: f.opts };
-          if (i > 0) val.alias = true;
-          map.push([op, val]);
-        });
-      }
+      const map = docs.operators.reduce((a, c) => (Array.isArray(c.op) ? c.op.forEach(o => a.push([o, c])) : a.push([c.op, c]), a), []);
       let ops = evaluate({ map }, `sort(map =>if _.0[0] == '#' then 'zz[_.0]' elif _.0[0] == '|' then ' {_.0}' else _.0)`)
-
       const search = this.get('opsearch');
       if (search) {
         const re = new RegExp(search.replace(/([*.\\\/$^()[\]{}+])/g, '\\$1'), 'i');
@@ -3211,7 +3256,6 @@ code.hljs { border-radius: 0.5em; }
     },
     'pad.text'(v) {
       if (typeof v === 'string') this.saveDebounced && this.saveDebounced();
-      this.set('visited', { tree: 0, table: 0 });
       if (!this._buildlock) this.set('_html', undefined);
       if (!this.lockPostman && this.get('pad.syntax') === 'postman') {
         this.lockPostman = true;
@@ -3386,7 +3430,7 @@ class HostExplore extends Window {
     }
 
     if (source.condition) {
-      const root = new Root(Object.assign({}, globalContext), { parameters: params });
+      const root = makeContext({}, { parameters: params });
       const ok = evaluate(root, source.condition);
       if (!ok) {
         if (source.alternate) return { value: evaluate(root, source.alternate) };
@@ -3533,7 +3577,7 @@ class HostExplore extends Window {
 
       for (const src of report.sources) {
         if (src.condition) {
-          const root = new Root(Object.assign({}, globalContext), { parameters: params });
+          const root = makeContext({}, { parameters: params });
           const ok = evaluate(root, src.condition);
           if (!ok) {
             if (src.alternate) data[src.name] = { value: evaluate(root, src.alternate) };
@@ -3758,7 +3802,7 @@ dd { white-space: pre-wrap; }
         const con = cons.find(c => c.constr === constr);
         if (!con) continue;
         const list = hosts[constr];
-        res[constr] = evaluate(Object.assign({}, globalContext, { list, con, filter, apply, last, results: provided }), `let flt = parse('=>{filter}' raport:1);
+        res[constr] = evaluate(makeContext({ list, con, filter, apply, last, results: provided }), `let flt = parse('=>{filter}' raport:1);
 let connection = con.config;
 let constr = con.constr;
 filter(list |entry| => {
@@ -3906,7 +3950,7 @@ class Report extends Window {
   async fetchSource(msg) {
     const src = msg.source;
     if (src.condition) {
-      const root = new Root(Object.assign({}, globalContext), { parameters: msg.params || {} });
+      const root = makeContext({}, { parameters: msg.params || {} });
       const ok = evaluate(root, src.condition);
       if (!ok) {
         if (src.alternate) this.respond({ data: evaluate(root, src.alternate) }, msg);
@@ -4189,9 +4233,9 @@ function load(ext, multi) {
 
 async function downloadQuery(result) {
   const settings = app.get('store.settings');
-  const field = settings.csv.field || ',';
-  const record = settings.csv.record || '\n';
-  const quote = settings.csv.quote || undefined;
+  const field = settings?.csv?.field || ',';
+  const record = settings?.csv?.record || '\n';
+  const quote = settings?.csv?.quote || undefined;
   const ext = field === ',' ? 'csv' : field === '\\t' ? 'tsv' : 'txt';
   const name = await app.ask('Please enter a file name:', 'Query Result File Name', `${evaluate('@date#timestamp')} query.${ext}`);
   if (name) {
@@ -4210,7 +4254,7 @@ function cloneDeep(any) {
 
 function queryParams(definition, source, params) {
   if (source.query) {
-    const ctx = new Raport.Root(Object.assign({}, globalContext, definition.context ? cloneDeep(definition.context) : {}));
+    const ctx = makeContext(definition.context ? cloneDeep(definition.context) : {});
     ctx.parameters = params;
     if (definition.extraContext) evaluate(ctx, definition.extraContext)
     params = params || {};
@@ -4236,6 +4280,7 @@ Ractive.helpers.copyToClipboard = (function() {
   let id = 0;
   return function copyToClipboard(text, message) {
     if (typeof text !== 'string') text = JSON.stringify(text);
+    if (text === undefined) text = 'undefined';
 
     const cur = ++id;
     app.set('copied.text', text);
@@ -4454,7 +4499,7 @@ async function makeRequest(config, params) {
     const entry = requestCache[key];
     if (entry) return entry.cache;
   }
-  const root = new Root(globalContext, { parser: parseTemplate, parameters: params });
+  const root = makeContext({}, { parser: parseTemplate, parameters: params });
   const req = { url: evaluate(root, config.url) };
   if (Array.isArray(config.headers)) {
     req.headers = {};
@@ -4467,7 +4512,7 @@ async function makeRequest(config, params) {
     if (config.server) res = (await request(Object.assign({ action: 'fetch' }, req))).result;
     else res = await (await fetch(req.url, req)).text();
     if (!config.eval || config.eval === 'json') res = JSON.parse(res);
-    else if (config.eval === 'raport') res = evaluate(globalContext, res);
+    else if (config.eval === 'raport') res = evaluate(makeContext(), res);
     else if (config.eval === 'try') {
       let val = res;
       if (val[0] === '<') return evaluate({ val }, 'parse(val xml:1)');
