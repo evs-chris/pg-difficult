@@ -20,6 +20,7 @@
     <script src="./raui@0.15.6/Table.js"></script>
     <script src="./raui@0.15.6/Card.js"></script>
     <script src="./raui@0.15.6/VirtualList.js"></script>
+    <script src="./raui@0.15.6/Runner.js"></script>
     <script src="./pouchdb@9.0.0.js"></script>
 <style>
   html, body {
@@ -513,6 +514,7 @@
       </center>
     </shell>
     <input type=file id=file />
+    <runner on-init="@.runnerSetup($1)" bind-popped="~/showRunner" />
   {{else}}
     <div class=html style="width: 100vw; height: 100vh; display: flex; align-items: center; justify-content: center;">
       <h2 style="text-align: center;">

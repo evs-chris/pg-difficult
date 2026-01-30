@@ -2,7 +2,7 @@ const { evaluate, template, registerOperator, parse, parseTemplate, parsePath, r
 const { docs, registerOperatorDoc } = Raport.Design;
 const { Window } = RauiWindow;
 
-Ractive.use(RauiButton.plugin(), RauiForm.plugin({ includeStyle: true }), RauiShell.plugin(), RauiSplit.plugin(), RauiMenu.plugin(), RauiWindow.plugin(), RauiAppBar.plugin(), RauiTabs.plugin(), RauiTable.plugin({ includeGrid: true }), RauiVirtualList.plugin(), RauiCard.plugin());
+Ractive.use(RauiButton.plugin(), RauiForm.plugin({ includeStyle: true }), RauiShell.plugin(), RauiSplit.plugin(), RauiMenu.plugin(), RauiWindow.plugin(), RauiAppBar.plugin(), RauiTabs.plugin(), RauiTable.plugin({ includeGrid: true }), RauiVirtualList.plugin(), RauiCard.plugin(), RauiRunner.plugin());
 
 Ractive.perComponentStyleElements = true;
 
@@ -472,6 +472,11 @@ Ractive.styleSet({
         },
       },
     },
+    runner: {
+      primary: {
+        fga: '#222',
+      },
+    },
   },
 }, { deep: true });
 
@@ -678,6 +683,43 @@ class App extends Ractive {
     if (multi) pr.resolve(txts);
     else pr.resolve(txts[0]);
   }
+
+  runnerSetup(run) {
+    this.run = () => run.showHide();
+    run.addPlugin({
+      name: 'Eval',
+      run(str) {
+        const res = template(makeContext(), `{{${str}}}`, { template: 1 });
+        if (res != null && res !== '') return [`${res}`];
+      },
+      action(v) {
+        Ractive.helpers.copyToClipboard(v);
+      },
+    });
+    run.addPlugin(RauiRunner.WindowList(this.findComponent('host')));
+    run.addPlugin({
+      name: 'Scratch',
+      run(str) {
+        const pads = app.get('store.scratch.list');
+        const s = str.toLowerCase();
+        return pads.filter(p => p.name.toLowerCase().includes(s)).map(p => [p.name, p.id]);
+      },
+      action(v) {
+        app.openScratch({ id: v });
+      },
+    });
+    run.addPlugin({
+      name: 'Report',
+      run(str) {
+        const reps = app.get('store.report.list');
+        const s = str.toLowerCase();
+        return reps.filter(p => p.name.toLowerCase().includes(s)).map(p => [p.name, p.id]);
+      },
+      action(v) {
+        app.openReport({ id: v });
+      },
+    });
+  }
 }
 Ractive.extendWith(App, {
   noCssTransform: true,
@@ -701,6 +743,17 @@ Ractive.extendWith(App, {
       label.field select:focus { background-color: ${data('raui.primary.bg') || '#fff'}; }
       .mermaid { background-color: ${data('theme') === 'dark' ? '#191919' : '#f7f7f7'}; }
     `;
+  },
+  on: {
+    init() {
+      document.body.addEventListener('keydown', ev => {
+        if ((ev.which === 32 || ev.which === 80 || ev.which === 112) && (ev.ctrlKey || ev.metaKey)) {
+          ev.preventDefault();
+          ev.stopPropagation();
+          if (typeof this.run === 'function') this.run();
+        }
+      });
+    },
   },
 });
 
