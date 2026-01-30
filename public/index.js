@@ -742,6 +742,7 @@ Ractive.extendWith(App, {
       label.field svg.icon:hover { opacity: 1; }
       label.field select:focus { background-color: ${data('raui.primary.bg') || '#fff'}; }
       .mermaid { background-color: ${data('theme') === 'dark' ? '#191919' : '#f7f7f7'}; }
+      button[disabled] { opacity: 0.5; }
     `;
   },
   on: {
@@ -2491,12 +2492,17 @@ const renderMD = (function() {
             case 'timer': {
               timer = true;
               const bits = evaluate(makeContext(), code) || {};
-              return `<div class="timer widget" data-index="${widgets.timer++}"><span class=time>${bits.end > Date.now() ? evaluate({ bits }, '(bits.end - #now#)#timespan(precision::s fmt::timer)') : bits.remain ? evaluate({ bits }, 'bits.remain#timespan(precision::s fmt::timer)') : ''}</span><label class="field inline"><input placeholder="duration" /></label><button disabled>Start</button><button disabled>Pause</button><button disabled>Reset</button></div>`;
+              return `<div class="timer widget" data-index="${widgets.timer++}"><span class=time style="margin-right: 1em;">${bits.end > Date.now() ? evaluate({ bits }, '(bits.end - #now#)#timespan(precision::s fmt::timer)') : bits.remain ? evaluate({ bits }, 'bits.remain#timespan(precision::s fmt::timer)') : ''}</span><label class="field inline"><input placeholder="duration" value="${bits.input || ''}" ${bits.end || bits.remain ? 'style="display: none;"' : ''} /></label><button disabled>Start</button><button disabled>Pause</button><button disabled>Reset</button></div>`;
+            }
+            case 'interval': {
+              timer = true;
+              const bits = evaluate(makeContext(), code) || {};
+              return `<div class="interval widget" data-index="${widgets.interval++}"><span class=time style="margin-right: 1em;">${bits.end > Date.now() ? evaluate({ bits }, '(bits.end - #now#)#timespan(precision::s fmt::timer)') : bits.remain ? evaluate({ bits }, 'bits.remain#timespan(precision::s fmt::timer)') : ''}</span><label class="field inline"><input placeholder="duration" value="${bits.input || ''}" class="interval" /></label><button disabled>Start</button><button disabled>Pause</button><button disabled>Reset</button></div>`;
             }
             case 'pomodoro': {
               timer = true;
               const bits = evaluate(makeContext(), code) || {};
-              return `<div class="pomodoro widget" data-index="${widgets.pomodoro++}"><span class=time>${bits.end > Date.now() ? evaluate({ bits }, '(bits.end - #now#)#timespan(precision::s fmt::timer)') : bits.remain ? evaluate({ bits }, 'bits.remain#timespan(precision::s fmt::timer)') : ''}</span><span class=text>${bits.status || ''}</span><button disabled>Start</button><button disabled>Pause</button><button disabled>Next</button><button>Reset</button></div>`;
+              return `<div class="pomodoro widget" data-index="${widgets.pomodoro++}"><span class=time style="margin-right: 1em;">${bits.end > Date.now() ? evaluate({ bits }, '(bits.end - #now#)#timespan(precision::s fmt::timer)') : bits.remain ? evaluate({ bits }, 'bits.remain#timespan(precision::s fmt::timer)') : ''}</span><span class=text>${bits.status || ''}</span><button disabled>Start</button><button disabled>Pause</button><button disabled>Next</button><button>Reset</button></div>`;
             }
           }
         } else {
@@ -2895,21 +2901,31 @@ class ScratchPad extends Window {
       count.innerText = `${num}`;
       const code = this.widgetCode(w);
       if (code) this.replaceWidgetCode(code, count.innerText);
-    } else if (w.classList.contains('timer') || w.classList.contains('pomodoro')) {
+    } else if (w.classList.contains('timer') || w.classList.contains('pomodoro') || w.classList.contains('interval')) {
       const pom = w.classList.contains('pomodoro');
+      const int = w.classList.contains('interval');
       const code = this.widgetCode(w);
       if (e.innerText === 'Start') {
         const data = evaluate(code.code);
-        const time = data?.remain ? evaluate(data, `date(#now# + remain)`) : evaluate({ tm: pom ? code.opts?.on || '25mm' : w.querySelector('input').value }, `date(#now# + interval(tm))`);
-        this.replaceWidgetCode(code, evaluate({ data: { end: +time } }, 'unparse(data)'));
-        this.checkTimerPrecision(1);
+        const input = w.querySelector('input')?.value;
+        const time = data?.remain ? evaluate(data, `date(#now# + remain)`) : evaluate({ tm: pom ? code.opts?.on || '25mm' : input }, `date(#now# + interval(tm))`);
+        this.replaceWidgetCode(code, evaluate({ data: { end: +time }, input }, 'unparse(if input then data + { input: input } else data)'));
+        this.markdownTimes();
       } else if (e.innerText === 'Pause') {
         const data = { remain: evaluate(code, 'date(eval(code).end) - #now#' ) };
         if (pom) data.segment = evaluate(code.code)?.segment || 'work';
         this.replaceWidgetCode(code, evaluate({ data }, 'unparse(data)'));
+        this.markdownTimes();
       } else if (e.innerText === 'Reset') {
-        this.replaceWidgetCode(code, '');
-        w.querySelector('.time').innerText = '';
+        const data = evaluate(code.code);
+        const input = w.querySelector('input');
+        if (int && data?.end && input?.value) {
+          data.end = evaluate({ input: input.value }, `+(#now# + interval(input))`);
+          this.replaceWidgetCode(code, evaluate({ data }, 'unparse(data)'));
+        } else {
+          this.replaceWidgetCode(code, pom ? '' : evaluate({ data: { input: data.input } }, 'unparse(data)'));
+          w.querySelector('.time').innerText = '';
+        }
       } else if (e.innerText === 'Next') {
         const data = evaluate(code.code);
         const segment = data?.segment || 'work';
@@ -2917,6 +2933,7 @@ class ScratchPad extends Window {
         const tm = evaluate({ int: next === 'work' ? code.opts?.on || '25mm' : code.opts?.off || '5mm' }, 'date(#now# + interval(int))');
         this.replaceWidgetCode(code, evaluate({ data: { end: +tm, segment: next } }, 'unparse(data)'));
         w.querySelector('.time').innerText = `${next} for ${evaluate({ rem: +tm - Date.now() }, 'rem#timespan(format::timer precision::s)')}`;
+        this.markdownTimes();
       }
     } else if (w.classList.contains('dong')) {
       notificate({ sound: 'dong', message: 'Dong!', timeout: 4000 });
@@ -2926,9 +2943,9 @@ class ScratchPad extends Window {
     const e = ev.target;
     const w = this.findWidget(e);
     if (!w) return;
-    if (w.classList.contains('timer')) {
+    if (w.classList.contains('timer') || w.classList.contains('interval')) {
       const buttons = w.querySelectorAll('button');
-      if (evaluate(`#${e.value}#`)) buttons[0].disabled = false;
+      if (evaluate({ str: e.value }, `interval(str)`)) buttons[0].disabled = false;
       else buttons[0].disabled = true;
     }
   }
@@ -2947,9 +2964,12 @@ class ScratchPad extends Window {
           o.time.innerText = evaluate({ fmt }, '@date#time(fmt)');
         }
       }
-      if (obj = ts.timer) {
+      const timers = ts.timer && ts.interval ? [].concat(ts.timer, ts.interval) : (ts.timer || ts.interval);
+      if (obj = timers) {
         for (const o of obj) {
           const state = evaluate(this.widgetCode(o.widget).code);
+          const input = o.widget.querySelector('input');
+          const int = input.classList.contains('interval');
           if (state?.end) {
             const now = Date.now();
             const rem = now - state.end;
@@ -2958,20 +2978,24 @@ class ScratchPad extends Window {
               notificate({ sound: o.opts?.sound || 'time-beep', message: o.opts?.message, body: o.opts?.body, timeout: o.opts?.timeout });
               o.time.innerText = 'elapsed';
               o.data.donged = true;
-              btns[0].disabled = !evaluate({ str: o.widget.querySelector('input').value }, 'interval(str)');
+              input.style.display = '';
+              btns[0].disabled = !evaluate({ str: input.value }, 'interval(str)');
               btns[1].disabled = true;
               btns[2].disabled = false;
             } else {
               if (rem < 0) {
                 o.time.innerText = evaluate({ rem: -rem }, 'rem#timespan(format::timer precision::s)');
                 if (!['mm', 'min'].includes(o.opts?.precision)) precision = 1;
-                btns[0].disabled = btns[2].disabled = true;
+                btns[0].disabled = true;
                 btns[1].disabled = false;
+                btns[2].disabled = int ? !evaluate({ str: input.value }, 'interval(str)') : true;
+                if (!int) input.style.display = 'none';
               } else {
                 o.time.innerText = 'elapsed';
-                btns[0].disabled = !evaluate({ str: o.widget.querySelector('input').value }, 'interval(str)');
+                btns[0].disabled = !evaluate({ str: input.value }, 'interval(str)');
                 btns[1].disabled = true;
                 btns[2].disabled = false;
+                input.style.display = '';
               }
             }
           } else if (state?.remain) {
@@ -2979,11 +3003,13 @@ class ScratchPad extends Window {
             o.time.innerText = `paused: ${evaluate({ rem: state.remain }, 'rem#timespan(format::timer precision::s)')}`;
             btns[0].disabled = btns[2].disabled = false;
             btns[1].disabled = true;
+            if (!int) input.style.display = 'none';
           } else {
             o.time.innerText = '';
             const btns = o.widget.querySelectorAll('button');
-            btns[0].disabled = !evaluate({ str: o.widget.querySelector('input').value }, 'interval(str)');
+            btns[0].disabled = !evaluate({ str: input.value }, 'interval(str)');
             btns[1].disabled = btns[2].disabled = true;
+            input.style.display = '';
           }
         }
       }
