@@ -3554,7 +3554,7 @@ class HostExplore extends Window {
     } else if (source.type === 'pg-fetch') {
       return { value: await makeRequest(source, params) };
     } else if (source.type === 'scratch') {
-      return loadScratchReportSource(source);
+      return loadScratchReportSource(source, params);
     }
   }
   
@@ -3672,7 +3672,7 @@ class HostExplore extends Window {
         } else if (src.type === 'pg-fetch') {
           data[src.name] = { value: await makeRequest(src, params) };
         } else if (src.type === 'scratch') {
-          data[src.name] = await loadScratchReportSource(src);
+          data[src.name] = await loadScratchReportSource(src, params);
         }
       } // TODO: other sources?
 
@@ -4077,7 +4077,7 @@ class Report extends Window {
         this.respond({ error: e.message }, msg);
       }
     } else if (src.type === 'scratch') {
-      this.respond({ data: await loadScratchReportSource(src) }, msg);
+      this.respond({ data: await loadScratchReportSource(src, msg.params || {}) }, msg);
     } else {
       this.respond({ error: `Invalid source ${src.type}` }, msg);
     }
@@ -4528,7 +4528,7 @@ function processQueryParams(params) {
   return params ? [params] : undefined;
 }
 
-async function loadScratchReportSource(source) {
+async function loadScratchReportSource(source, params) {
   let id = source.id;
   if (!id && source.path) id = (await store.list('scratch')).find(s => s.name === source.path)?.id;
   if (!id) return;
