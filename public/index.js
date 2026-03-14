@@ -1408,7 +1408,7 @@ Window.extendWith(ControlPanel, {
       let res;
       if (flt && (('op' in flt && flt.op === 'block') || 'r' in flt || ('v' in flt && Object.keys(flt).length === 1))) {
         // just use the text
-        v = parse(`name ilike ${JSON.stringify(`%${v}%`)}`);
+        v = parse(`name flike ${JSON.stringify(`${v}`)}`);
         const list = await store.list('scratch');
         res = list.filter(e => evaluate(e, v)).map(e => e.id);
       } else {
