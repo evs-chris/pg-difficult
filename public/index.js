@@ -607,8 +607,9 @@ globalThis.removeSource = function(name) {
 }
 globalThis.makeContext = function(value, opts) {
   opts = opts || {};
-  opts.sources = Object.assign({}, globalSources, opts.sources);
-  return new Root(Object.assign({}, globalContext, value), opts);
+  const root = new Root(Object.assign({}, globalContext, value), opts);
+  root.sources = Object.assign({}, globalSources, opts.sources);
+  return root;
 }
 registerOperator({ type: 'value', names: ['provide-source'], apply(name, values, opts, ctx) {
   return provideSource(opts?.name || values[0], opts?.value || opts?.source || values[1]);
