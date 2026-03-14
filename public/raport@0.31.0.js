@@ -586,18 +586,19 @@
     }
     function istr(...strings) {
         const copy = strings.slice();
-        const chars = read1(copy.map(s => s.toLowerCase() + s.toUpperCase()).join(''));
         const idx = copy.map(s => s.toLowerCase());
+        const lens = idx.map(s => s.length);
         return {
             parse(s, p, res) {
-                const r = chars.parse(s, p, res);
-                if (!r.length)
-                    return r;
-                const i = idx.indexOf(r[0].toLowerCase());
-                if (!~i)
-                    return fail(p, detailedFail & 1 && `expected ${copy.length > 1 ? 'one of ' : ''}${copy.map(s => `${s}`).join(', ')}`);
-                r[0] = copy[i];
-                return r;
+                for (let i = 0; i < idx.length; i++) {
+                    const v = s.slice(p, p + lens[i]);
+                    if (v.toLowerCase() === idx[i]) {
+                        res[0] = copy[i];
+                        res[1] = p + lens[i];
+                        return res;
+                    }
+                }
+                return fail(p, detailedFail & 1 && `expected ${copy.length > 1 ? 'one of ' : ''}${copy.map(s => `${s}`).join(', ')}`);
             }
         };
     }
@@ -1162,7 +1163,14 @@
     const space$3 = ' \t\n\r';
     const escmap$1 = { b: '\b', r: '\r', n: '\n', "'": "'", '"': '"', t: '\t', '\\': '\\' };
     const underscores = /_/g;
-    const JNum = map(seq(opt(str('-', '+')), read1(digits), read(digits + '_'), opt(str(".")), read(digits + '_'), map(opt(seq(str('e', 'E'), opt(str('+', '-')), read1(digits + '_'))), r => r && concat$1(r))), r => +(concat$1(r).replace(underscores, '')));
+    const decNum = map(seq(opt(str('-', '+')), read1(digits), read(digits + '_'), opt(str(".")), read(digits + '_'), map(opt(seq(str('e', 'E'), opt(str('+', '-')), read1(digits + '_'))), r => r && concat$1(r))), r => +(concat$1(r).replace(underscores, '')));
+    function ccat(v) {
+        return concat$1([v[0]].concat(v.slice(2)));
+    }
+    const hexNum = map(seq(opt(str('-', '+')), str('0x', '0X'), read1(hex$1), read(hex$1 + '_')), r => parseInt(ccat(r).replace(underscores, ''), 16));
+    const octNum = map(seq(opt(str('-', '+')), str('0o'), read1('01234567'), read('01234567_')), r => parseInt(ccat(r).replace(underscores, ''), 8));
+    const binNum = map(seq(opt(str('-', '+')), str('0b', '0B'), read1('01'), read('01_')), r => parseInt(ccat(r).replace(underscores, ''), 2));
+    const JNum = alt('number', hexNum, binNum, octNum, decNum);
     const JStringEscape = map(seq(str("\\"), notchars(1, 'xu')), r => escmap$1[r[1]] || r[1]);
     const JStringUnicode = map(seq(str("\\u"), chars(4, hex$1)), r => String.fromCharCode(parseInt(r[1], 16)));
     const JStringHex = map(seq(str('\\x'), chars(2, hex$1)), r => String.fromCharCode(parseInt(r[1], 16)));
@@ -1277,7 +1285,7 @@
     }, 'localpath');
     const parsePath = parser$1(keypath);
     const parseLetPath = parser$1(localpath);
-    const illegalRefs = ['if', 'else', 'elif', 'elseif', 'elsif', 'fi', 'esac', 'unless', 'then', 'case', 'when', 'not', 'gte', 'gt', 'lte', 'lt', 'in', 'like', 'ilike', 'not-in', 'not-like', 'not-ilike', 'contains', 'does-not-contain', 'is-not', 'is', 'strict-is-not', 'strict-is', 'deep-is-not', 'deep-is', 'and', 'or', 'end', 'with', 'each'];
+    const illegalRefs = ['if', 'else', 'elif', 'elseif', 'elsif', 'fi', 'esac', 'unless', 'then', 'case', 'when', 'not', 'gte', 'gt', 'lte', 'lt', 'in', 'ilike', 'like', 'flike', 'cflike', 'not-in', 'not-like', 'not-ilike', 'not-flike', 'not-cflike', 'contains', 'does-not-contain', 'is-not', 'is', 'strict-is-not', 'strict-is', 'deep-is-not', 'deep-is', 'and', 'or', 'end', 'with', 'each'];
     const ref = map(keypath, (r, err) => {
         if (r.k.length === 1 && !r.p && !r.u && illegalRefs.includes(r.k[0]))
             err(`invalid reference name '${r.k[0]}'`);
@@ -1516,7 +1524,7 @@
     const binop_e = map(seq(binop_pipe, rep(alt(seq(nop, name$1(str('**'), 'exp op'), nop, binop_pipe), seq(rws, name$1(str('**'), 'exp op'), rws, binop_pipe)))), ([arg1, more]) => more.length ? rightassoc(arg1, more) : arg1, 'exp-op');
     const binop_md = map(seq(binop_e, rep(alt(seq(nop, name$1(str('*', '/%', '/', '%'), 'muldiv-op'), nop, binop_e), seq(rws, name$1(str('*', '/%', '/', '%'), 'muldiv-op'), rws, binop_e)))), ([arg1, more]) => more.length ? more.reduce(leftassoc, arg1) : arg1, 'muldiv-op');
     const binop_as = map(seq(binop_md, rep(alt(seq(nop, name$1(str('+', '-'), 'addsub-op'), nop, binop_md), seq(rws, name$1(str('+', '-'), 'addsub-op'), rws, binop_md)))), ([arg1, more]) => more.length ? more.reduce(leftassoc, arg1) : arg1, 'addsub-op');
-    const binop_cmp = map(seq(binop_as, rep(alt(seq(nop, name$1(str('>=', '>', '<=', '<'), 'cmp-op'), nop, binop_as), seq(rws, name$1(str('>=', '>', '<=', '<', 'gte', 'gt', 'lte', 'lt', 'in', 'like', 'ilike', 'not-in', 'not-like', 'not-ilike', 'contains', 'does-not-contain'), 'cmp-op'), rws, binop_as)))), ([arg1, more]) => more.length ? more.reduce(leftassoc, arg1) : arg1, 'cmp-op');
+    const binop_cmp = map(seq(binop_as, rep(alt(seq(nop, name$1(str('>=', '>', '<=', '<'), 'cmp-op'), nop, binop_as), seq(rws, name$1(str('>=', '>', '<=', '<', 'gte', 'gt', 'lte', 'lt', 'in', 'like', 'ilike', 'flike', 'cflike', 'not-in', 'not-like', 'not-ilike', 'not-flike', 'not-cflike', 'contains', 'does-not-contain'), 'cmp-op'), rws, binop_as)))), ([arg1, more]) => more.length ? more.reduce(leftassoc, arg1) : arg1, 'cmp-op');
     const binop_eq = map(seq(binop_cmp, rep(alt(seq(nop, name$1(str('===', '==', '!==', '!='), 'eq-op'), nop, binop_cmp), seq(rws, name$1(str('===', '==', '!==', '!=', 'is-not', 'is', 'strict-is-not', 'strict-is', 'deep-is-not', 'deep-is'), 'eq-op'), rws, binop_cmp)))), ([arg1, more]) => more.length ? more.reduce(leftassoc, arg1) : arg1, 'eq-op');
     const binop_and = map(seq(binop_eq, rep(alt(seq(nop, name$1(str('&&'), 'and-op'), nop, binop_eq), seq(rws, name$1(str('and', '&&'), 'and-op'), rws, binop_eq)))), ([arg1, more]) => more.length ? more.reduce(leftassoc, arg1) : arg1, 'and-op');
     const binop_or = map(seq(binop_and, rep(alt(seq(nop, name$1(str('||', '??'), 'or-op'), nop, binop_and), seq(rws, name$1(str('or', '||', '??'), 'or-op'), rws, binop_and)))), ([arg1, more]) => more.length ? more.reduce(leftassoc, arg1) : arg1, 'or-op');
@@ -1837,6 +1845,9 @@
                     }
                     else if (which === 'parameters' || which === 'sources') {
                         o = root.root[which];
+                    }
+                    else if (which === 'VERSION') {
+                        o = '0.31.0';
                     }
                     else if (which !== 'value') {
                         while (ctx && (!ctx.special || !(which in ctx.special)))
@@ -2255,8 +2266,23 @@
                         a = Object.assign({}, a, { args: [{ r: { k: ['pipe'], p: '@' } }].concat(a.args || []) });
                     if (isApplication(a))
                         v = evalApply(root, a, [v]);
-                    else
-                        v = evalParse(extend$1(root, { special: { pipe: v } }), a);
+                    else {
+                        if (isReference(a)) {
+                            const ref = safeGet(root, a.r);
+                            if (isApplication(ref)) {
+                                a = ref;
+                            }
+                            else {
+                                const r = typeof a.r === 'string' ? a.r : typeof a.r === 'object' && 'k' in a.r && Array.isArray(a.r.k) && a.r.k.length === 1 && typeof a.r.k[0] === 'string' ? a.r.k[0] : '';
+                                if (opMap[r])
+                                    a = { op: r, args: [{ r: { k: ['pipe'], p: '@' } }] };
+                            }
+                        }
+                        if (isApplication(a))
+                            v = evalApply(root, a, [v]);
+                        else
+                            v = evalParse(extend$1(root, { special: { pipe: v } }), a);
+                    }
                 }
                 return v;
             }
@@ -3246,6 +3272,9 @@
         if (report.sources)
             applySources(ctx, report.sources, sources);
         ctx.parameters = Object.assign({}, initParameters(report, sources), ctx.parameters);
+        if (!ctx.special)
+            ctx.special = {};
+        ctx.special.definition = report;
         if (report.extraContext) {
             const res = evaluate(ctx, report.extraContext);
             if (res && typeof res === 'object')
@@ -3698,7 +3727,7 @@
         return res;
     }
     function style(str) {
-        const parsed = parser(str);
+        const parsed = parser(typeof str === 'string' ? str : str != null ? `${str}` : '');
         if (Array.isArray(parsed))
             return process(parsed);
         return str;
@@ -5714,8 +5743,9 @@
     function csv(options) {
         const opts = Object.assign({}, DEFAULTS, options);
         const ws = skip(' \t\r\n'.replace(opts.field, '').replace(opts.record, '').replace(opts.quote, ''));
-        const quote = str(opts.quote || '"');
-        const quotedField = bracket(seq(ws, quote), map(rep(alt(readTo(opts.quote || '"'), map(seq(quote, quote), () => ''))), r => concat$1(r)), seq(quote, ws));
+        const q = opts.quote || '"';
+        const quote = str(q);
+        const quotedField = bracket(seq(ws, quote), map(rep(alt(map(str(`${q}${q}`), () => q), readTo(q))), r => concat$1(r)), seq(quote, ws));
         const unquotedField = readTo(opts.record + opts.field, true);
         const field = opts.quote ? alt(quotedField, unquotedField) : unquotedField;
         const record = verify(rep1sep(field, seq(ws, str(opts.field), ws)), s => s.length > 1 || s[0].length > 0 || 'empty record');
@@ -6359,6 +6389,32 @@
             }
         }
     }
+    function fuzzyMatch(search, str) {
+        if (!search)
+            return 0;
+        if (typeof str !== 'string')
+            str = `${str}`;
+        if (typeof search !== 'string')
+            search = `${search}`;
+        let c = -1;
+        let distance = 0;
+        let match = 0;
+        let front = 0;
+        fuzz: for (let i = 0; i < search.length; i++) {
+            for (let cc = c + 1; cc < str.length; cc++) {
+                if (search[i] === str[cc]) {
+                    c = cc;
+                    match++;
+                    if (i === 0)
+                        front = cc;
+                    continue fuzz;
+                }
+                distance++;
+            }
+            return 0 - str.length - search.length + 2 * match;
+        }
+        return (2 * (str.length + search.length)) - (2 * distance - (front + (str.length - 1 - c)));
+    }
     function inRange(v, range) {
         let found = false;
         let excluded = false;
@@ -6466,7 +6522,48 @@
             else
                 res = re.test(target);
         }
-        return name === 'like' || name === 'ilike' ? res : !res;
+        return name[0] !== 'n' ? res : !res;
+    }), simple(['flike', 'not-flike', 'cflike', 'not-cflike'], (name, values) => {
+        const [target, pattern] = values;
+        let res = false;
+        const patterns = typeof pattern === 'string' ? [pattern] : pattern;
+        const targets = typeof target === 'string' ? [target] : target;
+        if (!Array.isArray(patterns) || !Array.isArray(targets))
+            return false;
+        if (name === 'flike' || name === 'not-flike') {
+            for (let i = 0; i < targets.length; i++)
+                targets[i] = `${targets[i]}`.toLowerCase();
+            for (let i = 0; i < patterns.length; i++)
+                patterns[i] = `${patterns[i]}`.toLowerCase();
+        }
+        for (let i = 0; i < patterns.length && !res; i++) {
+            for (let j = 0; j < targets.length && !res; j++)
+                res = fuzzyMatch(patterns[i], targets[j]) >= 0;
+        }
+        return name[0] !== 'n' ? res : !res;
+    }), simple(['fuzzy-likeness'], (_, values, opts) => {
+        let [target, pattern, arg] = values;
+        if (!opts && typeof arg === 'object')
+            opts = arg;
+        if (!Array.isArray(target))
+            target = [target];
+        if (!Array.isArray(pattern))
+            pattern = [pattern];
+        if (!target.length || !pattern.length)
+            return 0;
+        let res = null;
+        for (let i = 0; i < target.length && (res === null || res < 0); i++) {
+            for (let j = 0; j < pattern.length && (res === null || res < 0); j++) {
+                let n;
+                if (!(opts === null || opts === void 0 ? void 0 : opts.case) && !(opts === null || opts === void 0 ? void 0 : opts.c))
+                    n = fuzzyMatch(`${pattern[j]}`.toLowerCase(), `${target[i]}`.toLowerCase());
+                else
+                    n = fuzzyMatch(pattern[j], target[i]);
+                if (res === null || res < n)
+                    res = n;
+            }
+        }
+        return res;
     }), simple(['in', 'not-in'], (name, values, _opts, ctx) => {
         const [l, r] = values;
         let range;
@@ -6861,6 +6958,14 @@
             }
             else if (typeof value === 'string' && opts.styled)
                 return style(value);
+            else if ((opts.int || opts.integer) && !isNaN(value)) {
+                const r = Math.min(36, Math.max(2, opts.radix || opts.base || 10));
+                let v = Math.floor(+value);
+                const n = v < 0;
+                if (n)
+                    v = v * -1;
+                return `${n ? '-' : ''}${r === 16 ? '0x' : r === 2 ? '0b' : r === 8 ? '0o' : ''}${v.toString(r)}`;
+            }
             else if (value == null)
                 return '';
         }
@@ -7023,17 +7128,17 @@
             return values.reduce((a, c) => +round(a - (!isNum(c) ? 0 : +c), ctx.special.round), !isNum(first) ? 0 : +first);
         else
             return values.reduce((a, c) => a - (!isNum(c) ? 0 : +c), !isNum(first) ? 0 : +first);
-    }), simple(['*', 'multiply'], (_name, values, _opts, ctx) => {
+    }), simple(['*', 'multiply'], (name, values, _opts, ctx) => {
         const first = values.shift();
         if (!isNum(first)) {
-            if (values.length === 1 && isNum(values[0]) && +values[0] > 0) {
+            if ((values.length === 1 || name !== '*') && isNum(values[0]) && +values[0] > 0) {
                 if (typeof first === 'string') {
                     return stringTimes(first, +values[0]);
                 }
                 else if (isApplication(first) && +values[0] < 10000) {
                     const res = [];
                     for (let i = 0; i < +values[0]; i++)
-                        res.push(evalApply(ctx, first, [i]));
+                        res.push(evalApply(ctx, first, values.slice(1), { index: i }));
                     return res;
                 }
                 else if (Array.isArray(first) && +values[0] < 10000 && first.length < 1000) {
@@ -7197,6 +7302,12 @@
         }
         else if (Array.isArray(src)) {
             return src.slice().reverse();
+        }
+        else if (typeof src === 'object') {
+            const r = {};
+            for (const k in src)
+                r[src[k]] = k;
+            return r;
         }
     }), simple(['wrap-count'], (_name, [str, width, font], opts, ctx) => {
         var _a;
@@ -7421,6 +7532,18 @@
             return range(v, opts);
         else if (opts.xml)
             return parse(v, opts);
+        else if (opts.int || opts.integer) {
+            let r = opts.radix || opts.base;
+            const p = v.slice(0, 2);
+            if (p === '0x' || p === '0X')
+                r = 16;
+            else if (p === '0b' || p === '0B')
+                r = 2;
+            else if (p === '0o')
+                r = 8;
+            r = Math.min(36, Math.max(2, r));
+            return parseInt(`${v}`.replace(/0[xob]/i, ''), r);
+        }
         else if (opts.csv || opts.delimited) {
             if (opts.detect || !opts.field || !opts.record)
                 opts = Object.assign(detect(v, opts.context), opts);
@@ -7689,6 +7812,14 @@
                 const res = Array.prototype.map.call(v, (e, i) => evalApply(ctx, app, [e, i], { index: i, key: i }));
                 if (opts && opts.flat)
                     return flatten(res, opts.flat);
+                if (opts && opts.object)
+                    return res.reduce((a, c) => {
+                        if (Array.isArray(c))
+                            a[c[0]] = c[1];
+                        else if (typeof c === 'object' && 'key' in c)
+                            a[c.key] = c.value;
+                        return a;
+                    }, {});
                 return res;
             }
             else if (v && typeof v === 'object' && isApplication(app)) {
@@ -8085,6 +8216,7 @@
     exports.evaluate = evaluate;
     exports.extend = extend$1;
     exports.filter = filter;
+    exports.fuzzyMatch = fuzzyMatch;
     exports.getOperator = getOperator;
     exports.getOperatorMap = getOperatorMap;
     exports.initParameters = initParameters;
