@@ -2782,7 +2782,7 @@ class ScratchPad extends Window {
     ctx.value = Object.assign(ctx.value, vars);
     ctx.sources = Object.assign({}, opts.sources);
     ctx.log = this.log;
-    const r = { url: template(ctx, req.url.raw), method: req.method || 'GET', headers: req.header.reduce((a, c) => (a[template(ctx, c.key)] = template(ctx, c.value), a), {}) };
+    const r = { url: template(ctx, req.url.raw), method: req.method || 'GET', headers: (req.header || []).reduce((a, c) => (a[template(ctx, c.key)] = template(ctx, c.value), a), {}) };
     if (req.body?.mode === 'raw' && req.body?.raw && !['GET', 'OPTIONS', 'HEAD'].includes(req.method || 'GET')) r.body = template(ctx, req.body.raw);
     return r;
   }
