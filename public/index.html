@@ -562,7 +562,7 @@
               {{else}}
                 <div>
                   <button on-click="@.stopLeak(.)" title="Cease monitoring connections to this database.">Stop Monitor</button>
-                  <button on-click="@.leaks(.)" title="View monitored connecstions to this database">Connections</button>
+                  <button on-click="@.leaks(.)" title="View monitored connections to this database">Connections</button>
                 </div>
               {{/if}}
               <button on-click="@.query(.)" title="Open a query window to run queries against this database.">Query</button>
@@ -1135,8 +1135,9 @@
     </tab>
   </tabs>
   <div as-serverblock />
-  <div style="background-color: rgba(128, 128, 128, 0.1); padding: 0.2em; border-top: 1px solid;">
+  <div style="background-color: rgba(128, 128, 128, 0.1); padding: 0.2em; border-top: 1px solid; display: flex; justify-content: space-between;">
     <div>Updated {{age(~/status.lastUpdate)}}</div>
+    {{#if @.leakId != null}}<div><label as-field class=one-line><input type=checkbox checked="{{~/showAll}}" /> Show all server connections? <tip>This will include connections to databases other than the one this monitor was started on.</tip></label>{{/if}}
   </div>
 </script>
 

@@ -2243,12 +2243,16 @@ Window.extendWith(Leaks, {
 .leak .constr { width: 18em; }
 .leak .query { width: 99%; }
 .leak .pid { width: 6em; text-align: right; }
+label.one-line { min-height: 1em; padding: 0; }
+label.one-line input { top: -0.3em; left: -0.3em; height: 1.8em; width: 1.8em; }
+label.field.check.one-line:after { top: 0.1em; left: 0.1em; }
 `; },
   computed: {
     leaks() {
       if (this.leakId != null) {
         const leak = app.get(`status.leaks.${this.leakId}`);
-        return leak.current.filter(l => l.database === this.database && !leak.initial[this.database].find(k => k.pid === l.pid && k.started === l.started)).map(l => Object.assign({ source: constr(leak.config, { database: l.database }) }, l));
+        const showall = this.get('showAll');
+        return leak.current.filter(l => (showall || l.database === this.database) && !(leak.initial[this.database] || []).find(k => k.pid === l.pid && k.started === l.started)).map(l => Object.assign({ source: constr(leak.config, { database: l.database }) }, l));
       } else {
         return Object.values(app.get('status.leaks')).reduce((a, leak) => {
           const inits = Object.values(leak.initial).reduce((a, c) => (a.push.apply(a, c), a), []);
@@ -2260,7 +2264,8 @@ Window.extendWith(Leaks, {
     current() {
       if (this.leakId != null) {
         const leak = app.get(`status.leaks.${this.leakId}`);
-        return (app.get(`status.leaks.${this.leakId}.current`) || []).filter(l => l.database === this.database).map(l => Object.assign({ source: constr(leak, { database: l.database }) }, l));
+        const showall = this.get('showAll');
+        return (app.get(`status.leaks.${this.leakId}.current`) || []).filter(l => showall || l.database === this.database).map(l => Object.assign({ source: constr(leak, { database: l.database }) }, l));
       } else {
         return Object.values(app.get('status.leaks')).reduce((a, c) => {
           a.push.apply(a, c.current.filter(l => c.databases.includes(l.database)).map(l => Object.assign({ source: constr(c.config, { database: l.database }) }, l)));
@@ -2271,7 +2276,8 @@ Window.extendWith(Leaks, {
     initial() {
       if (this.leakId != null) {
         const leak = app.get(`status.leaks.${this.leakId}`);
-        return (app.get(`status.leaks.${this.leakId}.initial.${this.database}`) || []).filter(l => l.database === this.database).map(l => Object.assign({ source: constr(leak, { database: l.database }) }, l));
+        const showall = this.get('showAll');
+        return (app.get(`status.leaks.${this.leakId}.initial.${this.database}`) || []).filter(l => showall || l.database === this.database).map(l => Object.assign({ source: constr(leak, { database: l.database }) }, l));
       } else {
         return Object.values(app.get('status.leaks')).reduce((a, c) => {
           const all = Object.values(c.initial);
