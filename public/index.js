@@ -626,6 +626,13 @@ registerOperatorDoc({
   sig: [{ proto: '(string) => any', desc: 'Unregisters the given name as a global data source and returns the value that was registered, if any.' }],
 });
 
+globalThis.couldConnect = !globalThis.clientOnly;
+(() => {
+  const params = new URLSearchParams(window?.location?.search || '');
+  const client = params.get('clientOnly');
+  if (client === 'true' || client === '1' || client === 't') globalThis.clientOnly = true;
+})();
+
 class App extends Ractive {
   constructor(opts) { super(opts); }
 
@@ -1306,7 +1313,7 @@ class ControlPanel extends Window {
     app.openLocalDiff();
   }
   halt() {
-    app.set('halted', true);
+    app.set('halting', true);
     app.notify({ action: 'halt' });
   }
   exploreHosts() {
@@ -1353,6 +1360,19 @@ class ControlPanel extends Window {
   async debugServer() {
     const { data } = await request({ action: 'debug' });
     app.openEphemeralPad(data, `Server Data ${evaluate('#now##timestamp')}`);
+  }
+
+  goClientOnly() {
+    if (app.get('connected')) disconnect();
+    app.set('@global.clientOnly', true);
+    this.findComponent('tabs').select(4);
+  }
+
+  reconnect() {
+    if (globalThis.couldConnect && !app.get('connected')) {
+      app.set('@global.clientOnly', false);
+      reconnect(100);
+    }
   }
 }
 Window.extendWith(ControlPanel, {
@@ -4213,15 +4233,40 @@ function connect() {
     ws = globalThis.ws = undefined;
     app.set('connected', false);
   });
-  ws.addEventListener('close', () => {
+  ws.addEventListener('close', async () => {
     ws = globalThis.ws = undefined;
     app.set('connected', false);
+    if (app.get('halting')) {
+      if (await app.choose(`The server has been stopped. Would you like to continue using pg-difficult in client-only mode?`, [
+        { label: 'Yes', where: 'right', action() {
+          this.close(false, true);
+        } },
+        { label: 'No', where: 'left', class: 'reject', action() {
+          this.close(false, false);
+        } },
+      ], 'Keep client open?')) {
+        app.host.getWindow('control-panel').goClientOnly();
+        app.set('halting', false);
+        return;
+      } else {
+        app.set('halted', true);
+        window.close();
+      }
+    }
     reconnect();
   });
   ws.addEventListener('message', ev => {
     const msg = JSON.parse(ev.data);
     message(msg);
   });
+}
+
+function disconnect() {
+  if (globalThis.ws) {
+    globalThis.ws.close();
+    globalThis.ws = undefined;
+  }
+  app.set('connected', false);
 }
 
 function message(msg) {
@@ -4272,7 +4317,7 @@ function message(msg) {
 
 function reconnect(wait = 10000) {
   if (app.get('halted')) return;
-  if (!app.get('connected')) setTimeout(() => connect(), wait);
+  if (!app.get('connected') && !globalThis.clientOnly) setTimeout(() => connect(), wait);
 }
 
 function basename(name) {

@@ -806,8 +806,16 @@
   <buttons>
     {{#unless @global.clientOnly}}
       <button left title="Open a new Host Explorer window to browse databases on all connections, view schema, query across multiple databases, and run reports." on-click="@.exploreHosts()">Host Explorer</button>
-      <button class=reject on-click="@.halt()" disabled="{{!~/connected}}">Stop pg-difficult</button>
     {{/unless}}
+    {{#if ~/connected && !@global.clientOnly}}
+      <button class=reject on-click="@.halt()">Stop pg-difficult</button>
+    {{/if}}
+    {{#if !~/connected && !@global.clientOnly}}
+      <button class=reject on-click="@.goClientOnly()" title="Stop trying to reconnect with the server and just have the client tools available.">Disconnect</button>
+    {{/if}}
+    {{#if !~/connected && @global.couldConnect && @global.clientOnly}}
+      <button class=reject on-click="@.reconnect()" title="Reconnect to the server.">Reconnect</button>
+    {{/if}}
     <button left title="Open a new two-way diff window for local data." on-click="@.localDiff()">Local Diff</button>
     <button left title="Open a new evaluation pad for calculations or inspecting data." on-click="@.evalPad()">Eval Pad</button>
   </buttons>
