@@ -1847,7 +1847,7 @@
                         o = root.root[which];
                     }
                     else if (which === 'VERSION') {
-                        o = '0.31.0';
+                        o = '0.31.0-dev';
                     }
                     else if (which !== 'value') {
                         while (ctx && (!ctx.special || !(which in ctx.special)))
