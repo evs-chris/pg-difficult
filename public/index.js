@@ -4304,9 +4304,10 @@ function message(msg) {
       const entries = app.get('entries');
       const clients = app.get('status.clients');
       for (const k in clients) {
+        if (msg.client && k !== msg.client) continue;
         const client = clients[k];
         const since = evaluate({ entries, source: client.source }, 'max(filter(~entries =>source == ~source) =>id)') || undefined;
-        gate('check', () => ({ action: 'check', client: client.id, since }));
+        request({ action: 'check', client: client.id, since });
       }
       break;
     }
