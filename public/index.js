@@ -2840,18 +2840,29 @@ class ScratchPad extends Window {
   async makeRequest(req) {
     const r = req || this.buildRequest();
     if (globalThis.clientOnly || this.get('forceClient')) {
-      const res = await fetch(r.url, r);
-      const headers = {};
-      for (const [k, v] of res.headers) headers[k] = v;
-      const rr = { body: await res.text(), status: res.status, statusText: res.statusText, headers };
-      this.loadPostmanResult(rr);
-      this.unshift('history', { request: r, result: rr, stamp: new Date() });
+      try {
+        const res = await fetch(r.url, r);
+        const headers = {};
+        for (const [k, v] of res.headers) headers[k] = v;
+        const rr = { body: await res.text(), status: res.status, statusText: res.statusText, headers };
+        this.loadPostmanResult(rr);
+        this.unshift('history', { request: r, result: rr, stamp: new Date() });
+      } catch (e) {
+        const body = e?.stack || e?.message || '<fetch error>';
+        this.host.toast(`${r.method || 'GET'} ${r.url} from client failed.`, { type: 'error', more: body, timeout: 6000 });
+        this.unshift('history', { request: r, result: { body, status: 'nope', statusText: 'fetch failed', headers: {} }, stamp: new Date() });
+      }
     } else {
       r.action = 'fetch';
-      const res = await request(r);
-      const rr = { body: res.result, status: res.status, statusText: res.statusText, headers: res.headers };
-      this.loadPostmanResult(rr);
-      this.unshift('history', { request: r, result: rr, stamp: new Date() });
+      try {
+        const res = await request(r);
+        const rr = { body: res.result, status: res.status, statusText: res.statusText, headers: res.headers };
+        this.loadPostmanResult(rr);
+        this.unshift('history', { request: r, result: rr, stamp: new Date() });
+      } catch (e) {
+        const body = e?.error || '<server error>';
+        this.unshift('history', { request: r, result: { body, status: 'nope', statusText: 'server failed', headers: {} }, stamp: new Date() });
+      }
     }
   }
   lineCount(str) {
