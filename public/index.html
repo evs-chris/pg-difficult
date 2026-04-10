@@ -260,6 +260,7 @@
     color: #fff;
     width: 1em;
     height: 1em;
+    line-height: 1em;
     border-radius: 1em;
     user-select: none;
     cursor: help;
@@ -469,7 +470,7 @@
         <menu>
           <container>
             <div style="display: flex; align-items: center; justify-content: space-around; height: 3.6em; background-color: {{@style.colors.darker || '#325932'}};">
-              <span><a style="color: #eee; text-decoration: none;" href="https://github.com/evs-chris/pg-difficult" target=_blank>pg-difficult</a> <span class=version>- v{{~/status.VERSION || '-client-only'}}</span></span>
+              <span><a style="color: #eee; text-decoration: none;" href="https://github.com/evs-chris/pg-difficult" target=_blank>pg-difficult</a> <span class=version>- v{{~/status.VERSION || @global.CLIENT_VERSION}} {{#if !~/status.VERSION}}(client only){{/if}}</span></span>
             </div>
           </container>
           <item title="Control Panel" on-action="@.host.getWindow('control-panel').raise(true)" />

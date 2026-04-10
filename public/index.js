@@ -2,6 +2,8 @@ const { evaluate, template, registerOperator, parse, parseTemplate, parsePath, r
 const { docs, registerOperatorDoc } = Raport.Design;
 const { Window } = RauiWindow;
 
+globalThis.CLIENT_VERSION = 'DEV';
+
 Ractive.use(RauiButton.plugin(), RauiForm.plugin({ includeStyle: true }), RauiShell.plugin(), RauiSplit.plugin(), RauiMenu.plugin(), RauiWindow.plugin(), RauiAppBar.plugin(), RauiTabs.plugin(), RauiTable.plugin({ includeGrid: true }), RauiVirtualList.plugin(), RauiCard.plugin(), RauiRunner.plugin());
 
 Ractive.perComponentStyleElements = true;
@@ -800,7 +802,7 @@ const app = globalThis.app = new App({
     'status.leaks': {
       handler(v) {
         const all = Object.values(v || {}).reduce((a, c) => {
-          a.push.apply(a, c.databases.map(d => ({ title: constr(c.config, { database: d }), action() { app.openLeak(c.id, d) } })));
+          a.push.apply(a, c.databases.map(d => ({ title: constr(c.config, { database: d }), action() { app.openLeak(c.id, d) }, right: c.connected === false ? '<span class=disconnected title="Connection to server has been lost.">!</span>' : '' })));
           return a;
         }, []);
         if (all.length > 1) all.unshift({ title: 'All Connections', action() { app.openLeak() } });
