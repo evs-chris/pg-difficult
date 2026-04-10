@@ -730,6 +730,22 @@ class App extends Ractive {
       },
     });
   }
+
+  reMenu() {
+    const v = this.host;
+    if (!v) return;
+    const wins = v.get('windows');
+    const list = [];
+    for (const k in wins) {
+      if (!wins[k]) continue;
+      if (/entries-/.test(k)) {
+        const source = v.getWindow(k)?.source;
+        if (Object.values(app.get('status.clients') || {}).find(c => c.source === source)) continue;
+        list.push({ title: wins[k].title, marquee: true, action() { v.raise(k, true); } });
+      } else if (!/query-|leaks-|entries-|control-|host-/.test(k)) list.push({ title: wins[k].title, marquee: true, action() { v.raise(k, true); } });
+    }
+    this.set('others', list);
+  }
 }
 Ractive.extendWith(App, {
   noCssTransform: true,
@@ -784,6 +800,7 @@ const app = globalThis.app = new App({
           return { title: v.source, action() { app.openEntries(v.id) }, right: !(v.connected ?? true) ? '<span class=disconnected title="Connection to server has been lost.">!</span>' : '' };
         });
         if (active.length > 1) active.unshift({ title: 'All Entries', action() { app.openEntries() } });
+        const oldactive = this.get('diffs') || [];
         this.set('diffs', active);
 
         const found = [];
@@ -796,6 +813,7 @@ const app = globalThis.app = new App({
         for (const k in schemas) {
           if (!~found.indexOf(k)) this.set(`schemas.${Ractive.escapeKey(k)}`, undefined);
         }
+        if (active.length !== oldactive.length) this.reMenu();
       },
       strict: true, init: false,
     },
@@ -846,21 +864,12 @@ const app = globalThis.app = new App({
     '@.host': {
       handler(v) {
         if (v) {
-          const bb = () => {
-            const wins = v.get('windows');
-            const list = [];
-            for (const k in wins) {
-              if (!wins[k]) continue;
-              if (!/query-|leaks-|entries-|control-|host-/.test(k)) list.push({ title: wins[k].title, marquee: true, action() { v.raise(k, true); } });
-            }
-            this.set('others', list);
-          };
           let tm;
           const cb = () => {
             if (tm != null) return;
             tm = setTimeout(() => {
               tm = null;
-              bb();
+              this.reMenu();
             }, 200);
           };
           v.observe('windows.* windows.*.title', cb, { strict: true });
