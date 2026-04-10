@@ -1109,7 +1109,7 @@
       <div class=query>Query</div>
     </div>
     {{#each leaks}}
-      <div class="leak striped">
+      <div class="leak striped" on-click="copyToClipboard(., `Copied connection details for ${.source} (${.pid}) to clipboard.`)">
         <div class=user>{{.user}}</div>
         <div class=application>{{.application}}</div>
         <div class=client>{{.client}}</div>
@@ -1120,6 +1120,7 @@
         <div class=pid>{{.pid}}</div>
         <div class=queried title="{{.queried}}">{{age(.queried)}}</div>
         <div class=query title="{{.query}}">{{.query}}</div>
+        <div class=actions><button class=reject on-click="@.kill(.), false">Terminate</button></div>
       </div>
     {{else}}
       <div style="padding: 0.2em;">No connections.</div>

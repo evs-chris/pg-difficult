@@ -14,9 +14,9 @@ import (
 
 type ConnectedClient = map[string]any
 
-func listConnections(conn *pgx.Conn) ([]ConnectedClient, error) {
-	const sql = "select pid, usename as user, application_name as application, datname as database, backend_start as started, state, state_change as updated, client_addr || ':' || client_port as client, query, query_start as queried from pg_stat_activity order by backend_start desc"
-	res, err := query(conn, sql)
+func listConnections(conn *pgx.Conn, id int) ([]ConnectedClient, error) {
+	const sql = "select pid, usename as user, application_name as application, datname as database, backend_start as started, state, state_change as updated, client_addr || ':' || client_port as client, query, query_start as queried, $1::integer as leakid from pg_stat_activity order by backend_start desc"
+	res, err := query(conn, sql, id)
 	if err != nil {
 		return nil, err
 	}
@@ -49,7 +49,7 @@ func leak(config *DBConfig, interval *time.Duration) error {
 
 	if newdb != nil {
 		lock.Lock()
-		current, err := listConnections(newdb.PollConn)
+		current, err := listConnections(newdb.PollConn, newdb.Id)
 		if err != nil {
 			newdb.Initial[config.Database] = current
 		} else {
@@ -65,7 +65,7 @@ func leak(config *DBConfig, interval *time.Duration) error {
 		return err
 	}
 
-	current, err := listConnections(client)
+	current, err := listConnections(client, idseq)
 	if err != nil {
 		_ = client.Close(context.Background())
 		return err
@@ -203,7 +203,7 @@ func pollLeaks() {
 					slog.Info("Leak connection interrupted", "leak", leak.Id)
 					ch <- Result{result: nil, id: id, err: errors.New("Not connected")}
 				} else {
-					res, err := listConnections(conn)
+					res, err := listConnections(conn, id)
 					if err != nil {
 						ch <- Result{result: nil, id: id, err: err}
 					} else {

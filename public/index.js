@@ -2236,13 +2236,27 @@ class Leaks extends Window {
     this.leakId = id;
     this.database = database;
   }
+
+  async kill(con) {
+    if (!con || !con.pid) return;
+    if (await app.confirm(`Are you sure you want to terminate backend ${con.client} (${con.pid}), started ${Ractive.helpers.age(con.started)}${con.queried ? `, last active ${Ractive.helpers.age(con.queried)} with query ${con.query}` : ''}?`, `Terminate Backend?`)) {
+      const leaks = app.get('status.leaks') || {};
+      const leak = leaks[con.leakid];
+      if (leak) {
+        const res = await request({ action: 'query', query: [`select pg_terminate_backend($1) as ok;`], params: [[con.pid]], client: con.leakid });
+        if (res.result?.[0]?.ok) app.host.toast(`Backend ${con.client} (${con.pid}) terminated.`, { type: 'success', timeout: 3000 });
+          else app.host.toast(`Failed to terminate backend ${con.client} (${con.pid}).`, { type: 'error', timeout: 3000 });
+        return;
+      }
+    }
+  }
 }
 Window.extendWith(Leaks, {
   template: '#leaks',
   options: { flex: true, resizable: true, width: '40em', height: '30em' },
   css(data) { return `
 .content-wrapper { padding: 0; }
-.leak { display: flex; flex-wrap: wrap; }
+.leak { display: flex; flex-wrap: wrap; position: relative; }
 .leak > * { box-sizing: border-box; padding: 0.2em; }
 .leak.header { font-weight: bold; position: sticky; top: 0; background-color: ${data('raui.window.host.bg') || '#fff'}; border-bottom: 1px solid; z-index: 1; padding: 0.3em; }
 .leak .user { width: 8em; }
@@ -2254,6 +2268,10 @@ Window.extendWith(Leaks, {
 .leak .constr { width: 18em; }
 .leak .query { width: 99%; }
 .leak .pid { width: 6em; text-align: right; }
+.leak .actions { position: absolute; bottom: 0.5em; right: 0.5em; opacity: 0; transition: opacity 0.5s ease; }
+.leak:hover .actions { opacity: 1; }
+.leak .actions button { pointer-events: none; }
+.leak:hover .actions button { pointer-events: auto; }
 label.one-line { min-height: 1em; padding: 0; }
 label.one-line input { top: -0.3em; left: -0.3em; height: 1.8em; width: 1.8em; }
 label.field.check.one-line:after { top: 0.1em; left: 0.1em; }
