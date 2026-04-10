@@ -730,6 +730,33 @@ class App extends Ractive {
       },
     });
   }
+
+  reMenu() {
+    const v = this.host;
+    if (!v) return;
+    const wins = v.get('windows');
+    const old = app.get('stopped') || {};
+    const list = [];
+    let adjust;
+    for (const k in wins) {
+      if (!wins[k]) continue;
+      if (old[k]) {
+        const win = v.getWindow(k);
+        if (win) {
+          if (!adjust) adjust = [];
+          adjust.push([k, win]);
+        }
+      } else if (!/^(entries-|leaks-|query-|control-|host-)/.test(k)) list.push({ title: wins[k].title, marquee: true, action() { v.raise(k, true); } });
+    }
+    if (adjust) {
+      for (const [id, win] of adjust) {
+        const nid = `old-${id}`;
+        v.changeWindowId(id, nid);
+        list.push({ title: win.title, marquee: true, action() { v.raise(nid, true); } });
+      }
+    }
+    this.set('others', list);
+  }
 }
 Ractive.extendWith(App, {
   noCssTransform: true,
@@ -780,10 +807,13 @@ const app = globalThis.app = new App({
   observe: {
     'status.clients': {
       handler(v) {
+        let global = 0;
         const active = Object.values(v || {}).map(v => {
+          if (v.global) global++;
           return { title: v.source, action() { app.openEntries(v.id) }, right: !(v.connected ?? true) ? '<span class=disconnected title="Connection to server has been lost.">!</span>' : '' };
         });
-        if (active.length > 1) active.unshift({ title: 'All Entries', action() { app.openEntries() } });
+        if (global > 1) active.unshift({ title: 'Global Entries', action() { app.openEntries() } });
+        const oldactive = (this.get('diffs') || []).filter(e => e.title !== 'Global Entries');
         this.set('diffs', active);
 
         const found = [];
@@ -796,13 +826,14 @@ const app = globalThis.app = new App({
         for (const k in schemas) {
           if (!~found.indexOf(k)) this.set(`schemas.${Ractive.escapeKey(k)}`, undefined);
         }
+        if (active.length !== oldactive.length) this.reMenu();
       },
       strict: true, init: false,
     },
     'status.leaks': {
       handler(v) {
         const all = Object.values(v || {}).reduce((a, c) => {
-          a.push.apply(a, c.databases.map(d => ({ title: constr(c.config, { database: d }), action() { app.openLeak(c.id, d) } })));
+          a.push.apply(a, c.databases.map(d => ({ title: constr(c.config, { database: d }), action() { app.openLeak(c.id, d) }, right: c.connected === false ? '<span class=disconnected title="Connection to server has been lost.">!</span>' : '' })));
           return a;
         }, []);
         if (all.length > 1) all.unshift({ title: 'All Connections', action() { app.openLeak() } });
@@ -846,21 +877,12 @@ const app = globalThis.app = new App({
     '@.host': {
       handler(v) {
         if (v) {
-          const bb = () => {
-            const wins = v.get('windows');
-            const list = [];
-            for (const k in wins) {
-              if (!wins[k]) continue;
-              if (!/query-|leaks-|entries-|control-|host-/.test(k)) list.push({ title: wins[k].title, marquee: true, action() { v.raise(k, true); } });
-            }
-            this.set('others', list);
-          };
           let tm;
           const cb = () => {
             if (tm != null) return;
             tm = setTimeout(() => {
               tm = null;
-              bb();
+              this.reMenu();
             }, 200);
           };
           v.observe('windows.* windows.*.title', cb, { strict: true });
@@ -1012,9 +1034,8 @@ const app = globalThis.app = new App({
     } else {
       win = new Entries();
       win.combined = true;
-      this.host.addWindow(win, { id: wid, title: `All Entries` });
+      this.host.addWindow(win, { id: wid, title: `Global Entries` });
     }
-    win.link('newSegment', 'newSegment', { instance: this });
   },
   openLeak(id, database) {
     const wid = `leaks-${id ?? 'all'}-${database || 'all'}`;
@@ -1105,8 +1126,8 @@ const app = globalThis.app = new App({
     const win = new Diff();
     this.host.addWindow(win, { id: `local-diff-${id}`, title: `Local Diff ${id}` });
   },
-  confirm(question, title) {
-    const w = new Confirm({ data: { message: question } });
+  confirm(question, title, opts) {
+    const w = new Confirm({ data: Object.assign({ message: question }, opts) });
     this.host.addWindow(w, { title, block: true, top: 'center', left: 'center' });
     return w.result;
   },
@@ -1166,7 +1187,13 @@ class ControlPanel extends Window {
   constructor(opts) { super(opts); }
   diffStateMap = new Map();
   async editConnection(which) {
-    const config = which;
+    let config = which;
+    if (this.event.event.shiftKey) {
+      config = cloneDeep(config);
+      delete config._id;
+      delete config._rev;
+      config.label = `${config.label} - Copy`;
+    }
     const wnd = new Connect({ data: { config: Object.assign({ type: 'connection' }, config) } });
     this.host.addWindow(wnd, { block: this });
     const res = await wnd.result;
@@ -1195,9 +1222,11 @@ class ControlPanel extends Window {
   }
   async startDiff(config) {
     this.waitForDiff(config, true);
+    const multi = this.get('store.settings.multiDiff');
+    const global = multi === 'separate' ? false : multi === undefined ? true : await app.confirm(`Should this diff use the shared global segment or have its own separate segment?`, 'Global Segmentation?', { yesLabel: 'Global', noLabel: 'Separate' });
     let res;
     try {
-      res = await request({ action: 'start', config });
+      res = await request({ action: 'start', config, globalsegment: global, segment: global ? app.get('status.segment') : undefined });
     } finally {
       this.waitForDiff(config, false);
     }
@@ -1210,7 +1239,7 @@ class ControlPanel extends Window {
       if (what) {
         this.waitForDiff(config, true);
         try {
-          await request({ action: what, config });
+          await request({ action: what, config, globalsegment: global, segment: global ? app.get('status.segment') : undefined });
         } finally {
           this.waitForDiff(config, false);
         }
@@ -1224,6 +1253,7 @@ class ControlPanel extends Window {
     if (client) {
       this.waitForDiff(config, true);
       await request({ action: 'stop', diff: client.id });
+      app.set(`stopped.${Ractive.escapeKey(`entries-${client.id}`)}`, true);
       this.waitForDiff(config, false);
     }
   }
@@ -1247,6 +1277,11 @@ class ControlPanel extends Window {
   stopLeak(config) {
     const cfg = Object.assign({}, config);
     notify({ action: 'unleak', config: cfg });
+    let str = constr(config);
+    str = str.slice(0, str.indexOf('/'));
+    const leak = Object.values(app.get('status.leaks') || {}).find(l => l.source.startsWith(str));
+    const win = app.host.getWindow(`leaks-${leak?.id}-${cfg.database}`);
+    if (win) win.close();
   }
   async addLeak() {
     const wnd = new Connect();
@@ -1360,8 +1395,12 @@ class ControlPanel extends Window {
     this.set(`${path}.valid`, await store.validate(config));
   }
   async debugServer() {
-    const { data } = await request({ action: 'debug' });
-    app.openEphemeralPad(data, `Server Data ${evaluate('#now##timestamp')}`);
+    if (this.event.event.altKey && this.event.event.shiftKey) {
+      notify({ action: 'crash' });
+    } else {
+      const { data } = await request({ action: 'debug' });
+      app.openEphemeralPad(data, `Server Data ${evaluate('#now##timestamp')}`);
+    }
   }
 
   goClientOnly() {
@@ -1471,6 +1510,10 @@ Window.extendWith(ControlPanel, {
       const tree = dirify(this.get('store.report.list'), old);
       this.set('_reportTree', tree);
       return tree;
+    },
+    hasGlobalClients() {
+      const clients = this.get('status.clients') || {};
+      for (const c of Object.values(clients)) if (c.global) return true;
     }
   },
 });
@@ -1915,8 +1958,16 @@ res
       text = `<html><head><title>${name}</title><style>${css}</style></head><body>${html}</body></html>`
     } else {
       const out = { entries: this.get('allEntries') };
-      if (this.source) out.schemas = { [this.source]: (this.get('schemas') || {})[this.source] };
-      else out.schemas = this.get('schemas');
+      if (this.source) {
+        out.schemas = { [this.source]: (this.get('schemas') || {})[this.source] };
+      } else {
+        const sources = Object.values(app.get('status.clients') || {});
+        out.schemas = Object.entries(this.get('schemas')).reduce((a, [k, v]) => {
+          const src = sources.find(s => s.source === k);
+          if (src && src.global) a[k] = v;
+          return a
+        }, {});
+      }
       if (this.get('expr')) out.expr = this.get('expr');
       text = JSON.stringify(out);
     }
@@ -2050,7 +2101,7 @@ res
   }
 
   async renameSegment(entry, by) {
-    const all = (this.source || this.combined) ? app.get('entries') : this.get('entries') || [];
+    const all = this.get('entries') || [];
     const name = await app.ask('What would you like the new segment name to be?', `${by ? 'Split' : 'Rename'} ${entry.segment}`, entry.segment);
     if (!name) return;
 
@@ -2079,13 +2130,13 @@ res
 
     for (const t of targets) t.segment = name;
 
-    (this.source ? app : this).update('entries');
+    ((this.source || this.combined) ? app : this).update('entries');
   }
 
   async toggleHidden(entry, noconfirm) {
     if (!noconfirm && !await app.confirm(`${entry.hide ? 'Show' : 'Hide'} segment ${entry.segment}?`)) return;
     const hide = !entry.hide;
-    const all = (this.source || this.combined) ? app.get('entries') : this.get('entries') || [];
+    const all = this.get('entries') || [];
     const targets = adjacentEntries(entry, all, 'segment');
 
     if (this.source || this.combined) {
@@ -2106,7 +2157,7 @@ res
 
     for (const t of targets) t.hide = hide;
 
-    (this.source ? app : this).update('entries');
+    ((this.source || this.combined) ? app : this).update('entries');
   }
 
   clearEntries() {
@@ -2145,10 +2196,23 @@ Window.extendWith(Entries, {
         else res = [];
       } else {
         const entries = app.get('entries');
-        if (source != null) res = entries.filter(e => e.source === this.source);
-        else res = entries;
+        if (source != null) {
+          res = entries.filter(e => e.source === this.source);
+        } else {
+          const globals = {};
+          for (const c of Object.values(app.get('status.clients') || {})) globals[c.source] = c.global;
+          res = entries.filter(e => globals[e.source]);
+        }
       }
       return res;
+    },
+    client() {
+      if (!this.get('@.source')) return;
+      const clients = app.get('status.clients');
+      for ([k, c] of Object.entries(clients)) if (c.source === this.source) {
+        this.clientId = k;
+        return c;
+      }
     },
     entries() {
       let res = this.get('allEntries');
@@ -2218,6 +2282,26 @@ Window.extendWith(Entries, {
       this._cache = {};
       this.update('@.details', { force: true });
     },
+    'client.segment'(v) {
+      if (this.lock) return;
+      this.lock = true;
+      this.set('newSegment', v);
+      this.lock = false;
+    },
+    async newSegment(v) {
+      if (this.lock || !this.source) return;
+      this.lock = true;
+      await request({ action: 'segment', segment: v, client: this.clientId });
+      this.lock = false;
+    },
+    client(v, o) {
+      if (!v && o && o.source) {
+        const entries = (this.get('allEntries') || []).filter(e => e.source === o.source);
+        const schemas = { [o.source]: app.get('schemas')[o.source] }
+        this.title = `Stopped - ${this.title}`;
+        this.set('loaded', { entries, schemas });
+      }
+    }
   },
 });
 
@@ -2227,13 +2311,27 @@ class Leaks extends Window {
     this.leakId = id;
     this.database = database;
   }
+
+  async kill(con) {
+    if (!con || !con.pid) return;
+    if (await app.confirm(`Are you sure you want to terminate backend ${con.client} (${con.pid}), started ${Ractive.helpers.age(con.started)}${con.queried ? `, last active ${Ractive.helpers.age(con.queried)} with query ${con.query}` : ''}?`, `Terminate Backend?`)) {
+      const leaks = app.get('status.leaks') || {};
+      const leak = leaks[con.leakid];
+      if (leak) {
+        const res = await request({ action: 'query', query: [`select pg_terminate_backend($1) as ok;`], params: [[con.pid]], client: con.leakid });
+        if (res.result?.[0]?.ok) app.host.toast(`Backend ${con.client} (${con.pid}) terminated.`, { type: 'success', timeout: 3000 });
+          else app.host.toast(`Failed to terminate backend ${con.client} (${con.pid}).`, { type: 'error', timeout: 3000 });
+        return;
+      }
+    }
+  }
 }
 Window.extendWith(Leaks, {
   template: '#leaks',
   options: { flex: true, resizable: true, width: '40em', height: '30em' },
   css(data) { return `
 .content-wrapper { padding: 0; }
-.leak { display: flex; flex-wrap: wrap; }
+.leak { display: flex; flex-wrap: wrap; position: relative; }
 .leak > * { box-sizing: border-box; padding: 0.2em; }
 .leak.header { font-weight: bold; position: sticky; top: 0; background-color: ${data('raui.window.host.bg') || '#fff'}; border-bottom: 1px solid; z-index: 1; padding: 0.3em; }
 .leak .user { width: 8em; }
@@ -2245,6 +2343,7 @@ Window.extendWith(Leaks, {
 .leak .constr { width: 18em; }
 .leak .query { width: 99%; }
 .leak .pid { width: 6em; text-align: right; }
+.leak .hover-actions { bottom: 0.5em; top: unset; }
 label.one-line { min-height: 1em; padding: 0; }
 label.one-line input { top: -0.3em; left: -0.3em; height: 1.8em; width: 1.8em; }
 label.field.check.one-line:after { top: 0.1em; left: 0.1em; }
@@ -2501,7 +2600,7 @@ const renderMD = (function() {
           try {
             if (opts.pretty) code = JSON.stringify(JSON.parse(code), null, '  ');
           } catch (e) { console.log(e)}
-          return `<pre><code class="hljs json">${hljs.highlight(code, { language: 'json', ignoreIllegals: true }).value}</code></pre>`;
+          return `<div style="position: relative;"><pre><code class="hljs json" data-copy-target>${hljs.highlight(code, { language: 'json', ignoreIllegals: true }).value}</code></pre><div class=hover-actions><button onclick="copyAdjacentText(this)" title="Copy text to clipboard" class=copy-button>Copy</button></div></div>`;
         } else if (lang.startsWith('widget+')) {
           let end = lang.indexOf(' ');
           if (!~end) end = lang.length;
@@ -2536,7 +2635,7 @@ const renderMD = (function() {
           }
         } else {
           const highlighted = l && hljs.getLanguage(l) ? hljs.highlight(code, { language: l, ignoreIllegals: true }).value : code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-          return `<pre><code class="hljs ${l}">${highlighted}</code></pre>`;
+          return `<div style="position: relative;"><pre><code class="hljs ${l}" data-copy-target>${highlighted}</code></pre><div class=hover-actions><button onclick="copyAdjacentText(this)" title="Copy text to clipboard" class=copy-button>Copy</button></div></div>`;
         }
       };
       marked.setOptions({ renderer });
@@ -2577,6 +2676,7 @@ class ScratchPad extends Window {
       const doc = Object.assign({}, await store.get(id));
       delete doc._id;
       delete doc._rev;
+      doc.name = `${doc.name} - Copy`;
       this.set('pad', doc);
     } else {
       await store.acquire('scratch', id);
@@ -2587,7 +2687,7 @@ class ScratchPad extends Window {
     this.lock = false;
     if (this.get('pad.syntax') === 'postman') {
       this.lockPostman = true;
-      this.set('postman', JSON.parse(this.get('pad.text')));
+      this.set('postman', tryJSONParse(this.get('pad.text')));
       this.lockPostman = false;
     }
   }
@@ -2826,7 +2926,7 @@ class ScratchPad extends Window {
     });
   }
   loadPostmanResult(res) {
-    this.set('postmanResult', JSON.parse(JSON.stringify(res)));
+    this.set('postmanResult', cloneDeep(res));
     let tree;
     if (res.headers['content-type'].includes('json')) tree = treeify(tryJSONParse(res.body));
     else if (res.headers['content-type'].includes('xml')) tree = treeify(evaluate({ txt: res.body }, 'parse(txt xml:1)'));
@@ -3378,7 +3478,7 @@ code.hljs { border-radius: 0.5em; }
       if (!this._buildlock) this.set('_html', undefined);
       if (!this.lockPostman && this.get('pad.syntax') === 'postman') {
         this.lockPostman = true;
-        this.set('postman', JSON.parse(v));
+        this.set('postman', tryJSONParse(v));
         this.lockPostman = false;
       }
     },
@@ -3386,12 +3486,15 @@ code.hljs { border-radius: 0.5em; }
       if (!this._buildlock) this.set('_html', undefined);
       if (v) this.saveDebounced && this.saveDebounced();
     },
-    postman(v) {
-      if (v && !this.lockPostman) {
-        this.lockPostman = true;
-        this.set('pad.text', JSON.stringify(v, null, '  '));
-        this.lockPostman = false;
-      }
+    postman: {
+      handler: debounce(function(v) {
+        if (v && !this.lockPostman) {
+          this.lockPostman = true;
+          this.set('pad.text', JSON.stringify(v, null, '  '));
+          this.lockPostman = false;
+        }
+      }, 500),
+      init: false,
     },
     'editor.autosave'(v) {
       if (this.saveDebounced) this.saveDebounced.timeout = v ?? 15000;
@@ -3845,11 +3948,17 @@ class HostExplore extends Window {
     }
     if (cur) store.release('report', cur._id);
   }
+
+  async deleteHost(con) {
+    if (await app.confirm(`Are you sure you want to remove the connection for ${con.constr}?`, 'Remove Connection?')) {
+      store.remove(con.config._id);
+    }
+  }
 }
 Window.extendWith(HostExplore, {
   template: '#host-explore',
   css(data) {
-    return `div.host { background-color: ${data('raui.primary.bg') || '#fff'}; }
+    return `div.host { background-color: ${data('raui.primary.bg') || '#fff'}; min-height: 2em; }
 .filter-pane { background-color: ${data('raui.window.host.bg') || '#eee'}; height: 3.5em; }
 .query { flex-grow: 1; display: flex; flex-direction: column; overflow: hidden; }
 .query .query-text { height: 100%; }
@@ -3857,6 +3966,9 @@ Window.extendWith(HostExplore, {
 .query .result { display: flex; border-top: 1px solid; overflow: hidden; flex-grow: 1; height: 100%; box-sizing: border-box; }
 .selected { background-color: rgba(128, 128, 128, 0.3); }
 dd { white-space: pre-wrap; }
+div.host .hover-actions { top: 0; right: -0.5em; fill: #fff; background-color: #222d; padding: 0.3em; width: 6em; border-radius: 0.5em 0 0 0.5em; }
+div.host .hover-actions div { fill: #fff; pointer-events: none; width: 1.2em; height: 1.2em; text-align: center; background: rgba(128, 128, 128, 0.5); padding: 0.1em; }
+div.host:hover .hover-actions div { pointer-events: auto; }
 `;
   },
   partials: {
@@ -3988,6 +4100,7 @@ class Report extends Window {
       const rep = Object.assign({}, await store.get(id));
       delete rep._id;
       delete rep._rev;
+      if (rep.definition) rep.definition.name = `${rep.definition.name} - Copy`;
       this.set('report', rep);
     } else {
       await store.acquire('report', id);
@@ -4303,10 +4416,14 @@ function message(msg) {
 
     case 'check': {
       if (msg.reset) app.set('entries', []);
-      const entries = app.get('entries');
+      let entries = app.get('entries');
       const clients = app.get('status.clients');
+      if (msg.source && msg.init) {
+        entries = entries.filter(e => e.source !== msg.source);
+        app.set('entries', entries);
+      }
       for (const k in clients) {
-        if (msg.client && k !== msg.client) continue;
+        if (msg.client && k != msg.client) continue;
         const client = clients[k];
         const since = evaluate({ entries, source: client.source }, 'max(filter(~entries =>source == ~source) =>id)') || undefined;
         request({ action: 'check', client: client.id, since });
@@ -4457,6 +4574,11 @@ Ractive.helpers.copyToClipboard = (function() {
     }
   }
 })();
+
+globalThis.copyAdjacentText = function(node) {
+  const text = node.parentElement?.parentElement?.querySelector('[data-copy-target]')?.innerText;
+  if (text) Ractive.helpers.copyToClipboard(text);
+}
 
 let unloadTm;
 function unload(ev) {

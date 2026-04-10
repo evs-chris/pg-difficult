@@ -1,6 +1,38 @@
+## 2.0.0
+
+2026-04-13
+
+Version 2.0.0 replace the Deno server with a go implementation. This is a mostly compatible port with a little bit of rearchitecture to hopefully remove some of the buggy textures encountered when running multiple concurrent diffs.
+
+### Bugs
+
+* As mentioed above, hopefully all of the quirks related to multiple concurent diffs have been resolved.
+* Entries windows for stopped diffs are now labelled as such and moved to the other windows list rather than just falling off the menu entirely.
+
+### Features
+
+* Diff segments can now be handled globally, separately, or both. Global diffs all share the same segment. Separate diffs have a segment to themselves. The option to do one or the other or ask on each diff start is in settings and defaults to global.
+* There is now a `postman` scratch pad type that can load in a set of postman services and help run them from either the client or server. It can also be used as a sort of curl replacement by defining your own endpoints.
+* The client can now use the location hash to open scratch pads, optionally maximized. This makes it possible to link among markdown scratch pads.
+* `raport+text` blocks in markdown may now set their output language.
+* `html` scratch pads can now run interactively in an iframe and have style and script injection helpers and console proxying.
+* `json` scratch pads may now be used as report sources by selecting the scratch pad source in the designer and entering the path to the desired scratch pad.
+* All eval contexts now have access to global data sources, including filter contexts and eval pads. Things that allow downloading their content will now also allow for providing that content as a data source. Global data sources may be provided with new functions available to the raport scratch pad.
+* Local operators provided to scratch pads now have docs in the operator reference.
+* There is now a Raui runner available for keyboard switching to windows and opening scratch pads and reports. `ctrl+space` will open the runner. The runner will also evaluate raport expressions, which is useful for quick calculations.
+* There is now a `widget+interval` widget available to markdown pads that will count down a specified interval and notify if it elapses. The countdown can be reset to the initial interval with a button. This is useful to keep track of things that need to happen repeatedly within a certain period, but may complete sooner.
+* Search filtering now uses `flike` rather than `ilike`, which means wildcards are no longer needed when looking for the middle of a string.
+* The client will now offer to switch to client-only mode when disconnected from the server. It can also be reconnected later if the server becomes available again.
+* The leak monitor can now optionally show all connections to the server.
+* The leak monitor can now ask the server to terminate backends, which it will do, depending on whether the connection user is a superuser.
+* The schema viewer will now show a table's schema if it's not `public`.
+* Copied things now get a ` - Copy` appended to their name to make it easier to distinguish what just got added and modified if you forget to change the name before saving.
+* The host explorer can now remove connections.
+* `markdown` scratch pad code blocks and `raport` scratch pad eval results now have a hover copy button to copy text to the clipboard.
+
 ## 1.15.0
 
-2025-04-12
+2025-10-31
 
 ### Bugs
 

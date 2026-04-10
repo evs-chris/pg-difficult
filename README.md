@@ -74,7 +74,7 @@ For local development environments, these concerns aren't usually a terrible ris
 
 ## Building an executable
 
-Building requires `go` 1.25 or later and the `zip` utility. To build the usual array of binaries:
+Building requires `go` 1.25 or later, bash, a `zip` utility, and `sed`. To build the usual array of binaries:
 
 1. Run `./package-go.sh` in the repo root.
 2. ???
@@ -121,5 +121,6 @@ The client is also happy to run in serverless mode, where it gives you the abili
 * [x] Add a dark theme.
 * [x] Expose all server connections in additional tabs in the monitor.
 * [ ] Add other instance polling so that multiple servers can diff the same database and let the last one out turn off the lights. Possibly allow grabbing diff entries from the initial start or the current start for servers that join later.
-* [ ] Add parameter support to saved queries to make common query tasks simpler?
+* [x] Add parameter support to saved queries to make common query tasks simpler?
 * [x] Build the server in Go, to lighten the weight and be available on more platforms.
+* [ ] Add a help section of some sort to explain/document all of the things. There's even already an md renderer built in.

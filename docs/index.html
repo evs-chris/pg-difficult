@@ -260,6 +260,7 @@
     color: #fff;
     width: 1em;
     height: 1em;
+    line-height: 1em;
     border-radius: 1em;
     user-select: none;
     cursor: help;
@@ -459,6 +460,13 @@
   .query-parameters > * {
     flex-shrink: 0;
   }
+
+  .hover-actions { position: absolute; top: 0.5em; right: 0.5em; opacity: 0; transition: opacity 0.2s ease; display: flex; justify-content: space-around; }
+  .hover-actions button { pointer-events: none; }
+  *:hover > .hover-actions { opacity: 1; }
+  *:hover > .hover-actions button { pointer-events: auto; }
+
+  .copy-button { padding: 0.2em 0.5em; min-height: unset; font-size: 0.7em; }
 </style>
 <script>clientOnly = true</script>
 <script type=text/ractive id=template>
@@ -469,7 +477,7 @@
         <menu>
           <container>
             <div style="display: flex; align-items: center; justify-content: space-around; height: 3.6em; background-color: {{@style.colors.darker || '#325932'}};">
-              <span><a style="color: #eee; text-decoration: none;" href="https://github.com/evs-chris/pg-difficult" target=_blank>pg-difficult</a> <span class=version>- v{{~/status.VERSION || @global.CLIENT_VERSION}} {{#if !~/status.VERSION}}(client only){{/if}}</span></span>
+              <span><a style="color: #eee; text-decoration: none;" href="https://github.com/evs-chris/pg-difficult" target=_blank>pg-difficult</a> <span class=version>- v{{~/status.VERSION || @global.CLIENT_VERSION}} {{#if !~/status.VERSION}}(client only){{elseif ~/status.VERSION !== @global.CLIENT_VERSION}}(client v{{@global.CLIENT_VERSION}}){{/if}}</span></span>
             </div>
           </container>
           <item title="Control Panel" on-action="@.host.getWindow('control-panel').raise(true)" />
@@ -547,7 +555,7 @@
             <div class="constr">
               <div style="flex-grow: 1;">{{#if .label}}<strong>{{.label}}</strong> ({{constr(.)}}){{else}}{{constr(.)}}{{/if}}<tip>{{`Maximium value length: ${.diffopts.maxlen || 'none'}\nChanged record capture: ${.diffopts.change === 'whole' ? 'both whole records' : .diffopts.change === 'whole-old' ? 'whole old record, new changes' : 'changes only'}\nIgnored tables: ${.diffopts.ignore.length ? .diffopts.ignore.join(', ') : 'none'}`}}</tip></div>
               <div style="width: 13em; flex-shrink: 0;">
-                <button class=flat on-click="@.editConnection(.)" {{#if @.hasDiff(.) || @.hasLeak(.)}}disabled title="Stop active watchers to modify this connection"{{else}}title="Edit this saved connection."{{/if}}>Edit</button>
+                <button class=flat on-click="@.editConnection(.)" {{#if @.hasDiff(.) || @.hasLeak(.)}}disabled title="Stop active watchers to modify this connection"{{else}}title="Edit this saved connection. shift+click to edit a new copy of this saved connection."{{/if}}>Edit</button>
                 <button class=flat on-click="@.remove(.)" {{#if @.hasDiff(.) || @.hasLeak(.)}}disabled title="Stop active watchers to modify this connection"{{else}}title="Remove this saved connection."{{/if}}>Remove</button><br/>
               </div>
             </div>
@@ -577,20 +585,26 @@
       <div as-serverblock />
     </tab>
     <tab title="Active Diffs" hidden="@global.clientOnly">
+      {{#if store.settings.multiDiff === undefined || hasGlobalClients}}
       <div style="display: flex; justify-content: space-between; align-items: center;">
         <div style="flex-grow: 1; display: flex;">
-          <label as-field style="flex-grow: 1;" title="The segment name groups sets of changes together. The segment will automatically be updated when you stop typing, and any new changes will get the new segment name.">Segment<input value="{{~/newSegment}}" lazy=1500 /></label>
+          <label as-field style="flex-grow: 1;" title="The global segment name groups sets of changes together for diffs that don't have separate segments. The segment will automatically be updated when you stop typing, and any new changes will get the new segment name.">Global Segment<input value="{{~/newSegment}}" lazy=1500 /></label>
         </div>
         <div>
-          <button on-click="@.clear()" title="Remove all recorded changes.">Clear Entries</button>
-          <button on-click="@.entries()" title="View all recorded entries in a single combined set.">Combined Entries</button>
+          <button on-click="@.clear()" title="Remove all global recorded changes.">Clear Entries</button>
+          <button on-click="@.entries()" title="View all global recorded entries in a single combined set.">Global Entries</button>
           <button on-click="@.addDiff()" title="Start recording changes to an ephemeral connection.">Add Connection</button>
         </div>
       </div>
+      {{else}}
+      <div style="display: flex; justify-content: end;">
+        <button on-click="@.addDiff()" title="Start recording changes to an ephemeral connection.">Add Connection</button>
+      </div>
+      {{/if}}
       <div style="overflow: auto;">
         {{#each Object.values(~/status.clients || {})}}
           <div class="record striped">
-            <div class="constr">{{.source}}</div>
+            <div class="constr">{{.source}} {{#if .global}}(global){{/if}}</div>
             <div class="actions">
               <button on-click="@.query(.config)" title="Open a query widnow to run queries against this database.">Query</button>
               <button on-click="@.schema(.config)" title="View this database's schema.">Schema</button>
@@ -719,6 +733,12 @@
           <label as-field class=inline><input type=checkbox bind-checked="~/store.settings.hideBlankFields" /> Hide empty string fields in diff records by default?</label>
           <label as-field class=inline><input type=checkbox bind-checked="~/store.settings.hideDefaultFields" /> Hide defaulted fields in diff records by default?</label>
           <label as-field class=inline><input type=checkbox bind-checked="~/store.settings.hideEmptyEntries" /> Hide diff entries with no changes (empty changesets)?</label>
+          <hr style="opacity: 0.2;" />
+          <label as-field>Multiple Diffs<select value="{{~/store.settings.multiDiff}}">
+            <option value="{{undefined}}">All diffs segment together</option>
+            <option value="separate">All diffs segment independently</option>
+            <option value="ask">Ask how diffs should segment</option>
+          </select></label>
         </fieldset>
         {{#if !@global.clientOnly}}
           <fieldset style="margin-top: 1em;">
@@ -910,6 +930,21 @@
     <path style="stroke-width: 10%;" d="M 421.7 52.445 L 95.922 422.148"></path>
   </svg>
 </script>
+<script type=text/ractive id="pencil">
+  <svg viewBox="0 0 16 16" class=pencil>
+    <path d="m 10.574807,3.7181493 1.230348,-1.230348 c 0.786061,-0.1047571 2.169305,1.3270952 2.115927,2.0909526 l -1.24767,1.2476704 z m 0,0 L 12.677529,5.825142 5.136945,13.365724 3.5226704,13.820162 1.9083957,14.2746 2.5400804,12.67292 3.1717651,11.07124 10.574806,3.718149 Z" />
+  </svg>
+</script>
+<script type=text/ractive id="times">
+  <svg viewBox="0 0 16 16">
+    <path d="m 3.081157,3.2367593 a 0.39687499,0.39687499 0 0 0 -0.28125,0.1171875 0.39687499,0.39687499 0 0 0 0,0.5605469 L 7.3038132,8.4184 2.799907,12.920353 a 0.39687499,0.39687499 0 0 0 0,0.560547 0.39687499,0.39687499 0 0 0 0.5625,0 L 7.8643601,8.9789468 12.368266,13.4809 a 0.39687499,0.39687499 0 0 0 0.560547,0 0.39687499,0.39687499 0 0 0 0,-0.560547 L 8.424907,8.4184 12.928813,3.9144937 a 0.39687499,0.39687499 0 0 0 0,-0.5605469 0.39687499,0.39687499 0 0 0 -0.560547,0 L 7.8643601,7.8558999 3.362407,3.3539468 A 0.39687499,0.39687499 0 0 0 3.081157,3.2367593 Z" />
+  </svg>
+</script>
+<script type=text/ractive id=refresh>
+  <svg viewBox="0 0 16 16">
+    <path d="M 8,1.09375 C 4.1915288,1.09375 1.09375,4.1915288 1.09375,8 c 1e-7,1.1411798 0.3457995,2.171715 0.8378906,3.121094 l -0.4804687,3.326172 0.9902344,0.142578 0.3222656,-2.236328 C 4.0315467,13.877415 5.8671795,14.90625 8,14.90625 c 3.808471,0 6.90625,-3.097779 6.90625,-6.90625 0,-1.2519665 -0.424997,-2.3633414 -1.009766,-3.3769531 L 14.376953,1.2734375 13.388672,1.1308594 13.0625,3.3886719 C 11.798381,2.0005626 10.021059,1.0937501 8,1.09375 Z m 0,1 c 1.6025467,10e-8 3.044514,0.6456892 4.107422,1.6777344 L 9.8398438,3.4199219 9.6855469,4.4082031 12.912109,4.9101562 C 13.487343,5.8218003 13.90625,6.8397702 13.90625,8 c 0,3.268031 -2.638219,5.90625 -5.90625,5.90625 -1.7385853,0 -3.2620272,-0.775765 -4.3417969,-1.966797 L 5.9902344,12.300781 6.1425781,11.3125 2.8984375,10.808594 C 2.4305465,9.9620529 2.0937501,9.0378738 2.09375,8 2.09375,4.7319689 4.7319689,2.09375 8,2.09375 Z" />
+  </svg>
+</script>
 
 <script type=text/ractive id=query>
   <div style="border-bottom: 1px solid; display: flex; justify-content: space-between; align-items: center;">
@@ -960,7 +995,7 @@
     </div>
     <div class="controls">
       {{#if @.source && !~/loaded}}
-        <label as-field title="The segment name groups sets of changes together. The segment will automatically be updated when you stop typing, and any new changes will get the new segment name.">Segment<input value="{{~/newSegment}}" lazy=1500 /></label>
+        <label as-field title="The segment name groups sets of changes together. The segment will automatically be updated when you stop typing, and any new changes will get the new segment name.">{{#if client.global}}Global{{/if}} Segment<input value="{{~/newSegment}}" lazy=1500 /></label>
       {{/if}}
       <label class=filter class-error="~/exprError" as-field title="Raport expression used to filter out entries. Available fields are id, new, old, schema, segment, source, stamp, and table. new and old are objects containing the fields that changed in the record. table, schema, source, and segment are strings.{{#if ~/exprError}}{{'\n\nError: ' + ~/exprError.message + '\n' + ~/exprError.marked}}{{/if}}">Filter Expression<input value="{{expr}}" lazy=1000 /></label>
       <button class="settings flat" title="Settings" as-pop=`~/showSettings`>{{>cog}}</button>
@@ -1108,7 +1143,7 @@
       <div class=query>Query</div>
     </div>
     {{#each leaks}}
-      <div class="leak striped">
+      <div class="leak striped" on-click="copyToClipboard(., `Copied connection details for ${.source} (${.pid}) to clipboard.`)">
         <div class=user>{{.user}}</div>
         <div class=application>{{.application}}</div>
         <div class=client>{{.client}}</div>
@@ -1119,6 +1154,7 @@
         <div class=pid>{{.pid}}</div>
         <div class=queried title="{{.queried}}">{{age(.queried)}}</div>
         <div class=query title="{{.query}}">{{.query}}</div>
+        <div class=hover-actions><button class=reject on-click="@.kill(.), false">Terminate</button></div>
       </div>
     {{else}}
       <div style="padding: 0.2em;">No connections.</div>
@@ -1302,7 +1338,7 @@
         {{_schema.functions.length}} functions
       </div>
     </tab>
-    <tab right button on-click="@.refreshSchema()" hidden="{{!@.refreshSchema}}"><title>&#10227;</title></tab>
+    <tab right button on-click="@.refreshSchema()" hidden="{{!@.refreshSchema}}"><title><div style="fill: {{@style.raui.primary.fg}}; width: 1em; height: 1em;">{{>refresh}}</div></title></tab>
   </tabs>
 </script>
 
@@ -1457,10 +1493,13 @@
           </div>
         </title>
         <label as-field>Name<input value="{{.name}}" /></label>
-        {{#if .request}}
+        {{#if !!.request}}
           <label as-field>Method<select value="{{.request.method}}">{{#each 'GET POST PUT DELETE OPTIONS HEAD'.split(' ')}}<option>{{.}}</option>{{/each}}</select></label>
+          <label as-field><button class=reject on-click="@context.set('.request', undefined)">Remove Request</button></label>
           <br/>
           {{>request}}
+        {{else}}
+          <label as-field><button on-click="@context.set('.request', {})">Configure Request</button></label>
         {{/if}}
         {{#if .item}}
           {{>endpoints}}
@@ -1495,7 +1534,10 @@
         <tabs pad flex bind-selected="~/activeTab" size=0 style="height: 100%;">
           <tab>
             <title>{{~/evalerror ? 'Error' : 'Result'}}</title>
-            <pre><code on-click="copyToClipboard(~/evalresult)" title="click to copy result to the clipboard">{{~/evalerror || ~/evaltext}}</code></pre>
+            <pre><code>{{~/evalerror || ~/evaltext}}</code></pre>
+            <div class=hover-actions>
+              <button class=copy-button on-click="copyToClipboard(~/evalerror || ~/evaltext)" title="Copy result to the clipboard">Copy</button>
+            </div>
           </tab>
           <tab hidden="{{~/evalerror}}" no-pad on-enter="@.add('visited.tree')">
             <title>{{#if ~/resultCanTree}}Tree{{else}}Text{{/if}}</title>
@@ -1509,6 +1551,9 @@
             {{else}}
               <pre style="margin: 1em;"><code>{{{~/evalerror || ~/evalresult}}}</code></pre>
             {{/if}}
+            <div class=hover-actions style="top: unset; bottom: 0.5em;">
+              <button class=copy-button on-click="copyToClipboard(~/evalerror || ~/evalresult)" title="Copy result to the clipboard">Copy</button>
+            </div>
           </tab>
           <tab no-pad title="Table" hidden="{{!~/resultCanTable}}" on-enter="@.add('visited.table')">
             {{#if ~/visited.table}}
@@ -1727,15 +1772,14 @@
         <tab title="Response" hidden="{{!postmanResult}}">
           {{#with postmanResult}}
             <h3 style="margin: 0.5em 0 1em; 0">{{.status}} - {{.statusText}}</h3>
-            <fieldset>
-              <legend>Headers</legend>
+            <card section expandable expanded=true title="Headers">
               <dl>
                 {{#each .headers}}
                 <dt>{{@key}}</dt>
                 <dd>{{.}}</dd>
                 {{/each}}
               </dl>
-            </fieldset>
+            </card>
             {{#if .body}}
               <div style="position: relative; margin-top: 1em;">
                 <pre><code class=hljs>{{.body}}</code></pre>
@@ -1856,12 +1900,16 @@
         </label>
       </div>
       {{#each ~/connections as con}}
-        <div class="host" style="display: flex; position: sticky; top: 4.1em; word-break: break-all; align-items: center; justify-content: space-between; cursor: pointer;" on-click="Array.isArray(~/hosts[.constr]) && @event.shiftKey ? [appSet('scratchroot.sources.databases', { value: ~/hosts[.constr] }), @.host.toast('Database list is now available to raport scratch pads as *databases.', { type: 'info', timeout: 3000 })] : @.toggle('expanded.' + escapeKey(.constr))" title="Click to expand.{{#if Array.isArray(~/hosts[.constr])}} shift+click to make database list available to raport scratch pads as *databases.{{/if}}">
+        <div class="host" style="display: flex; position: sticky; top: 4.1em; word-break: break-all; align-items: center; cursor: pointer;" on-click="Array.isArray(~/hosts[.constr]) && @event.shiftKey ? [appSet('scratchroot.sources.databases', { value: ~/hosts[.constr] }), @.host.toast('Database list is now available to raport scratch pads as *databases.', { type: 'info', timeout: 3000 })] : @.toggle('expanded.' + escapeKey(.constr))" title="Click to expand.{{#if Array.isArray(~/hosts[.constr])}} shift+click to make database list available to raport scratch pads as *databases.{{/if}}">
           <div style="width: 1em; height: 1em; display: flex; border: 1px solid; align-items: center; justify-content: center; margin-right: 0.5em; flex-shrink: 0; cursor: pointer;">
             {{#if ~/expanded[.constr]}}-{{else}}+{{/if}}
           </div>
           <div style="padding: 0.2em;">{{#if .label}}<strong>{{.label}}</strong> <em>({{.constr}})</em>{{else}}<em>{{.constr}}</em>{{/if}}{{#if ~/hosts && ~/expanded[.constr] && Array.isArray(~/hosts[.constr])}} ({{~/_entries[.constr].length}} / {{~/hosts[.constr].length}}){{/if}}</div>
-          <div class="round fade" on-click="@event.shiftKey ? @.editHost(con) : @.refreshHost(con), false" title="Refresh host database list. shift+click to edit connection settings.">&#10227;</div>
+          <div class=hover-actions>
+            <div class="fade" on-click="@.deleteHost(con), false" title="Remove connection.">{{>times}}</div>
+            <div class="fade" on-click="@.editHost(con), false" title="Edit connection settings.">{{>pencil}}</div>
+            <div class="fade" on-click="@.refreshHost(con), false" title="Refresh host database list.">{{>refresh}}</div>
+          </div>
         </div>
         <div style="padding-left: 1.5em;">
           {{#if ~/expanded[.constr]}}
@@ -2332,8 +2380,8 @@
     <div class="message" style="max-width: 36em;"><pre style="font-family: sans-serif;">{{{.message}}}</pre></div>
   </div>
   <buttons>
-    <button center on-click="@.close(false, true)">Yes</button>
-    <button center class=reject on-click="@.close(false, false)">No</button>
+    <button center on-click="@.close(false, true)">{{~/yesLabel || 'Yes'}}</button>
+    <button center class=reject on-click="@.close(false, false)">{{~/noLabel || 'No'}}</button>
   </buttons>
 </script>
 
