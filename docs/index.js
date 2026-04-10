@@ -1,8 +1,10 @@
 const { evaluate, template, registerOperator, parse, parseTemplate, parsePath, run, Root, stringify } = Raport;
-const { docs } = Raport.Design;
+const { docs, registerOperatorDoc } = Raport.Design;
 const { Window } = RauiWindow;
 
-Ractive.use(RauiButton.plugin(), RauiForm.plugin({ includeStyle: true }), RauiShell.plugin(), RauiSplit.plugin(), RauiMenu.plugin(), RauiWindow.plugin(), RauiAppBar.plugin(), RauiTabs.plugin(), RauiTable.plugin({ includeGrid: true }), RauiVirtualList.plugin());
+globalThis.CLIENT_VERSION = '2.0.0';
+
+Ractive.use(RauiButton.plugin(), RauiForm.plugin({ includeStyle: true }), RauiShell.plugin(), RauiSplit.plugin(), RauiMenu.plugin(), RauiWindow.plugin(), RauiAppBar.plugin(), RauiTabs.plugin(), RauiTable.plugin({ includeGrid: true }), RauiVirtualList.plugin(), RauiCard.plugin(), RauiRunner.plugin());
 
 Ractive.perComponentStyleElements = true;
 
@@ -472,6 +474,11 @@ Ractive.styleSet({
         },
       },
     },
+    runner: {
+      primary: {
+        fga: '#222',
+      },
+    },
   },
 }, { deep: true });
 
@@ -587,6 +594,46 @@ let reportId = 0;
 let localDiffId = 0;
 let contextScratch;
 let globalContext = {};
+const globalSources = {};
+
+globalThis.provideSource = function(name, value) {
+  if (typeof name !== 'string') return;
+  value = typeof value === 'object' && 'value' in value ? value : { value };
+  return globalSources[name] = value;
+}
+globalThis.removeSource = function(name) {
+  if (typeof name === 'string') return;
+  const v = globalSources[name];
+  delete globalSources[name];
+  return v;
+}
+globalThis.makeContext = function(value, opts) {
+  opts = opts || {};
+  const root = new Root(Object.assign({}, globalContext, value), opts);
+  root.sources = Object.assign({}, globalSources, opts.sources);
+  return root;
+}
+registerOperator({ type: 'value', names: ['provide-source'], apply(name, values, opts, ctx) {
+  return provideSource(opts?.name || values[0], opts?.value || opts?.source || values[1]);
+} });
+registerOperatorDoc({
+  op: 'provide-source',
+  sig: [{ proto: '(string, any) => any', desc: 'Registers the given second argument value as a global data source with the given string name and returns the value.' }],
+});
+registerOperator({ type: 'value', names: ['unprovide-source', 'remove-source'], apply(name, values, opts, ctx) {
+  return removeSource(opts?.name || values[0]);
+} });
+registerOperatorDoc({
+  op: ['unprovide-source', 'remove-source'],
+  sig: [{ proto: '(string) => any', desc: 'Unregisters the given name as a global data source and returns the value that was registered, if any.' }],
+});
+
+globalThis.couldConnect = !globalThis.clientOnly;
+(() => {
+  const params = new URLSearchParams(window?.location?.search || '');
+  const client = params.get('clientOnly');
+  if (client === 'true' || client === '1' || client === 't') globalThis.clientOnly = true;
+})();
 
 class App extends Ractive {
   constructor(opts) { super(opts); }
@@ -646,6 +693,43 @@ class App extends Ractive {
     if (multi) pr.resolve(txts);
     else pr.resolve(txts[0]);
   }
+
+  runnerSetup(run) {
+    this.run = () => run.showHide();
+    run.addPlugin({
+      name: 'Eval',
+      run(str) {
+        const res = template(makeContext(), `{{${str}}}`, { template: 1 });
+        if (res != null && res !== '') return [`${res}`];
+      },
+      action(v) {
+        Ractive.helpers.copyToClipboard(v);
+      },
+    });
+    run.addPlugin(RauiRunner.WindowList(this.findComponent('host')));
+    run.addPlugin({
+      name: 'Scratch',
+      run(str) {
+        const pads = app.get('store.scratch.list');
+        const s = str.toLowerCase();
+        return pads.filter(p => p.name.toLowerCase().includes(s)).map(p => [p.name, p.id]);
+      },
+      action(v) {
+        app.openScratch({ id: v });
+      },
+    });
+    run.addPlugin({
+      name: 'Report',
+      run(str) {
+        const reps = app.get('store.report.list');
+        const s = str.toLowerCase();
+        return reps.filter(p => p.name.toLowerCase().includes(s)).map(p => [p.name, p.id]);
+      },
+      action(v) {
+        app.openReport({ id: v });
+      },
+    });
+  }
 }
 Ractive.extendWith(App, {
   noCssTransform: true,
@@ -668,7 +752,19 @@ Ractive.extendWith(App, {
       label.field svg.icon:hover { opacity: 1; }
       label.field select:focus { background-color: ${data('raui.primary.bg') || '#fff'}; }
       .mermaid { background-color: ${data('theme') === 'dark' ? '#191919' : '#f7f7f7'}; }
+      button[disabled] { opacity: 0.5; }
     `;
+  },
+  on: {
+    init() {
+      document.body.addEventListener('keydown', ev => {
+        if ((ev.which === 32 || ev.which === 80 || ev.which === 112) && (ev.ctrlKey || ev.metaKey)) {
+          ev.preventDefault();
+          ev.stopPropagation();
+          if (typeof this.run === 'function') this.run();
+        }
+      });
+    },
   },
 });
 
@@ -857,11 +953,16 @@ const app = globalThis.app = new App({
   },
   on: {
     render() {
+      let maxLock = false, userMax = false;
       // set up mobile resize
       const resize = size => {
+        size = size?.center || size;
         if (!size || !size.width || !size.height) return;
-        if (size.width > 100 && size.height > 60) this.host.set('userMax', false);
+
+        maxLock = true;
+        if (size.width > 80 && size.height > 65) this.host.set('userMax', userMax);
         else this.host.set('userMax', true);
+        maxLock = false;
       };
 
       resize(this.shell.shellSize());
@@ -870,6 +971,12 @@ const app = globalThis.app = new App({
       this.host.toastDefaults.top = false;
       this.host.toastDefaults.bottom = true;
       this.host.toastDefaults.stack = true;
+
+      this.host.observe('userMax', v => {
+        if (!maxLock) userMax = v;
+      }, { init: false });
+
+      if (window.location.hash) setTimeout(() => hashChangeHandler(window.location.hash), 100);
     },
   },
   notify,
@@ -949,25 +1056,30 @@ const app = globalThis.app = new App({
     if (pad?.id && !copy) {
       const wid = `scratch-${pad.id}`;
       const win = this.host.getWindow(wid);
-      if (win) return win.raise(true);
+      if (win) {
+        win.raise(true);
+        return win;
+      }
     }
     try {
       if (file) file = await app.pickFile();
       let m;
-      if ((m = /\.\w+$/.exec(file.name))) {
+      if (file && (m = /\.\w+$/.exec(file.name))) {
         const ext = m[0].slice(1);
         if (ScratchSyntax.concat(['txt', 'md', 'js', 'ts', 'go', 'hbs', 'wiki', 'py', 'cpp']).includes(ext)) {
           file.name = file.name.slice(0, file.name.length - ext.length - 1);
           file.syntax = { md: 'markdown', js: 'javascript', ts: 'typescript', go: 'golang', hbs: 'handlebars', txt: 'plain_text', wiki: 'mediawiki', py: 'python', cpp: 'c_cpp' }[ext] || ext;
         }
       }
-    } catch {
+    } catch (e) {
+      console.warn(e);
       return;
     }
     const win = new ScratchPad();
     if (pad?.id) win.load(pad.id, copy);
     this.host.addWindow(win, { title: pad?.id ? `Loading scratch pad...` : 'New Scratch Pad' });
     if (file) win.set('pad', file, { deep: true });
+    return win;
   },
   async scratchQuery(id) {
     if (id) {
@@ -1203,7 +1315,7 @@ class ControlPanel extends Window {
     app.openLocalDiff();
   }
   halt() {
-    app.set('halted', true);
+    app.set('halting', true);
     app.notify({ action: 'halt' });
   }
   exploreHosts() {
@@ -1250,6 +1362,19 @@ class ControlPanel extends Window {
   async debugServer() {
     const { data } = await request({ action: 'debug' });
     app.openEphemeralPad(data, `Server Data ${evaluate('#now##timestamp')}`);
+  }
+
+  goClientOnly() {
+    if (app.get('connected')) disconnect();
+    app.set('@global.clientOnly', true);
+    this.findComponent('tabs').select(4);
+  }
+
+  reconnect() {
+    if (globalThis.couldConnect && !app.get('connected')) {
+      app.set('@global.clientOnly', false);
+      reconnect(100);
+    }
   }
 }
 Window.extendWith(ControlPanel, {
@@ -1306,7 +1431,7 @@ Window.extendWith(ControlPanel, {
       let res;
       if (flt && (('op' in flt && flt.op === 'block') || 'r' in flt || ('v' in flt && Object.keys(flt).length === 1))) {
         // just use the text
-        v = parse(`name ilike ${JSON.stringify(`%${v}%`)}`);
+        v = parse(`name flike ${JSON.stringify(`${v}`)}`);
         const list = await store.list('scratch');
         res = list.filter(e => evaluate(e, v)).map(e => e.id);
       } else {
@@ -1587,6 +1712,12 @@ class Query extends Window {
     const msg = `Copied ${(ev.ctrlKey || ev.shiftKey) ? 'record JSON' : 'column value'} to clipboard.`;
     const str = val && typeof val === 'object' ? JSON.stringify(val) : val;
     Ractive.helpers.copyToClipboard(str, msg);
+  }
+  async provideSource(getname, value) {
+    getname = getname || await app.ask('Provide query result as source named:', 'Name Source', 'query');
+    if (getname === undefined) return;
+    provideSource(getname, value);
+    this.host.toast(`Query result is now available to raport expressions as *${getname}.`, { type: 'info', timeout: 3000 });
   }
   downloadQuery = downloadQuery;
 }
@@ -1887,7 +2018,7 @@ res
       return this.host.toast(`All entries are empty, and you have undoing empty changesets disabled.`, { type: 'info', timeout: 3000 });
     }
 
-    if (!this.event?.event?.ctrlKey || this.event?.event?.shiftKey) await request({ action: 'segment', segment: `Undo ${entry.segment}` });
+    if (!this.event?.event?.ctrlKey && !this.event?.event?.shiftKey) await request({ action: 'segment', segment: `Undo ${entry.segment}` });
 
     const blocked = this.blocked;
     this.blocked = true;
@@ -2114,12 +2245,16 @@ Window.extendWith(Leaks, {
 .leak .constr { width: 18em; }
 .leak .query { width: 99%; }
 .leak .pid { width: 6em; text-align: right; }
+label.one-line { min-height: 1em; padding: 0; }
+label.one-line input { top: -0.3em; left: -0.3em; height: 1.8em; width: 1.8em; }
+label.field.check.one-line:after { top: 0.1em; left: 0.1em; }
 `; },
   computed: {
     leaks() {
       if (this.leakId != null) {
         const leak = app.get(`status.leaks.${this.leakId}`);
-        return leak.current.filter(l => l.database === this.database && !leak.initial[this.database].find(k => k.pid === l.pid && k.started === l.started)).map(l => Object.assign({ source: constr(leak.config, { database: l.database }) }, l));
+        const showall = this.get('showAll');
+        return leak.current.filter(l => (showall || l.database === this.database) && !(leak.initial[this.database] || []).find(k => k.pid === l.pid && k.started === l.started)).map(l => Object.assign({ source: constr(leak.config, { database: l.database }) }, l));
       } else {
         return Object.values(app.get('status.leaks')).reduce((a, leak) => {
           const inits = Object.values(leak.initial).reduce((a, c) => (a.push.apply(a, c), a), []);
@@ -2131,7 +2266,8 @@ Window.extendWith(Leaks, {
     current() {
       if (this.leakId != null) {
         const leak = app.get(`status.leaks.${this.leakId}`);
-        return (app.get(`status.leaks.${this.leakId}.current`) || []).filter(l => l.database === this.database).map(l => Object.assign({ source: constr(leak, { database: l.database }) }, l));
+        const showall = this.get('showAll');
+        return (app.get(`status.leaks.${this.leakId}.current`) || []).filter(l => showall || l.database === this.database).map(l => Object.assign({ source: constr(leak, { database: l.database }) }, l));
       } else {
         return Object.values(app.get('status.leaks')).reduce((a, c) => {
           a.push.apply(a, c.current.filter(l => c.databases.includes(l.database)).map(l => Object.assign({ source: constr(c.config, { database: l.database }) }, l)));
@@ -2142,7 +2278,8 @@ Window.extendWith(Leaks, {
     initial() {
       if (this.leakId != null) {
         const leak = app.get(`status.leaks.${this.leakId}`);
-        return (app.get(`status.leaks.${this.leakId}.initial.${this.database}`) || []).filter(l => l.database === this.database).map(l => Object.assign({ source: constr(leak, { database: l.database }) }, l));
+        const showall = this.get('showAll');
+        return (app.get(`status.leaks.${this.leakId}.initial.${this.database}`) || []).filter(l => showall || l.database === this.database).map(l => Object.assign({ source: constr(leak, { database: l.database }) }, l));
       } else {
         return Object.values(app.get('status.leaks')).reduce((a, c) => {
           const all = Object.values(c.initial);
@@ -2211,6 +2348,12 @@ class Schema extends Window {
   downloadSchema(schema) {
     const db = this.config ? `${this.config.host || 'localhost'}-${this.config.port || 5432}-${this.config.database || 'postgres'}` : `Local File`;
     download(`schema ${db} ${evaluate(`#now##date,'yyyy-MM-dd HH mm'`)}.pgds`, JSON.stringify(schema), 'application/pg-difficult-schema');
+  }
+  async provideSource(getname, value) {
+    getname = getname || await app.ask('Provide schema as source named:', 'Name Source', 'schema');
+    if (getname === undefined) return;
+    provideSource(getname, value);
+    this.host.toast(`Schema is now available to raport expressions as *${getname}.`, { type: 'info', timeout: 3000 });
   }
 }
 Window.extendWith(Schema, {
@@ -2311,7 +2454,7 @@ const renderMD = (function() {
   let id = 1;
   let widgets = {};
   let timer = false;
-  return async function(str, opts = {}) {
+  const res = async function(str, opts = {}) {
     theme = opts.theme || Ractive.styleGet('theme');
     widgets = {};
     timer = false;
@@ -2324,7 +2467,7 @@ const renderMD = (function() {
         let optstr = '';
         if (~l.indexOf(' ')) {
           optstr = l.slice(l.indexOf(' '));
-          opts = evaluate(globalContext, `{${optstr}}`) || {};
+          opts = evaluate(makeContext(), `{${optstr}}`) || {};
         }
         if (lang === 'mermaid') {
           if (typeof subs[code] === 'string') return subs[code];
@@ -2337,18 +2480,22 @@ const renderMD = (function() {
         } else if (lang === 'jpeg+base64') {
           return `<img src="data:image/jpeg;base64,${code}" />`;
         } else if (lang === 'raport+html') {
-          return evaluate(globalContext, code);
+          return evaluate(makeContext(), code);
         } else if (lang === 'raport-template+html' || lang === 'raport-tpl+html' || lang === 'rptpl+html') {
-          return template(globalContext, code);
-        } else if (lang === 'raport+text') {
-          return `<pre><code class="hljs text">${evaluate(globalContext, code)}</code></pre>`;
+          return template(makeContext(), code);
+        } else if (lang.startsWith('raport+text') || lang.startsWith('raport+code')) {
+          const idx = lang.indexOf(' ');
+          const args = ~idx ? evaluate(makeContext(), `{${lang.slice(idx)}}`) : {};
+          let txt = evaluate(makeContext(), code);
+          if (args.lang || args.language) txt = hljs.highlight(txt, { language: args.lang || args.language, ignoreIllegals: true }).value;
+          return `<pre><code class="hljs ${args.lang || args.language || 'text'}">${txt}</code></pre>`;
         } else if (lang.startsWith('csv+table')) {
           if (!('header' in opts) && lang.includes('nohead')) opts.header = 0;
           if (!('order' in opts) && lang.includes('noorder')) opts.order = 0;
           const data = evaluate({ code }, `parse(code csv:1 ${evaluate({ opts }, 'unparse(opts noIndent:1)[1 1<]')})`);
           return `<div class="table-wrap${opts.contain ? ' contain' : ''}">${run({ type: 'delimited', source: 'data', sources: [{ source: 'data' }] }, { data: { value: data } }, {}, { table: 1 })}</div>`;
         } else if (lang.startsWith('raport+table')) {
-          const data = evaluate(globalContext, code);
+          const data = evaluate(makeContext(), code);
           return `<div class="table-wrap${opts.contain ? ' contain' : ''}">${run({ type: 'delimited', source: 'data', sources: [{ source: 'data' }] }, { data: { value: data } }, {}, { table: 1 })}</div>`;
         } else if (lang.startsWith('json')) {
           try {
@@ -2360,7 +2507,7 @@ const renderMD = (function() {
           if (!~end) end = lang.length;
           const start = lang.indexOf('+') + 1;
           const widget = lang.slice(start, end);
-          const args = evaluate(globalContext, `{${lang.slice(end)}}`);
+          const args = evaluate(makeContext(), `{${lang.slice(end)}}`);
           let idx;
           if (!widgets[widget]) widgets[widget] = 0;
           switch (widget) {
@@ -2373,13 +2520,18 @@ const renderMD = (function() {
               return `<div class="clock widget" data-index="${widgets.clock++}"><span class=time>${evaluate('@date#time')}</span></div>`;
             case 'timer': {
               timer = true;
-              const bits = evaluate(globalContext, code) || {};
-              return `<div class="timer widget" data-index="${widgets.timer++}"><span class=time>${bits.end > Date.now() ? evaluate({ bits }, '(bits.end - #now#)#timespan(precision::s fmt::timer)') : bits.remain ? evaluate({ bits }, 'bits.remain#timespan(precision::s fmt::timer)') : ''}</span><label class="field inline"><input placeholder="duration" /></label><button disabled>Start</button><button disabled>Pause</button><button disabled>Reset</button></div>`;
+              const bits = evaluate(makeContext(), code) || {};
+              return `<div class="timer widget" data-index="${widgets.timer++}"><span class=time style="margin-right: 1em;">${bits.end > Date.now() ? evaluate({ bits }, '(bits.end - #now#)#timespan(precision::s fmt::timer)') : bits.remain ? evaluate({ bits }, 'bits.remain#timespan(precision::s fmt::timer)') : ''}</span><label class="field inline"><input placeholder="duration" value="${bits.input || ''}" ${bits.end || bits.remain ? 'style="display: none;"' : ''} /></label><button disabled>Start</button><button disabled>Pause</button><button disabled>Reset</button></div>`;
+            }
+            case 'interval': {
+              timer = true;
+              const bits = evaluate(makeContext(), code) || {};
+              return `<div class="interval widget" data-index="${widgets.interval++}"><span class=time style="margin-right: 1em;">${bits.end > Date.now() ? evaluate({ bits }, '(bits.end - #now#)#timespan(precision::s fmt::timer)') : bits.remain ? evaluate({ bits }, 'bits.remain#timespan(precision::s fmt::timer)') : ''}</span><label class="field inline"><input placeholder="duration" value="${bits.input || ''}" class="interval" /></label><button disabled>Start</button><button disabled>Pause</button><button disabled>Reset</button></div>`;
             }
             case 'pomodoro': {
               timer = true;
-              const bits = evaluate(globalContext, code) || {};
-              return `<div class="pomodoro widget" data-index="${widgets.pomodoro++}"><span class=time>${bits.end > Date.now() ? evaluate({ bits }, '(bits.end - #now#)#timespan(precision::s fmt::timer)') : bits.remain ? evaluate({ bits }, 'bits.remain#timespan(precision::s fmt::timer)') : ''}</span><span class=text>${bits.status || ''}</span><button disabled>Start</button><button disabled>Pause</button><button disabled>Next</button><button>Reset</button></div>`;
+              const bits = evaluate(makeContext(), code) || {};
+              return `<div class="pomodoro widget" data-index="${widgets.pomodoro++}"><span class=time style="margin-right: 1em;">${bits.end > Date.now() ? evaluate({ bits }, '(bits.end - #now#)#timespan(precision::s fmt::timer)') : bits.remain ? evaluate({ bits }, 'bits.remain#timespan(precision::s fmt::timer)') : ''}</span><span class=text>${bits.status || ''}</span><button disabled>Start</button><button disabled>Pause</button><button disabled>Next</button><button>Reset</button></div>`;
             }
           }
         } else {
@@ -2404,6 +2556,8 @@ const renderMD = (function() {
     html = html.replace(/\<a (href="https?:\/\/)/g, '<a target="_blank" $1');
     return { html, timer };
   };
+  res.checkLanguage = checkLanguage;
+  return res;
 })();
 
 class ScratchPad extends Window {
@@ -2411,12 +2565,9 @@ class ScratchPad extends Window {
     super(opts);
     this.log = arr => {
       console.log(...arr);
-      this.push('logs', [arr.map(v => {
-        if (Array.isArray(v)) return JSON.stringify(v);
-        const str = `${v}`;
-        if (str.startsWith('[object ')) return JSON.stringify(v);
-        else return v;
-      }).join(' '), evaluate(`#now##date,'HH:mm:ss yyyy-MM-dd'`)]);
+      this.set('flash', true);
+      setTimeout(() => this.set('flash', false), 16);
+      this.push('logs', [arr, evaluate(`#now##date,'HH:mm:ss yyyy-MM-dd'`)]);
     }
   }
   async load(id, copy) {
@@ -2434,6 +2585,11 @@ class ScratchPad extends Window {
     }
     if (old?._id) store.release('scratch', old._id);
     this.lock = false;
+    if (this.get('pad.syntax') === 'postman') {
+      this.lockPostman = true;
+      this.set('postman', JSON.parse(this.get('pad.text')));
+      this.lockPostman = false;
+    }
   }
   async loadQuery(id) {
     this.lock = true;
@@ -2447,15 +2603,17 @@ class ScratchPad extends Window {
     if (query) {
       await store.save(this.get('query'));
     } else {
+      this._buildlock = true;
       const pad = Object.assign({}, this.get('pad'));
       if (!this.get('ephemeral')) {
-        if (pad._id) store.save(pad);
+        if (pad._id) await store.save(pad);
         else {
           pad.type = 'scratch';
           const res = await store.save(pad);
           await this.load(res._id);
         }
       }
+      setTimeout(() => this._buildlock = false, 50);
     }
     this.saveDebounced.cancel();
     this.set('unsaved', false);
@@ -2498,7 +2656,7 @@ class ScratchPad extends Window {
         });
       } else {
         const opts = app.get('scratchroot') || {};
-        const root = new Root(Object.assign({}, globalContext), opts);
+        const root = makeContext({}, opts);
         root.sources = Object.assign({}, opts.sources);
         const ephem = this.get('ephemeral');
         if (ephem) root.sources.data = { value: ephem };
@@ -2529,11 +2687,188 @@ class ScratchPad extends Window {
       } else if (sp.curSize < 0.5) split.set('splits.1', { curSize: 40, lastSize: 40, min: false }, { deep: true });
     }
     const tabs = this.findComponent('tabs');
-    if (tabs && tabs.selection > 1) tabs.select(0);
-    this.set('visited', { table: 0, tree: 0 });
+    if (tabs && tabs.selection > 2) tabs.select(0);
+    this.set('visited', { table: tabs?.selection === 2 ? 1 : 0, tree: tabs?.selection === 1 ? 1 : 0 });
   }
   string(v) {
     return v === undefined ? 'undefined' : JSON.stringify(v);
+  }
+
+  renderHTML() {
+    if (!this.get('_html')) {
+      const pad = this.get('pad');
+      let txt = pad.text;
+      let wrapHead = false;
+      let headIdx = txt.indexOf('</head>');
+      if (!~headIdx) {
+        wrapHead = true;
+        headIdx = txt.indexOf('<html');
+        if (~headIdx) headIdx = txt.indexOf('>', headIdx) + 1;
+        else headIdx = 0;
+      }
+      let bodyIdx = txt.indexOf('</body>');
+      if (!~bodyIdx) bodyIdx = txt.indexOf('</html>');
+      if (!~bodyIdx) bodyIdx = txt.length;
+
+      const processScripts = s => {
+        if (s.type === 'unpkg') return `<script src="https://unpkg.com/${s.value}"></script>`;
+        else if (s.type === 'jsdelivr') return `<script src="https://cdn.jsdelivr.net/npm/${s.value}"></script>`;
+        else if (s.type === 'src') return `<script src="${s.src}"></script>`;
+        else if (s.type === 'script') return `<script${s.scriptType ? ` type="${s.scriptType}"` : ''}${s.id ? ` id="${s.id}"` : ''}>${s.value}</script>`;
+        else return '';
+      };
+      let head = `<script>(function() {
+  var orig = { log: console.log, error: console.error, warn: console.warn, info: console.info };
+  var frameId = ${this.frameId};
+  var fn = function(name) {
+    orig[name].apply(this, Array.prototype.slice.call(arguments, 1));
+    if (window.parent) window.parent.postMessage({ frameId: frameId, action: 'log', name: name, args: Array.prototype.slice.call(arguments, 1).map(function(a) {
+      if (a instanceof Error) return a.message + '\\n\\n' + a.stack;
+      return a;
+    }) }, '*');
+  }
+  function partial(fn) { var args = Array.prototype.slice.call(arguments, 1); return function() { return fn.apply(this, [].concat(args, Array.prototype.slice.call(arguments))); } }
+  ['log', 'error', 'warn', 'info'].forEach(function(n) { console[n] = partial(fn, n); });
+  window.addEventListener('message', function(msg) {
+    if (msg.data.action === 'expr') eval(msg.data.expr);
+  });
+  window.addEventListener('error', function(ev) { console.error(ev.error); });
+  window.addEventListener('unhandledrejection', function(ev) { console.error('Unhandled Rejection: ', ev.reason); });
+})();</script>`;
+      head = head + (pad.scripts || []).filter(s => !s.foot).map(processScripts).join('\n');
+      head = head + (pad.styles || []).map(s => {
+        if (s.type === 'href') return `<style rel="stylesheet" href="${s.value}" />`;
+        else if (s.type === 'style') return `<style>${s.value}</style>`;
+        else return '';
+      }).join('\n');
+      if (wrapHead) head = `<head>${head}</head>`;
+
+      let body = (pad.scripts || []).filter(s => s.foot).map(processScripts).join('\n');
+
+      if (headIdx < bodyIdx) {
+        txt = txt.slice(0, bodyIdx) + body + txt.slice(bodyIdx);
+        txt = txt.slice(0, headIdx) + head + txt.slice(headIdx);
+      } else {
+        txt = txt.slice(0, headIdx) + head + txt.slice(headIdx);
+        txt = txt.slice(0, bodyIdx) + body + txt.slice(bodyIdx);
+      }
+
+      if (!~txt.indexOf('</html>')) txt = `<html>${txt}</html>`;
+
+      this.set('_html', txt);
+    }
+  }
+
+  htmlEval(expr) {
+    const frame = this.find('iframe');
+    if (frame && frame.contentWindow) {
+      frame.contentWindow.postMessage({ action: 'expr', expr }, '*');
+      this.set('expr', '');
+      this.find('.html-expr')?.querySelector('textarea')?.focus();
+    }
+  }
+
+  handleMessage(msg) {
+    if (!msg.data || msg.data.frameId !== this.frameId) return;
+    if (msg.data.action === 'log') {
+      let scroll = false;
+      const tab = this.find('.html-console-logs');
+      if (tab && tab.scrollTop + tab.clientHeight + 20 > tab.scrollHeight) scroll = true;
+      msg.data.when = evaluate(`#now##date,'HH:mm:ss yyyy-MM-dd'`);
+      this.push('logs', msg.data);
+      this.set('flash', true);
+      setTimeout(() => this.set('flash', false), 16);
+      if (scroll) this.find('.html-console-end')?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }
+
+  buildRequest() {
+    const req = this.get('activePostman.request');
+    const opts = app.get('scratchroot') || {};
+    const ctx = makeContext({}, opts);
+    const vars = (this.get('postman.variable') || []).reduce((a, c) => (a[c.key] = template(ctx, c.value), a), {});
+    ctx.value = Object.assign(ctx.value, vars);
+    ctx.sources = Object.assign({}, opts.sources);
+    ctx.log = this.log;
+    const r = { url: template(ctx, req.url.raw), method: req.method || 'GET', headers: (req.header || []).reduce((a, c) => (a[template(ctx, c.key)] = template(ctx, c.value), a), {}) };
+    if (req.body?.mode === 'raw' && req.body?.raw && !['GET', 'OPTIONS', 'HEAD'].includes(req.method || 'GET')) r.body = template(ctx, req.body.raw);
+    return r;
+  }
+  renderFetchRequest() {
+    const req = this.buildRequest();
+    renderMD.checkLanguage('js');
+    const res = `<pre><code class="hljs javascript">${hljs.highlight(`fetch(${JSON.stringify(req.url)}, {
+  method: ${JSON.stringify(req.method)}, ${Object.keys(req.headers || {}).length > 0 ? `
+  headers: ${JSON.stringify(req.headers, null, '  ').replace(/^(  |})/gm, '  $1')},` : ''}${req.body ? `
+  body: ${JSON.stringify(req.body)},` : ''}
+});`, { language: 'javascript', ignoreIllegals: true }).value}</code></pre>`;
+    return res;
+  }
+  renderCurlRequest() {
+    const req = this.buildRequest();
+    renderMD.checkLanguage('sh');
+    const res = `<pre><code class="hljs bash">${hljs.highlight(`curl --request ${req.method} \\${Object.keys(req.headers || {}).length > 0 ? `
+  ${Object.entries(req.headers).map(([k, v]) => `-H "${k}: ${v}" \\`).join('\n  ')}` : ''}${req.body ? `
+  -d '${req.body.replace(/'/g, '\\\'').replace(/\r/g, '\\r').replace(/\n/g, '\\n')}' \\` : ''}
+  ${req.url}`, { language: 'bash' }).value}</code></pre>`;
+    return res;
+  }
+  reloadRequest(req) {
+    this.set('_activePostman', undefined)
+    this.set('activePostman', {
+      name: 'Replay',
+      request: {
+        url: { raw: req.url },
+        method: req.method,
+        body: req.body ? { mode: 'raw', raw: req.body } : undefined,
+        header: Object.entries(req.headers).map(([k, v]) => ({ key: k, value: v, type: 'text' })),
+      }
+    });
+  }
+  loadPostmanResult(res) {
+    this.set('postmanResult', JSON.parse(JSON.stringify(res)));
+    let tree;
+    if (res.headers['content-type'].includes('json')) tree = treeify(tryJSONParse(res.body));
+    else if (res.headers['content-type'].includes('xml')) tree = treeify(evaluate({ txt: res.body }, 'parse(txt xml:1)'));
+
+    this.set('_resultTree', tree);
+    if (tree) {
+      this.set('visited.tree', 1);
+      this.set('activeTab', 2);
+    } else {
+      this.set('activeTab', 1);
+    }
+  }
+  async makeRequest(req) {
+    const r = req || this.buildRequest();
+    if (globalThis.clientOnly || this.get('forceClient')) {
+      try {
+        const res = await fetch(r.url, r);
+        const headers = {};
+        for (const [k, v] of res.headers) headers[k] = v;
+        const rr = { body: await res.text(), status: res.status, statusText: res.statusText, headers };
+        this.loadPostmanResult(rr);
+        this.unshift('history', { request: r, result: rr, stamp: new Date() });
+      } catch (e) {
+        const body = e?.stack || e?.message || '<fetch error>';
+        this.host.toast(`${r.method || 'GET'} ${r.url} from client failed.`, { type: 'error', more: body, timeout: 6000 });
+        this.unshift('history', { request: r, result: { body, status: 'nope', statusText: 'fetch failed', headers: {} }, stamp: new Date() });
+      }
+    } else {
+      r.action = 'fetch';
+      try {
+        const res = await request(r);
+        const rr = { body: res.result, status: res.status, statusText: res.statusText, headers: res.headers };
+        this.loadPostmanResult(rr);
+        this.unshift('history', { request: r, result: rr, stamp: new Date() });
+      } catch (e) {
+        const body = e?.error || '<server error>';
+        this.unshift('history', { request: r, result: { body, status: 'nope', statusText: 'server failed', headers: {} }, stamp: new Date() });
+      }
+    }
+  }
+  lineCount(str) {
+    return (str || '').split('\n').length;
   }
 
   findWidget(el) {
@@ -2558,7 +2893,7 @@ class ScratchPad extends Window {
       const eof = text.indexOf('\n', pos);
       const eob = text.indexOf('```', pos + 1);
       if (!~eof || !~eob) return;
-      const opts = evaluate(globalContext, `{${text.slice(pos + fence.length, eof)}}`);
+      const opts = evaluate(makeContext(), `{${text.slice(pos + fence.length, eof)}}`);
       return { code: text.slice(eof, eob), opts, from: eof + 1, to: eob - 1 };
     }
   }
@@ -2606,21 +2941,31 @@ class ScratchPad extends Window {
       count.innerText = `${num}`;
       const code = this.widgetCode(w);
       if (code) this.replaceWidgetCode(code, count.innerText);
-    } else if (w.classList.contains('timer') || w.classList.contains('pomodoro')) {
+    } else if (w.classList.contains('timer') || w.classList.contains('pomodoro') || w.classList.contains('interval')) {
       const pom = w.classList.contains('pomodoro');
+      const int = w.classList.contains('interval');
       const code = this.widgetCode(w);
       if (e.innerText === 'Start') {
         const data = evaluate(code.code);
-        const time = data?.remain ? evaluate(data, `date(#now# + remain)`) : evaluate({ tm: pom ? code.opts?.on || '25mm' : w.querySelector('input').value }, `date(#now# + interval(tm))`);
-        this.replaceWidgetCode(code, evaluate({ data: { end: +time } }, 'unparse(data)'));
-        this.checkTimerPrecision(1);
+        const input = w.querySelector('input')?.value;
+        const time = data?.remain ? evaluate(data, `date(#now# + remain)`) : evaluate({ tm: pom ? code.opts?.on || '25mm' : input }, `date(#now# + interval(tm))`);
+        this.replaceWidgetCode(code, evaluate({ data: { end: +time }, input }, 'unparse(if input then data + { input: input } else data)'));
+        this.markdownTimes();
       } else if (e.innerText === 'Pause') {
         const data = { remain: evaluate(code, 'date(eval(code).end) - #now#' ) };
         if (pom) data.segment = evaluate(code.code)?.segment || 'work';
         this.replaceWidgetCode(code, evaluate({ data }, 'unparse(data)'));
+        this.markdownTimes();
       } else if (e.innerText === 'Reset') {
-        this.replaceWidgetCode(code, '');
-        w.querySelector('.time').innerText = '';
+        const data = evaluate(code.code);
+        const input = w.querySelector('input');
+        if (int && data?.end && input?.value) {
+          data.end = evaluate({ input: input.value }, `+(#now# + interval(input))`);
+          this.replaceWidgetCode(code, evaluate({ data }, 'unparse(data)'));
+        } else {
+          this.replaceWidgetCode(code, pom ? '' : evaluate({ data: { input: data.input } }, 'unparse(data)'));
+          w.querySelector('.time').innerText = '';
+        }
       } else if (e.innerText === 'Next') {
         const data = evaluate(code.code);
         const segment = data?.segment || 'work';
@@ -2628,6 +2973,7 @@ class ScratchPad extends Window {
         const tm = evaluate({ int: next === 'work' ? code.opts?.on || '25mm' : code.opts?.off || '5mm' }, 'date(#now# + interval(int))');
         this.replaceWidgetCode(code, evaluate({ data: { end: +tm, segment: next } }, 'unparse(data)'));
         w.querySelector('.time').innerText = `${next} for ${evaluate({ rem: +tm - Date.now() }, 'rem#timespan(format::timer precision::s)')}`;
+        this.markdownTimes();
       }
     } else if (w.classList.contains('dong')) {
       notificate({ sound: 'dong', message: 'Dong!', timeout: 4000 });
@@ -2637,9 +2983,9 @@ class ScratchPad extends Window {
     const e = ev.target;
     const w = this.findWidget(e);
     if (!w) return;
-    if (w.classList.contains('timer')) {
+    if (w.classList.contains('timer') || w.classList.contains('interval')) {
       const buttons = w.querySelectorAll('button');
-      if (evaluate(`#${e.value}#`)) buttons[0].disabled = false;
+      if (evaluate({ str: e.value }, `interval(str)`)) buttons[0].disabled = false;
       else buttons[0].disabled = true;
     }
   }
@@ -2658,9 +3004,12 @@ class ScratchPad extends Window {
           o.time.innerText = evaluate({ fmt }, '@date#time(fmt)');
         }
       }
-      if (obj = ts.timer) {
+      const timers = ts.timer && ts.interval ? [].concat(ts.timer, ts.interval) : (ts.timer || ts.interval);
+      if (obj = timers) {
         for (const o of obj) {
           const state = evaluate(this.widgetCode(o.widget).code);
+          const input = o.widget.querySelector('input');
+          const int = input.classList.contains('interval');
           if (state?.end) {
             const now = Date.now();
             const rem = now - state.end;
@@ -2669,20 +3018,24 @@ class ScratchPad extends Window {
               notificate({ sound: o.opts?.sound || 'time-beep', message: o.opts?.message, body: o.opts?.body, timeout: o.opts?.timeout });
               o.time.innerText = 'elapsed';
               o.data.donged = true;
-              btns[0].disabled = !evaluate({ str: o.widget.querySelector('input').value }, 'interval(str)');
+              input.style.display = '';
+              btns[0].disabled = !evaluate({ str: input.value }, 'interval(str)');
               btns[1].disabled = true;
               btns[2].disabled = false;
             } else {
               if (rem < 0) {
                 o.time.innerText = evaluate({ rem: -rem }, 'rem#timespan(format::timer precision::s)');
                 if (!['mm', 'min'].includes(o.opts?.precision)) precision = 1;
-                btns[0].disabled = btns[2].disabled = true;
+                btns[0].disabled = true;
                 btns[1].disabled = false;
+                btns[2].disabled = int ? !evaluate({ str: input.value }, 'interval(str)') : true;
+                if (!int) input.style.display = 'none';
               } else {
                 o.time.innerText = 'elapsed';
-                btns[0].disabled = !evaluate({ str: o.widget.querySelector('input').value }, 'interval(str)');
+                btns[0].disabled = !evaluate({ str: input.value }, 'interval(str)');
                 btns[1].disabled = true;
                 btns[2].disabled = false;
+                input.style.display = '';
               }
             }
           } else if (state?.remain) {
@@ -2690,11 +3043,13 @@ class ScratchPad extends Window {
             o.time.innerText = `paused: ${evaluate({ rem: state.remain }, 'rem#timespan(format::timer precision::s)')}`;
             btns[0].disabled = btns[2].disabled = false;
             btns[1].disabled = true;
+            if (!int) input.style.display = 'none';
           } else {
             o.time.innerText = '';
             const btns = o.widget.querySelectorAll('button');
-            btns[0].disabled = !evaluate({ str: o.widget.querySelector('input').value }, 'interval(str)');
+            btns[0].disabled = !evaluate({ str: input.value }, 'interval(str)');
             btns[1].disabled = btns[2].disabled = true;
+            input.style.display = '';
           }
         }
       }
@@ -2841,6 +3196,16 @@ ${md}</body></html>`
       }
     }
   }
+  async provideSource(getname, value, def) {
+    getname = getname || await app.ask('Provide value as source named:', 'Name Source', def || 'log');
+    if (getname === undefined) return;
+    provideSource(getname, value);
+    this.host.toast(`Value is now available to raport expressions as *${getname}.`, { type: 'info', timeout: 3000 });
+  }
+  stringifyLog(v) {
+    if (v === undefined) return 'undefined';
+    return evaluate({ v }, 'string(v)');
+  }
 }
 Window.extendWith(ScratchPad, {
   template: '#scratch-pad',
@@ -2851,8 +3216,16 @@ dd { margin: 0.5em 0 1em 2em; white-space: pre-wrap; }
 .ops-search { opacity: 0.2; }
 .ops-search:hover { opacity: 1; }
 .log-entry { padding: 0.5em; border-bottom: 1px dotted rgba(128, 128, 128, 0.5); position: relative; }
-.log-entry .time { position: absolute; top: 0; right: 0; width: 10em; background-color: rgba(128, 128, 128, 0.5); opacity: 0.2; transition: opacity 0.2s ease; padding: 0.2em; border-radius: 0 0 0 0.5em; }
-.log-entry .time:hover { opacity: 1; }
+.log-entry .time, .html-log .time { position: absolute; top: 0; right: 0; width: 10em; background-color: rgb(128, 128, 128); opacity: 0.2; transition: opacity 0.2s ease; padding: 0.2em; border-radius: 0 0 0 0.5em; color: #fff; }
+.log-entry .time:hover, .html-log .time:hover { opacity: 1; }
+.log-part { text-decoration-color: transparent; transition: text-decoration-color 0.2s ease; text-decoration-line: underline; }
+.log-part:hover { text-decoration-color: rgb(128, 128, 128, 0.75); }
+.html-log.warn { ${data('theme') === 'dark' ? '' : 'background-'}color: rgb(255, 255, 210); ${data('theme') === 'dark' ? 'background-' : ''}color: rgb(142, 134, 62); }
+.html-log.error { ${data('theme') === 'dark' ? '' : 'background-'}color: rgb(255, 215, 215); ${data('theme') === 'dark' ? 'background-' : ''}color: rgb(113, 59, 59); }
+.html-log.info { ${data('theme') === 'dark' ? '' : 'background-'}color: rgb(217, 235, 255); ${data('theme') === 'dark' ? 'background-' : ''}color: rgb(76, 95, 172); }
+.warn .log-part:hover { text-decoration-color: ${data('theme') !== 'dark' ? 'rgb(142, 134, 62)' : 'rgb(255, 255, 210)'}; }
+.error .log-part:hover { text-decoration-color: ${data('theme') !== 'dark' ? 'rgb(113, 59, 59)' : 'rgb(255, 215, 215)'}; }
+.info .log-part:hover { text-decoration-color: ${data('theme') !== 'dark' ? 'rgb(76, 95, 172)' : 'rgb(217, 235, 255)'}; }
 .clear-logs { transition: opacity 0.2s ease; opacity: 0.2; }
 .clear-logs:hover { opacity: 1; }
 table { margin: 0; border-collapse: collapse; border: 1px solid rgba(128, 128, 128, 0.5); }
@@ -2864,8 +3237,14 @@ thead th { top: -1em; }
 tbody th { left: 0; }
 tbody tr:nth-child(2n+1) td { background-color: rgba(128, 128, 128, 0.1); }
 tbody tr:hover td { background-color: rgba(128, 128, 128, 0.25); }
-
 span.counter { margin-right: 1em; }
+.postman fieldset { margin: 0.5em 0; }
+.rcard-with-tabs { max-width: calc(100% - 15em); box-sizing: border-box; }
+button.ghost { opacity: 0.05; transition: opacity 0.2s ease; }
+button.ghost:hover { opacity: 1; }
+code.hljs { border-radius: 0.5em; }
+.console-tab { transition: color 1s ease, background-color 1s ease; color: ${data('raui.primary.fg', '#000')}; background-color: ${data('raui.primary.bg', '#fff')}; display: inline-block; border-radius: 0.5em; padding: 0.2em; margin: -0.2em; }
+.console-tab.flash { color: ${data('raui.primary.bga', '#fff')}; background-color: ${data('raui.primary.fga', '#000')}; transition: none; }
 `; },
   use: [RauiPopover.default({ name: 'pop' })],
   options: { flex: true, resizable: true, minimize: false, width: '50em', height: '35em' },
@@ -2892,7 +3271,9 @@ span.counter { margin-right: 1em; }
       setTimeout(() => {
         const el = this.find('.editor-el');
         const tabs = this.findComponent('tabs');
-        if (el && !this.get('query') && (!tabs || this.get('pad.syntax') !== 'markdown' || tabs.get('selected') === 0)) {
+        const sel = tabs?.get('selected') || 0;
+        const syntax = this.get('pad.syntax');
+        if (el && !this.get('query') && (!tabs || !['markdown', 'html', 'postman'].includes(syntax) || (sel === 0 && syntax !== 'postman') || (syntax === 'postman' && sel === 6))) {
           const ctx = this.getContext(el);
           ctx.decorators?.ace?.focus();
         }
@@ -2905,26 +3286,20 @@ span.counter { margin-right: 1em; }
     },
     render() {
       this.saveDebounced.timeout = this.get('editor.autosave') ?? 15000;
+      this.frameId = reportFrameId++;
+      window.addEventListener('message', (this._messageHandler = this.handleMessage.bind(this)));
+    },
+    unrender() {
+      window.removeEventListener('message', this._messageListener);
     },
   },
   data() {
-    return { docs, ops: evaluate(docs.operators), fmts: evaluate(docs.formats), expand: {}, pad: { name: '', syntax: 'markdown', text: '' }, visited: { table: 0 } };
+    return { docs, expand: {}, pad: { name: '', syntax: 'markdown', text: '' }, visited: { tree: 0, table: 0 } };
   },
   computed: {
     operators() {
-      const map = this.get('ops').reduce((a, c) => (Array.isArray(c.op) ? c.op.forEach(o => a.push([o, c])) : a.push([c.op, c]), a), []);
-      let fmts = this.get('fmts');
-      for (const f of fmts) {
-        const all = Array.isArray(f.name) ? f.name : [f.name];
-        all.forEach((n, i) => {
-          const op = `#${n}`;
-          const val = { op, sig: [{ fmt: 1, proto: op, desc: f.desc }], opts: f.opts };
-          if (i > 0) val.alias = true;
-          map.push([op, val]);
-        });
-      }
+      const map = docs.operators.reduce((a, c) => (Array.isArray(c.op) ? c.op.forEach(o => a.push([o, c])) : a.push([c.op, c]), a), []);
       let ops = evaluate({ map }, `sort(map =>if _.0[0] == '#' then 'zz[_.0]' elif _.0[0] == '|' then ' {_.0}' else _.0)`)
-
       const search = this.get('opsearch');
       if (search) {
         const re = new RegExp(search.replace(/([*.\\\/$^()[\]{}+])/g, '\\$1'), 'i');
@@ -2970,6 +3345,22 @@ span.counter { margin-right: 1em; }
       else if (typ === 'raport') v = this.get('evalresult');
       return run({ type: 'delimited', source: 'data', sources: [{ source: 'data' }] }, { data: { value: v } }, {}, { table: 1 });
     },
+    endpoints() {
+      const res = {};
+      function walk(i, p) {
+        const pp = `${p ? `${p} \u232a ` : ''}${i.name || (p ? 'Unnamed' : '')}`;
+        if (i.request) {
+          res[pp] = i;
+        }
+        if (Array.isArray(i.item)) {
+          for (const ii of i.item) {
+            walk(ii, pp);
+          }
+        }
+        return res;
+      }
+      return walk(this.get('postman'), '');
+    },
   },
   observe: {
     'pad.name'(n) {
@@ -2984,7 +3375,23 @@ span.counter { margin-right: 1em; }
     },
     'pad.text'(v) {
       if (typeof v === 'string') this.saveDebounced && this.saveDebounced();
-      this.set('visited', { tree: 0, table: 0 });
+      if (!this._buildlock) this.set('_html', undefined);
+      if (!this.lockPostman && this.get('pad.syntax') === 'postman') {
+        this.lockPostman = true;
+        this.set('postman', JSON.parse(v));
+        this.lockPostman = false;
+      }
+    },
+    'pad.scripts pad.styles'(v) {
+      if (!this._buildlock) this.set('_html', undefined);
+      if (v) this.saveDebounced && this.saveDebounced();
+    },
+    postman(v) {
+      if (v && !this.lockPostman) {
+        this.lockPostman = true;
+        this.set('pad.text', JSON.stringify(v, null, '  '));
+        this.lockPostman = false;
+      }
     },
     'editor.autosave'(v) {
       if (this.saveDebounced) this.saveDebounced.timeout = v ?? 15000;
@@ -3142,7 +3549,7 @@ class HostExplore extends Window {
     }
 
     if (source.condition) {
-      const root = new Root(Object.assign({}, globalContext), { parameters: params });
+      const root = makeContext({}, { parameters: params });
       const ok = evaluate(root, source.condition);
       if (!ok) {
         if (source.alternate) return { value: evaluate(root, source.alternate) };
@@ -3182,9 +3589,11 @@ class HostExplore extends Window {
       }
       return { value: set };
     } else if (source.type === 'json') {
-      return { value: JSON.parse(source.json) };
+      return { value: tryJSONParse(source.json) };
     } else if (source.type === 'pg-fetch') {
       return { value: await makeRequest(source, params) };
+    } else if (source.type === 'scratch') {
+      return loadScratchReportSource(source, params);
     }
   }
   
@@ -3287,7 +3696,7 @@ class HostExplore extends Window {
 
       for (const src of report.sources) {
         if (src.condition) {
-          const root = new Root(Object.assign({}, globalContext), { parameters: params });
+          const root = makeContext({}, { parameters: params });
           const ok = evaluate(root, src.condition);
           if (!ok) {
             if (src.alternate) data[src.name] = { value: evaluate(root, src.alternate) };
@@ -3297,8 +3706,12 @@ class HostExplore extends Window {
         }
         if (src.type === 'query') {
           data[src.name] = (await request({ action: 'query', query: [src.query], params: [queryParams(report.definition, src, params)], client })).result;
+        } else if (srouce.type === 'json') {
+          data[src.name] = { value: tryJSONParse(src.json) };
         } else if (src.type === 'pg-fetch') {
           data[src.name] = { value: await makeRequest(src, params) };
+        } else if (src.type === 'scratch') {
+          data[src.name] = await loadScratchReportSource(src, params);
         }
       } // TODO: other sources?
 
@@ -3508,7 +3921,7 @@ dd { white-space: pre-wrap; }
         const con = cons.find(c => c.constr === constr);
         if (!con) continue;
         const list = hosts[constr];
-        res[constr] = evaluate(Object.assign({}, globalContext, { list, con, filter, apply, last, results: provided }), `let flt = parse('=>{filter}' raport:1);
+        res[constr] = evaluate(makeContext({ list, con, filter, apply, last, results: provided }), `let flt = parse('=>{filter}' raport:1);
 let connection = con.config;
 let constr = con.constr;
 filter(list |entry| => {
@@ -3656,7 +4069,7 @@ class Report extends Window {
   async fetchSource(msg) {
     const src = msg.source;
     if (src.condition) {
-      const root = new Root(Object.assign({}, globalContext), { parameters: msg.params || {} });
+      const root = makeContext({}, { parameters: msg.params || {} });
       const ok = evaluate(root, src.condition);
       if (!ok) {
         if (src.alternate) this.respond({ data: evaluate(root, src.alternate) }, msg);
@@ -3685,7 +4098,7 @@ class Report extends Window {
         this.respond({ data: [] }, msg);
       }
     } else if (src.type === 'json') {
-      this.respond({ data: JSON.parse(src.json) }, msg);
+      this.respond({ data: tryJSONParse(src.json) }, msg);
     } else if (src.type === 'pg-fetch') {
       this.respond({ data: await makeRequest(src, msg.params) }, msg);
     } else if (src.type === 'query-all') {
@@ -3702,6 +4115,8 @@ class Report extends Window {
       } catch (e) {
         this.respond({ error: e.message }, msg);
       }
+    } else if (src.type === 'scratch') {
+      this.respond({ data: await loadScratchReportSource(src, msg.params || {}) }, msg);
     } else {
       this.respond({ error: `Invalid source ${src.type}` }, msg);
     }
@@ -3736,7 +4151,7 @@ class Report extends Window {
     report.definition = (await this.request({ action: 'get', get: 'report' })).get;
     report.sources = (await this.request({ action: 'get', get: 'sources' })).get;
     for (const s of (report.sources || [])) {
-      if (['pg-fetch', 'query', 'query-all'].includes(s.type) && s.data) {
+      if (['pg-fetch', 'query', 'query-all', 'scratch'].includes(s.type) && s.data) {
         delete s.cached;
         delete s.data;
       }
@@ -3837,15 +4252,40 @@ function connect() {
     ws = globalThis.ws = undefined;
     app.set('connected', false);
   });
-  ws.addEventListener('close', () => {
+  ws.addEventListener('close', async () => {
     ws = globalThis.ws = undefined;
     app.set('connected', false);
+    if (app.get('halting')) {
+      if (await app.choose(`The server has been stopped. Would you like to continue using pg-difficult in client-only mode?`, [
+        { label: 'Yes', where: 'right', action() {
+          this.close(false, true);
+        } },
+        { label: 'No', where: 'left', class: 'reject', action() {
+          this.close(false, false);
+        } },
+      ], 'Keep client open?')) {
+        app.host.getWindow('control-panel').goClientOnly();
+        app.set('halting', false);
+        return;
+      } else {
+        app.set('halted', true);
+        window.close();
+      }
+    }
     reconnect();
   });
   ws.addEventListener('message', ev => {
     const msg = JSON.parse(ev.data);
     message(msg);
   });
+}
+
+function disconnect() {
+  if (globalThis.ws) {
+    globalThis.ws.close();
+    globalThis.ws = undefined;
+  }
+  app.set('connected', false);
 }
 
 function message(msg) {
@@ -3866,9 +4306,10 @@ function message(msg) {
       const entries = app.get('entries');
       const clients = app.get('status.clients');
       for (const k in clients) {
+        if (msg.client && k !== msg.client) continue;
         const client = clients[k];
         const since = evaluate({ entries, source: client.source }, 'max(filter(~entries =>source == ~source) =>id)') || undefined;
-        gate('check', () => ({ action: 'check', client: client.id, since }));
+        request({ action: 'check', client: client.id, since });
       }
       break;
     }
@@ -3896,7 +4337,7 @@ function message(msg) {
 
 function reconnect(wait = 10000) {
   if (app.get('halted')) return;
-  if (!app.get('connected')) setTimeout(() => connect(), wait);
+  if (!app.get('connected') && !globalThis.clientOnly) setTimeout(() => connect(), wait);
 }
 
 function basename(name) {
@@ -3937,9 +4378,9 @@ function load(ext, multi) {
 
 async function downloadQuery(result) {
   const settings = app.get('store.settings');
-  const field = settings.csv.field || ',';
-  const record = settings.csv.record || '\n';
-  const quote = settings.csv.quote || undefined;
+  const field = settings?.csv?.field || ',';
+  const record = settings?.csv?.record || '\n';
+  const quote = settings?.csv?.quote || undefined;
   const ext = field === ',' ? 'csv' : field === '\\t' ? 'tsv' : 'txt';
   const name = await app.ask('Please enter a file name:', 'Query Result File Name', `${evaluate('@date#timestamp')} query.${ext}`);
   if (name) {
@@ -3958,7 +4399,7 @@ function cloneDeep(any) {
 
 function queryParams(definition, source, params) {
   if (source.query) {
-    const ctx = new Raport.Root(Object.assign({}, globalContext, definition.context ? cloneDeep(definition.context) : {}));
+    const ctx = makeContext(definition.context ? cloneDeep(definition.context) : {});
     ctx.parameters = params;
     if (definition.extraContext) evaluate(ctx, definition.extraContext)
     params = params || {};
@@ -3984,6 +4425,7 @@ Ractive.helpers.copyToClipboard = (function() {
   let id = 0;
   return function copyToClipboard(text, message) {
     if (typeof text !== 'string') text = JSON.stringify(text);
+    if (text === undefined) text = 'undefined';
 
     const cur = ++id;
     app.set('copied.text', text);
@@ -4151,6 +4593,17 @@ function processQueryParams(params) {
   return params ? [params] : undefined;
 }
 
+async function loadScratchReportSource(source, params) {
+  let id = source.id;
+  if (!id && source.path) id = (await store.list('scratch')).find(s => s.name === source.path)?.id;
+  if (!id) return;
+  const pad = await store.get(id);
+  if (!pad) return;
+  if (pad.syntax === 'json') return { value: tryJSONParse(pad.text) };
+  else if (pad.syntax === 'raport') return { value: evaluate(makeContext({}, { parameters: params }), pad.text) };
+  // TODO: csv, xml, others?
+}
+
 function csvToHtml(text) {
   const dark = Ractive.styleGet('theme') === 'dark';
   return `<html>
@@ -4191,7 +4644,7 @@ async function makeRequest(config, params) {
     const entry = requestCache[key];
     if (entry) return entry.cache;
   }
-  const root = new Root(globalContext, { parser: parseTemplate, parameters: params });
+  const root = makeContext({}, { parser: parseTemplate, parameters: params });
   const req = { url: evaluate(root, config.url) };
   if (Array.isArray(config.headers)) {
     req.headers = {};
@@ -4204,7 +4657,7 @@ async function makeRequest(config, params) {
     if (config.server) res = (await request(Object.assign({ action: 'fetch' }, req))).result;
     else res = await (await fetch(req.url, req)).text();
     if (!config.eval || config.eval === 'json') res = JSON.parse(res);
-    else if (config.eval === 'raport') res = evaluate(globalContext, res);
+    else if (config.eval === 'raport') res = evaluate(makeContext(), res);
     else if (config.eval === 'try') {
       let val = res;
       if (val[0] === '<') return evaluate({ val }, 'parse(val xml:1)');
@@ -4243,21 +4696,26 @@ function notificate(details) {
 window.addEventListener('beforeunload', unload);
 window.addEventListener('unload', unloading);
 window.addEventListener('storage', debounce(readSync, 5000));
-window.addEventListener('hashchange', async () => {
-  const loc = window.location;
-  if (loc.hash && loc.hash.startsWith('#scratch/')) {
-    const name = loc.hash.slice(9);
+async function hashChangeHandler(hash) {
+  if (hash && hash.startsWith('#scratch')) {
+    const start = hash.indexOf('/');
+    const init = hash.slice(0, start);
+    const name = hash.slice(start + 1);
     const list = await store.list('scratch');
     for (const s of list) {
       if (s.name === name) {
-        app.openScratch(s);
+        const win = await app.openScratch(s);
+        if (win && ~init.indexOf('max')) setTimeout(() => win.maximize(), 100);
         break;
       }
     }
   }
   window.location.hash = '';
+}
+window.addEventListener('hashchange', async () => {
+  const loc = window.location;
+  hashChangeHandler(loc.hash);
 });
-if (window.location.hash) window.location.hash = '';
 
 // Set up debug helper
 let el;

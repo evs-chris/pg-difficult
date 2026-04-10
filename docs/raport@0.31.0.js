@@ -586,20 +586,47 @@
     }
     function istr(...strings) {
         const copy = strings.slice();
-        const chars = read1(copy.map(s => s.toLowerCase() + s.toUpperCase()).join(''));
         const idx = copy.map(s => s.toLowerCase());
+        const lens = idx.map(s => s.length);
         return {
             parse(s, p, res) {
-                const r = chars.parse(s, p, res);
-                if (!r.length)
-                    return r;
-                const i = idx.indexOf(r[0].toLowerCase());
-                if (!~i)
-                    return fail(p, detailedFail & 1 && `expected ${copy.length > 1 ? 'one of ' : ''}${copy.map(s => `${s}`).join(', ')}`);
-                r[0] = copy[i];
-                return r;
+                for (let i = 0; i < idx.length; i++) {
+                    const v = s.slice(p, p + lens[i]);
+                    if (v.toLowerCase() === idx[i]) {
+                        res[0] = copy[i];
+                        res[1] = p + lens[i];
+                        return res;
+                    }
+                }
+                return fail(p, detailedFail & 1 && `expected ${copy.length > 1 ? 'one of ' : ''}${copy.map(s => `${s}`).join(', ')}`);
             }
         };
+    }
+    function readToParser(chars, parser, name) {
+        let ps;
+        const stop = readTo(chars, true);
+        return lazy(() => ps = unwrap(parser), function parse(s, p, res, tree) {
+            const node = tree && openNode(p, name);
+            const len = s.length;
+            let l = p;
+            let sub;
+            while (l < len) {
+                sub = stop.parse(s, l, res);
+                l = sub[1];
+                sub = ps.parse(s, l, res);
+                if (!sub.length) {
+                    l++;
+                }
+                else {
+                    break;
+                }
+            }
+            res[0] = s.substring(p, l);
+            res[1] = l;
+            if (node)
+                closeNode(node, tree, res);
+            return res;
+        });
     }
 
     function opt(parser, name) {
@@ -1136,7 +1163,14 @@
     const space$3 = ' \t\n\r';
     const escmap$1 = { b: '\b', r: '\r', n: '\n', "'": "'", '"': '"', t: '\t', '\\': '\\' };
     const underscores = /_/g;
-    const JNum = map(seq(opt(str('-', '+')), read1(digits), read(digits + '_'), opt(str(".")), read(digits + '_'), map(opt(seq(str('e', 'E'), opt(str('+', '-')), read1(digits + '_'))), r => r && concat$1(r))), r => +(concat$1(r).replace(underscores, '')));
+    const decNum = map(seq(opt(str('-', '+')), read1(digits), read(digits + '_'), opt(str(".")), read(digits + '_'), map(opt(seq(str('e', 'E'), opt(str('+', '-')), read1(digits + '_'))), r => r && concat$1(r))), r => +(concat$1(r).replace(underscores, '')));
+    function ccat(v) {
+        return concat$1([v[0]].concat(v.slice(2)));
+    }
+    const hexNum = map(seq(opt(str('-', '+')), str('0x', '0X'), read1(hex$1), read(hex$1 + '_')), r => parseInt(ccat(r).replace(underscores, ''), 16));
+    const octNum = map(seq(opt(str('-', '+')), str('0o'), read1('01234567'), read('01234567_')), r => parseInt(ccat(r).replace(underscores, ''), 8));
+    const binNum = map(seq(opt(str('-', '+')), str('0b', '0B'), read1('01'), read('01_')), r => parseInt(ccat(r).replace(underscores, ''), 2));
+    const JNum = alt('number', hexNum, binNum, octNum, decNum);
     const JStringEscape = map(seq(str("\\"), notchars(1, 'xu')), r => escmap$1[r[1]] || r[1]);
     const JStringUnicode = map(seq(str("\\u"), chars(4, hex$1)), r => String.fromCharCode(parseInt(r[1], 16)));
     const JStringHex = map(seq(str('\\x'), chars(2, hex$1)), r => String.fromCharCode(parseInt(r[1], 16)));
@@ -1188,7 +1222,7 @@
     const endSym = space$2 + '():{}[]<>,"\'`\\;&#';
     const endRef = endSym + '.+/*|^%=!?';
     const _comment = map(seq(ws$2, str('//'), opt(str(' ')), readTo('\n'), str('\n')), ([, , , c]) => ({ c }), { name: 'comment', primary: true });
-    function comment(prop, p) {
+    function comment$1(prop, p) {
         return map(seq(rep(_comment), ws$2, p), ([c, , v]) => {
             if (c && c.length)
                 v[prop] = c.map(c => c.c);
@@ -1251,7 +1285,7 @@
     }, 'localpath');
     const parsePath = parser$1(keypath);
     const parseLetPath = parser$1(localpath);
-    const illegalRefs = ['if', 'else', 'elif', 'elseif', 'elsif', 'fi', 'esac', 'unless', 'then', 'case', 'when', 'not', 'gte', 'gt', 'lte', 'lt', 'in', 'like', 'ilike', 'not-in', 'not-like', 'not-ilike', 'contains', 'does-not-contain', 'is-not', 'is', 'strict-is-not', 'strict-is', 'deep-is-not', 'deep-is', 'and', 'or', 'end', 'with', 'each'];
+    const illegalRefs = ['if', 'else', 'elif', 'elseif', 'elsif', 'fi', 'esac', 'unless', 'then', 'case', 'when', 'not', 'gte', 'gt', 'lte', 'lt', 'in', 'ilike', 'like', 'flike', 'cflike', 'not-in', 'not-like', 'not-ilike', 'not-flike', 'not-cflike', 'contains', 'does-not-contain', 'is-not', 'is', 'strict-is-not', 'strict-is', 'deep-is-not', 'deep-is', 'and', 'or', 'end', 'with', 'each'];
     const ref = map(keypath, (r, err) => {
         if (r.k.length === 1 && !r.p && !r.u && illegalRefs.includes(r.k[0]))
             err(`invalid reference name '${r.k[0]}'`);
@@ -1490,7 +1524,7 @@
     const binop_e = map(seq(binop_pipe, rep(alt(seq(nop, name$1(str('**'), 'exp op'), nop, binop_pipe), seq(rws, name$1(str('**'), 'exp op'), rws, binop_pipe)))), ([arg1, more]) => more.length ? rightassoc(arg1, more) : arg1, 'exp-op');
     const binop_md = map(seq(binop_e, rep(alt(seq(nop, name$1(str('*', '/%', '/', '%'), 'muldiv-op'), nop, binop_e), seq(rws, name$1(str('*', '/%', '/', '%'), 'muldiv-op'), rws, binop_e)))), ([arg1, more]) => more.length ? more.reduce(leftassoc, arg1) : arg1, 'muldiv-op');
     const binop_as = map(seq(binop_md, rep(alt(seq(nop, name$1(str('+', '-'), 'addsub-op'), nop, binop_md), seq(rws, name$1(str('+', '-'), 'addsub-op'), rws, binop_md)))), ([arg1, more]) => more.length ? more.reduce(leftassoc, arg1) : arg1, 'addsub-op');
-    const binop_cmp = map(seq(binop_as, rep(alt(seq(nop, name$1(str('>=', '>', '<=', '<'), 'cmp-op'), nop, binop_as), seq(rws, name$1(str('>=', '>', '<=', '<', 'gte', 'gt', 'lte', 'lt', 'in', 'like', 'ilike', 'not-in', 'not-like', 'not-ilike', 'contains', 'does-not-contain'), 'cmp-op'), rws, binop_as)))), ([arg1, more]) => more.length ? more.reduce(leftassoc, arg1) : arg1, 'cmp-op');
+    const binop_cmp = map(seq(binop_as, rep(alt(seq(nop, name$1(str('>=', '>', '<=', '<'), 'cmp-op'), nop, binop_as), seq(rws, name$1(str('>=', '>', '<=', '<', 'gte', 'gt', 'lte', 'lt', 'in', 'like', 'ilike', 'flike', 'cflike', 'not-in', 'not-like', 'not-ilike', 'not-flike', 'not-cflike', 'contains', 'does-not-contain'), 'cmp-op'), rws, binop_as)))), ([arg1, more]) => more.length ? more.reduce(leftassoc, arg1) : arg1, 'cmp-op');
     const binop_eq = map(seq(binop_cmp, rep(alt(seq(nop, name$1(str('===', '==', '!==', '!='), 'eq-op'), nop, binop_cmp), seq(rws, name$1(str('===', '==', '!==', '!=', 'is-not', 'is', 'strict-is-not', 'strict-is', 'deep-is-not', 'deep-is'), 'eq-op'), rws, binop_cmp)))), ([arg1, more]) => more.length ? more.reduce(leftassoc, arg1) : arg1, 'eq-op');
     const binop_and = map(seq(binop_eq, rep(alt(seq(nop, name$1(str('&&'), 'and-op'), nop, binop_eq), seq(rws, name$1(str('and', '&&'), 'and-op'), rws, binop_eq)))), ([arg1, more]) => more.length ? more.reduce(leftassoc, arg1) : arg1, 'and-op');
     const binop_or = map(seq(binop_and, rep(alt(seq(nop, name$1(str('||', '??'), 'or-op'), nop, binop_and), seq(rws, name$1(str('or', '||', '??'), 'or-op'), rws, binop_and)))), ([arg1, more]) => more.length ? more.reduce(leftassoc, arg1) : arg1, 'or-op');
@@ -1561,7 +1595,7 @@
     }
     object.parser = map(bracket(check(str('{'), ws$2), repsep(pair, read1(space$2 + ','), 'allow'), check(ws$2, str('}'))), objectOp, { primary: true, name: 'object' });
     block.parser = map(bracket(check(str('{'), ws$2), rep1sep(value, read1(space$2 + ';'), 'allow'), check(ws$2, str('}'))), args => ({ op: 'block', args }), { primary: true, name: 'block' });
-    value.parser = unwrap(comment('c', operation));
+    value.parser = unwrap(comment$1('c', operation));
     const namedArg = map(seq(ident, str(':'), ws$2, value), ([k, , , v]) => [{ v: k }, v], 'named-arg');
     application.parser = map(seq(opt(bracket(check(str('|'), ws$2), rep1sep(opName, read1(space$2 + ','), 'allow'), seq(str('|'), ws$2))), str('=>', '=\\'), ws$2, value), ([names, , , value]) => {
         const res = { a: value };
@@ -1589,7 +1623,7 @@
         const type = {};
         const conditions = opt(seq(ws$2, rep1sep(map(seq(name$1(str('?'), { name: 'condition', primary: true }), ws$2, application), ([, , a]) => a), rws, 'disallow')));
         const value = map(seq(str('any[]', 'string[]', 'number[]', 'boolean[]', 'date[]', 'object[]', 'value[]', 'any', 'string', 'number', 'boolean', 'date', 'object', 'value'), not(read1To(endRef))), ([s]) => ({ type: s === 'any[]' ? 'array' : s }), { name: 'type', primary: true });
-        const typedef = comment('c', map(seq(str('type'), ws$2, name$1(ident, { name: 'type', primary: true }), ws$2, str('='), ws$2, type), ([, , name, , , , type]) => ({ name, type })));
+        const typedef = comment$1('c', map(seq(str('type'), ws$2, name$1(ident, { name: 'type', primary: true }), ws$2, str('='), ws$2, type), ([, , name, , , , type]) => ({ name, type })));
         const typedefs = map(rep1sep(typedef, read1(' \t\n;'), 'allow'), defs => defs.reduce((a, c) => (c.type.desc = c.c, a[c.name] = c.type, a), {}));
         const ref = map(seq(ident, opt(str('[]'))), ([ref, arr]) => ({ type: arr ? 'array' : 'any', ref }), { name: 'type', primary: true });
         const key = map(seq(name$1(ident, { name: 'key', primary: true }), opt(str('?')), ws$2, str(':'), ws$2, type), ([name, opt, , , , type]) => {
@@ -1607,7 +1641,7 @@
         const rest = map(seq(str('...'), ws$2, str(':'), ws$2, type), ([, , , , type]) => {
             return Object.assign({ name: '...' }, type);
         });
-        const object = map(seq(str('{'), ws$2, repsep(comment('desc', alt('interface parts', key, rest)), read1(' \t\n,;'), 'allow'), ws$2, str('}'), opt(str('[]'))), ([, , keys, , , arr], fail) => {
+        const object = map(seq(str('{'), ws$2, repsep(comment$1('desc', alt('interface parts', key, rest)), read1(' \t\n,;'), 'allow'), ws$2, str('}'), opt(str('[]'))), ([, , keys, , , arr], fail) => {
             const rests = keys.filter(k => k.name === '...');
             if (rests.length > 1)
                 fail('only one object rest can be specified');
@@ -1703,7 +1737,7 @@
         }
         return op;
     }, { primary: true, name: 'case-block' });
-    const interpolator = map(seq(str('{{'), ws$2, value, ws$2, str('}}')), ([, , value]) => ({ op: 'string', args: [value] }), { primary: true, name: 'interpolator' });
+    const interpolator = map(seq(str('{{'), ws$2, value, ws$2, str('}}')), ([, , value]) => ({ op: 'string', args: [value], opts: { v: { interp: 1 } } }), { primary: true, name: 'interpolator' });
     content$1.parser = alt({ primary: true, name: 'content' }, text$1, each_op, if_op, with_op, case_op, unless_op, interpolator);
     function apply_first(content) {
         if (content.length)
@@ -1742,9 +1776,9 @@
             return values[0];
         return { op: 'cat', args: values, meta: { q: '$$$' } };
     }
-    const _parse$1 = parser$1(alt(map(rep1(content$1), args => concat(args)), map(ws$2, () => ({ v: '' }))), { trim: true });
-    _parse$1.namespace = 'template';
-    const parse$2 = _parse$1;
+    const _parse = parser$1(alt(map(rep1(content$1), args => concat(args)), map(ws$2, () => ({ v: '' }))), { trim: true });
+    _parse.namespace = 'template';
+    const parse$2 = _parse;
     inlineTemplate.parser = map(rep1(alt({ name: 'inline-template' }, nestedText, each_op, if_op, with_op, case_op, unless_op, interpolator)), args => concat(args));
 
     function toDataSet(value) {
@@ -1811,6 +1845,9 @@
                     }
                     else if (which === 'parameters' || which === 'sources') {
                         o = root.root[which];
+                    }
+                    else if (which === 'VERSION') {
+                        o = '0.31.0-dev';
                     }
                     else if (which !== 'value') {
                         while (ctx && (!ctx.special || !(which in ctx.special)))
@@ -1997,9 +2034,6 @@
     }
     /**
      * Evaluate an applicative with the given locals, naming them if the applicative declares named arguments.
-     * If swap is not true, then a new context extension will be used. Otherwise, the context locals will be
-     * swapped for the evaluation and replaced afterwards. Swap should only be used for applications that are
-     * passing the context value as the first local.
      */
     function evalApply(ctx, value, locals, special) {
         if (isApplication(value)) {
@@ -2065,8 +2099,9 @@
         return opMap[name];
     }
     const _defaultGetValue = (c, b, v) => evalApply(c, b, [v]);
-    function sort(context, arr, sorts, getValue) {
+    function sort(context, arr, sorts, getValue, options) {
         let sortArr;
+        context = extend$1(context, { special: { invert: (options === null || options === void 0 ? void 0 : options.invert) !== undefined && options.invert !== false } });
         if (Array.isArray(sorts)) {
             sortArr = sorts;
         }
@@ -2120,6 +2155,8 @@
                 // default to asc
                 return false;
             });
+            const invopt = (options === null || options === void 0 ? void 0 : options.invert) === 'first' ? [0] : options === null || options === void 0 ? void 0 : options.invert;
+            const invert = sortArr.map((_, i) => Array.isArray(invopt) ? (invopt.includes(i) ? -1 : 1) : (invopt ? -1 : 1));
             arr.sort((a, b) => {
                 for (let i = 0; i < sortArr.length; i++) {
                     const s = sortArr[i];
@@ -2134,14 +2171,14 @@
                                     : l > r ? 1
                                         : 0;
                     if (cmp)
-                        return (desc ? -1 : 1) * cmp;
+                        return (desc ? -1 : 1) * invert[i] * cmp;
                 }
                 return 0;
             });
         }
         return arr;
     }
-    function filter(ds, filter, sorts, groups, context) {
+    function filter(ds, filter, sorts, groups, context, options) {
         const _ds = Array.isArray(ds) ? { value: ds } : ds;
         if (!_ds || !Array.isArray(_ds.value))
             return _ds;
@@ -2163,7 +2200,7 @@
             });
         }
         if (sorts)
-            sort(_context, values, sorts);
+            sort(_context, values, sorts, undefined, options);
         if (groups && !Array.isArray(groups))
             groups = [groups];
         if (Array.isArray(groups) && groups.length) {
@@ -2197,11 +2234,27 @@
     }
     function applyOperator(root, operation) {
         const op = opMap[operation.op];
+        let opts = operation.opts ? evalParse(root, operation.opts) : undefined;
+        let args = operation.args || [];
+        if (opts && opts._) {
+            if (Array.isArray(opts._)) {
+                args = opts._.map(a => ({ v: a }));
+            }
+            else if (typeof opts._ === 'object') {
+                if (opts._.options)
+                    opts = Object.assign({}, opts._.options, opts);
+                else
+                    opts = Object.assign({}, opts._, opts);
+                if (Array.isArray(opts.arguments))
+                    args = opts.arguments.map(a => ({ v: a }));
+            }
+        }
         // if the operator doesn't exist, try a local, pipe, or skip
         if (!op) {
             const local = safeGet(root, operation.op) || safeGet(root.root, operation.op);
             if (isApplication(local)) {
-                return evalApply(root, local, (operation.args || []).map(a => evalParse(root, a)));
+                args = args.map(a => evalParse(root, a));
+                return evalApply(root, local, args, { options: opts, arguments: args });
             }
             else if (operation.op === 'pipe') { // handle the special built-in pipe operator
                 if (!operation.args || !operation.args.length)
@@ -2213,53 +2266,65 @@
                         a = Object.assign({}, a, { args: [{ r: { k: ['pipe'], p: '@' } }].concat(a.args || []) });
                     if (isApplication(a))
                         v = evalApply(root, a, [v]);
-                    else
-                        v = evalParse(extend$1(root, { special: { pipe: v } }), a);
+                    else {
+                        if (isReference(a)) {
+                            const ref = safeGet(root, a.r);
+                            if (isApplication(ref)) {
+                                a = ref;
+                            }
+                            else {
+                                const r = typeof a.r === 'string' ? a.r : typeof a.r === 'object' && 'k' in a.r && Array.isArray(a.r.k) && a.r.k.length === 1 && typeof a.r.k[0] === 'string' ? a.r.k[0] : '';
+                                if (opMap[r])
+                                    a = { op: r, args: [{ r: { k: ['pipe'], p: '@' } }] };
+                            }
+                        }
+                        if (isApplication(a))
+                            v = evalApply(root, a, [v]);
+                        else
+                            v = evalParse(extend$1(root, { special: { pipe: v } }), a);
+                    }
                 }
                 return v;
             }
             return true;
         }
-        let args;
         if (op.type === 'checked') {
-            args = [];
-            const flts = operation.args || [];
+            const _args = [];
+            const flts = args;
             const ctx = op.extend ? extend$1(root, {}) : root;
-            const opts = operation.opts ? evalParse(ctx, operation.opts) : undefined;
             for (let i = 0; i < flts.length; i++) {
                 const a = flts[i];
                 const arg = evalParse(ctx, a);
                 const res = op.checkArg(operation.op, i, flts.length - 1, arg, opts, ctx, a);
                 if (res === 'continue')
-                    args.push(arg);
+                    _args.push(arg);
                 else if ('skip' in res) {
                     i += res.skip;
                     if ('value' in res)
-                        args.push(res.value);
+                        _args.push(res.value);
                 }
                 else if ('result' in res)
                     return res.result;
             }
-            return op.apply(operation.op, args, opts, ctx);
+            return op.apply(operation.op, _args, opts, ctx);
         }
         else if (op.type === 'value') {
-            args = (operation.args || []).map(a => evalParse(root, a));
-            return op.apply(operation.op, args, operation.opts ? evalParse(root, operation.opts) : undefined, root);
+            args = args.map(a => evalParse(root, a));
+            return op.apply(operation.op, args, opts, root);
         }
         else {
             let arr;
             const ctx = op.extend ? extend$1(root, {}) : root;
-            const args = (operation.args || []).slice();
-            const opts = operation.opts ? evalParse(ctx, operation.opts) : undefined;
+            const _args = args.slice();
             let arg;
             if (!op.value) {
-                arg = evalParse(ctx, args[0]);
+                arg = evalParse(ctx, _args[0]);
                 if (Array.isArray(arg)) {
-                    args.shift();
+                    _args.shift();
                     arr = arg;
                 }
                 else if (typeof arg === 'object' && 'value' in arg && Array.isArray(arg.value)) {
-                    args.shift();
+                    _args.shift();
                     arr = arg.value;
                 }
                 if (!arr) {
@@ -2272,7 +2337,7 @@
                         arr = [];
                 }
             }
-            return op.apply(operation.op, Array.isArray(arr) ? arr : [], args, opts, ctx);
+            return op.apply(operation.op, Array.isArray(arr) ? arr : [], _args, opts, ctx);
         }
     }
     function isKeypath(v) {
@@ -2291,7 +2356,7 @@
         if (typeof v !== 'object' || !('a' in v) || typeof v.a !== 'object')
             return false;
         const len = Object.keys(v).length;
-        return len === 1 || len === 2 && 'n' in v;
+        return len === 1 || len === 2 && ('n' in v || 'c' in v) || len === 3 && 'n' in v && 'c' in v;
     }
     function isValueOrExpr(o) {
         return typeof o === 'string' || isValue(o);
@@ -2336,15 +2401,20 @@
         };
     }
     function extend$1(context, opts) {
-        return {
+        const res = {
             parent: opts.fork && (!opts.value || opts.value === context.value) ? (context.parent || context.root) : context,
             root: context.root,
             path: opts.path || '',
             value: 'value' in opts ? opts.value : context.value,
             special: opts.fork ? Object.assign({}, context.special, { pipe: undefined }, opts.special) : (opts.special || {}),
-            parser: opts.parser,
-            locals: opts.locals,
         };
+        if (opts.parser)
+            res.parser = opts.parser;
+        if (opts.stringifier || context.stringifier)
+            res.stringifier = opts.stringifier || context.stringifier;
+        if (opts.locals)
+            res.locals = opts.locals;
+        return res;
     }
     const formats = {};
     const virtualFormats = {};
@@ -2844,10 +2914,26 @@
                     }
                     if (p.y < 0) {
                         p.offsetY = m[0];
+                        if (isNaN(h)) {
+                            p.y = (placement.availableY || 1) + p.y;
+                            const r = error(context, p, 'Negative y position requires height');
+                            s += r.output;
+                            ps.unshift([p.x, p.y, getWidthWithMargin(w, placement, context), r.height]);
+                            continue;
+                        }
                         if (placement.availableY == null)
                             p.y = 0;
                         else
                             p.y = (placement.availableY || 1) + p.y - h + 1;
+                        if (p.y < 0) {
+                            const offset = maxYOffset(ps);
+                            state = state || { offset };
+                            state.last = i;
+                            state.attempt = (state.attempt || 0) + 1;
+                            if (state.attempt > 1)
+                                return error(context, placement, 'Negative y position underflow error');
+                            return { output: s, continue: state, height: offset };
+                        }
                     }
                     const { x, y } = p;
                     const r = renderWidget(w, context, p, state && state.child);
@@ -3186,6 +3272,9 @@
         if (report.sources)
             applySources(ctx, report.sources, sources);
         ctx.parameters = Object.assign({}, initParameters(report, sources), ctx.parameters);
+        if (!ctx.special)
+            ctx.special = {};
+        ctx.special.definition = report;
         if (report.extraContext) {
             const res = evaluate(ctx, report.extraContext);
             if (res && typeof res === 'object')
@@ -3234,7 +3323,7 @@
         let headers = report.headers;
         if ((!fields || !fields.length) && values.length && typeof values[0] === 'object' && values[0]) {
             if (Array.isArray(values[0]))
-                fields = fields.map(i => `_.${i}`);
+                fields = Object.keys(values[0]).map(i => `_.${i}`);
             else {
                 fields = Object.keys(values[0]).map(k => `_[${JSON.stringify(k)}]`);
                 if (!headers || !headers.length)
@@ -3638,7 +3727,7 @@
         return res;
     }
     function style(str) {
-        const parsed = parser(str);
+        const parsed = parser(typeof str === 'string' ? str : str != null ? `${str}` : '');
         if (Array.isArray(parsed))
             return process(parsed);
         return str;
@@ -3850,6 +3939,7 @@
         return `<span${styleClass(ctx, ['label'], style$1(w, placement, ctx, { lineSize: true }))}>${val}</span>`;
     });
     registerRenderer('container', (w, ctx, placement, state) => {
+        var _a;
         addStyle(ctx, 'container', `.container {position:absolute;box-sizing:border-box;}`);
         let h;
         if (!w.height)
@@ -3872,11 +3962,9 @@
             r.width = getWidthWithMargin(w, placement, ctx);
         }
         if ((r.cancel || r.continue) && !w.bridge) {
-            const state = r.continue || {};
+            // must start fresh
+            const state = { attempt: ((_a = r.continue) === null || _a === void 0 ? void 0 : _a.attempt) || 1 };
             state.offset = 0;
-            // must start over
-            delete state.last;
-            state.attempt = (state.attempt || 0) + 1;
             if (state.attempt > 1)
                 return error(ctx, placement);
             return { continue: state, output: '' };
@@ -4080,7 +4168,8 @@
         }
         if (w.footer) {
             const fctx = (rctx && rctx.context) || (state && state.state && state.state.context && state.state.context.context);
-            const c = extend(ctx, { special: { source: group && group.grouped ? group.all : arr, level: group && group.level, grouped: groupNo !== false, group: group && group.group, values: (fctx && fctx.special || {}).values }, commit: {} });
+            const values = (fctx && fctx.special || {}).values;
+            const c = extend(ctx, { value: values ? Object.assign({}, ctx.context.value, values) : ctx.context.value, special: { source: group && group.grouped ? group.all : arr, level: group && group.level, grouped: groupNo !== false, group: group && group.group, values }, commit: {} });
             if (group) {
                 if (w.groupEnds && w.groupEnds[group.grouped])
                     r = renderWidget(w.footer, c, { x: 0, y, availableX: placement.availableX, maxX: placement.maxX, maxY: placement.maxY, availableY });
@@ -5285,6 +5374,10 @@
             }
         }
         else {
+            if (v1 && !v2 || !v1 && v2) {
+                diff[path] = [v1, v2];
+                return diff;
+            }
             const _v1 = v1 || {};
             const _v2 = v2 || {};
             const ks = [];
@@ -5298,6 +5391,13 @@
                 for (const k of Object.keys(_v2))
                     if (!~ks.indexOf(k))
                         ks.push(k);
+            }
+            if (!ks.length) {
+                let _v1 = v1.toString();
+                let _v2 = v2.toString();
+                if (_v1 !== _v2 && ((_v1[0] && _v1[0] !== '[') || (_v2[0] && _v2[0] !== '[')))
+                    diff[path] = [v1, v2];
+                return diff;
             }
             for (const k of ks) {
                 const vv1 = _v1[k];
@@ -5643,8 +5743,9 @@
     function csv(options) {
         const opts = Object.assign({}, DEFAULTS, options);
         const ws = skip(' \t\r\n'.replace(opts.field, '').replace(opts.record, '').replace(opts.quote, ''));
-        const quote = str(opts.quote || '"');
-        const quotedField = bracket(seq(ws, quote), map(rep(alt(readTo(opts.quote || '"'), map(seq(quote, quote), () => ''))), r => concat$1(r)), seq(quote, ws));
+        const q = opts.quote || '"';
+        const quote = str(q);
+        const quotedField = bracket(seq(ws, quote), map(rep(alt(map(str(`${q}${q}`), () => q), readTo(q))), r => concat$1(r)), seq(quote, ws));
         const unquotedField = readTo(opts.record + opts.field, true);
         const field = opts.quote ? alt(quotedField, unquotedField) : unquotedField;
         const record = verify(rep1sep(field, seq(ws, str(opts.field), ws)), s => s.length > 1 || s[0].length > 0 || 'empty record');
@@ -5771,14 +5872,49 @@
     const entity = map(seq(str('&'), str('amp', 'gt', 'lt'), str(';')), ([, which]) => entities[which] || '', 'entity');
     const name = read1('abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-_:$', 'name');
     const attr = map(seq(name, opt(seq(ws, str('='), ws, alt(name, quoted('"'), quoted("'"))))), ([name, rest]) => ({ name, value: rest ? rest[3] : true }), 'attr');
+    const content = map(rep1(alt(read1To(endTxt, true), entity), 'content'), txts => txts.join('').trim());
+    const comment = map(seq(str('<!--'), readToParser('-', str('-->')), str('-->')), ([, text]) => ({ text }));
+    const cdata = map(seq(str('<![CDATA['), readToParser(']', str(']]>')), str(']]>')), ([, chars]) => chars);
     function quoted(quote) {
         return map(seq(str(quote), readTo(quote), str(quote)), ([, str]) => str);
     }
-    const open = map(seq(str('<'), ws, name, ws, repsep(attr, ws, 'allow'), opt(str('/')), str('>')), ([, , name, , attrs, close]) => ({ open: true, name, attrs, empty: !!close }), 'open');
-    const close = map(seq(str('</'), ws, name, ws, str('>')), ([, , name]) => ({ close: true, name }), 'close');
-    const content = map(rep1(alt(read1To(endTxt, true), entity), 'content'), txts => txts.join('').trim());
-    const stream = rep(alt(open, content, close));
-    const _parse = parser$1(stream, { trim: true, consumeAll: true, undefinedOnError: true });
+    const parseJson = (function () {
+        const decl = map(seq(str('<?'), name, ws, repsep(attr, ws, 'allow'), ws, str('?>')), ([, name, , attrs]) => ({ name, attrs }));
+        const open = map(seq(str('<'), ws, name, ws, repsep(attr, ws, 'allow'), opt(str('/')), str('>')), ([, , name, , attrs, close]) => ({ open: true, name, attrs, empty: !!close }), 'open');
+        const close = map(seq(str('</'), ws, name, ws, str('>')), ([, , name]) => ({ close: true, name }), 'close');
+        const stream = rep(alt(comment, decl, cdata, open, content, close));
+        return parser$1(stream, { trim: true, consumeAll: true, undefinedOnError: true });
+    })();
+    const parseDoc = (function () {
+        const _attr = map(attr, (a) => {
+            if (~a.name.indexOf(':')) {
+                a.tag = a.name;
+                [a.ns, a.name] = a.tag.split(':');
+            }
+            return a;
+        });
+        const decl = map(seq(str('<?'), name, ws, repsep(_attr, ws, 'allow'), ws, str('?>')), ([, name, , attributes]) => ({ name, attributes }));
+        const open = map(seq(str('<'), ws, name, ws, repsep(_attr, ws, 'allow'), opt(str('/')), str('>')), ([, , name, , attributes, close]) => {
+            const el = { name };
+            if (attributes.length)
+                el.attributes = attributes;
+            if (~el.name.indexOf(':')) {
+                el.tag = el.name;
+                [el.ns, el.name] = el.tag.split(':');
+            }
+            return { close: !!close, open: true, el };
+        }, 'open');
+        const close = map(seq(str('</'), ws, name, ws, str('>')), ([, , name]) => {
+            const a = { close: true, name };
+            if (~a.name.indexOf(':')) {
+                a.tag = a.name;
+                [a.ns, a.name] = a.tag.split(':');
+            }
+            return a;
+        }, 'close');
+        const stream = rep(alt(comment, decl, cdata, open, content, close));
+        return parser$1(stream, { trim: true, consumeAll: true, undefinedOnError: true });
+    })();
     function put(target, prop, value) {
         if (prop in target) {
             if (Array.isArray(target[prop]))
@@ -5790,59 +5926,130 @@
             target[prop] = value;
         }
     }
-    function parse(str, strict) {
-        const stack = [];
-        const names = [];
-        const res = [];
-        let content = '';
-        const stream = _parse(str);
-        if (!stream || 'error' in stream)
-            return undefined;
-        function close(end) {
-            const val = stack.pop();
-            if (!val)
-                return;
-            const name = names.pop();
-            if (!stack.length) {
-                res.push(val);
-            }
-            else {
-                if (!Object.keys(val).length)
-                    put(stack[stack.length - 1], name, content || '');
-                else
-                    put(stack[stack.length - 1], name, val);
-            }
-            if (end !== name)
-                close(end);
-        }
-        for (const p of stream) {
-            if (typeof p === 'string') {
-                if (p)
-                    content += p;
-            }
-            else if ('open' in p) {
-                content = '';
-                const val = p.attrs.reduce((a, c) => (put(a, c.name, c.value), a), {});
-                if (p.empty) {
-                    if (stack.length)
-                        put(stack[stack.length - 1], p.name, val);
-                    else
-                        res.push(val);
+    function parse(str, opts) {
+        const o = typeof opts === 'boolean' ? { result: 'json', strict: opts } : (opts || { result: 'json' });
+        if (o.result === 'doc') {
+            const stack = [];
+            let top;
+            const stream = parseDoc(str);
+            let content = '';
+            const doc = { root: undefined };
+            for (const n of stream) {
+                if (typeof n === 'string') {
+                    if (n)
+                        content += n;
+                }
+                else if ('open' in n) {
+                    const el = n.el;
+                    if (top) {
+                        if (!top.children)
+                            top.children = [];
+                        if (content) {
+                            top.children.push(content);
+                            content = '';
+                        }
+                        top.children.push(el);
+                    }
+                    else {
+                        if (o.strict && doc.root)
+                            return;
+                        doc.root = el;
+                    }
+                    stack.push(el);
+                    top = el;
+                }
+                else if ('close' in n) {
+                    if (top && content) {
+                        if (!top.children)
+                            top.children = [];
+                        top.children.push(content);
+                    }
+                    content = '';
+                    if ((top.tag || top.name) === (n.tag || n.name)) {
+                        stack.pop();
+                    }
+                    else {
+                        if (o.strict)
+                            return;
+                        if (~stack.slice().reverse().find(t => (t.tag || t.name) === (n.tag || n.name))) {
+                            let t;
+                            while (t = stack.pop()) {
+                                if ((n.tag || n.name) === (t.tag || t.name))
+                                    break;
+                            }
+                        }
+                    }
+                    top = stack[stack.length - 1];
+                }
+                else if ('name' in n) {
+                    doc.decl = n;
                 }
                 else {
-                    names.push(p.name);
-                    stack.push(val);
+                    if (top) {
+                        if (!top.children)
+                            top.children = [];
+                        top.children.push(n);
+                    }
                 }
             }
-            else if ('close' in p) {
-                if (strict && p.name !== names[names.length - 1])
-                    return;
-                close(p.name);
-            }
+            if (stack.length > 1 && o.strict)
+                return;
+            return doc;
         }
-        if (names.length && !strict)
-            close(names[0]);
-        return res.length > 1 ? res : res.length === 1 ? res[0] : undefined;
+        else {
+            const stack = [];
+            const names = [];
+            const res = [];
+            let content = '';
+            const stream = parseJson(str);
+            if (!stream)
+                return;
+            function close(end) {
+                const val = stack.pop();
+                if (!val)
+                    return;
+                const name = names.pop();
+                if (!stack.length) {
+                    res.push(val);
+                }
+                else {
+                    if (!Object.keys(val).length)
+                        put(stack[stack.length - 1], name, content || '');
+                    else
+                        put(stack[stack.length - 1], name, val);
+                }
+                if (end !== name)
+                    close(end);
+            }
+            for (const p of stream) {
+                if (typeof p === 'string') {
+                    if (p)
+                        content += p;
+                }
+                else if ('open' in p) {
+                    content = '';
+                    const val = p.attrs.reduce((a, c) => (put(a, c.name, c.value), a), {});
+                    if (p.empty) {
+                        if (stack.length)
+                            put(stack[stack.length - 1], p.name, val);
+                        else
+                            res.push(val);
+                    }
+                    else {
+                        names.push(p.name);
+                        stack.push(val);
+                    }
+                }
+                else if ('close' in p) {
+                    if (o.strict && p.name !== names[names.length - 1])
+                        return;
+                    close(p.name);
+                }
+            }
+            if (names.length && !o.strict)
+                close(names[0]);
+            return res.length > 1 ? res : res.length === 1 ? res[0] : undefined;
+        }
     }
 
     function simple(names, apply) {
@@ -6182,6 +6389,32 @@
             }
         }
     }
+    function fuzzyMatch(search, str) {
+        if (!search)
+            return 0;
+        if (typeof str !== 'string')
+            str = `${str}`;
+        if (typeof search !== 'string')
+            search = `${search}`;
+        let c = -1;
+        let distance = 0;
+        let match = 0;
+        let front = 0;
+        fuzz: for (let i = 0; i < search.length; i++) {
+            for (let cc = c + 1; cc < str.length; cc++) {
+                if (search[i] === str[cc]) {
+                    c = cc;
+                    match++;
+                    if (i === 0)
+                        front = cc;
+                    continue fuzz;
+                }
+                distance++;
+            }
+            return 0 - str.length - search.length + 2 * match;
+        }
+        return (2 * (str.length + search.length)) - (2 * distance - (front + (str.length - 1 - c)));
+    }
     function inRange(v, range) {
         let found = false;
         let excluded = false;
@@ -6289,7 +6522,48 @@
             else
                 res = re.test(target);
         }
-        return name === 'like' || name === 'ilike' ? res : !res;
+        return name[0] !== 'n' ? res : !res;
+    }), simple(['flike', 'not-flike', 'cflike', 'not-cflike'], (name, values) => {
+        const [target, pattern] = values;
+        let res = false;
+        const patterns = typeof pattern === 'string' ? [pattern] : pattern;
+        const targets = typeof target === 'string' ? [target] : target;
+        if (!Array.isArray(patterns) || !Array.isArray(targets))
+            return false;
+        if (name === 'flike' || name === 'not-flike') {
+            for (let i = 0; i < targets.length; i++)
+                targets[i] = `${targets[i]}`.toLowerCase();
+            for (let i = 0; i < patterns.length; i++)
+                patterns[i] = `${patterns[i]}`.toLowerCase();
+        }
+        for (let i = 0; i < patterns.length && !res; i++) {
+            for (let j = 0; j < targets.length && !res; j++)
+                res = fuzzyMatch(patterns[i], targets[j]) >= 0;
+        }
+        return name[0] !== 'n' ? res : !res;
+    }), simple(['fuzzy-likeness'], (_, values, opts) => {
+        let [target, pattern, arg] = values;
+        if (!opts && typeof arg === 'object')
+            opts = arg;
+        if (!Array.isArray(target))
+            target = [target];
+        if (!Array.isArray(pattern))
+            pattern = [pattern];
+        if (!target.length || !pattern.length)
+            return 0;
+        let res = null;
+        for (let i = 0; i < target.length && (res === null || res < 0); i++) {
+            for (let j = 0; j < pattern.length && (res === null || res < 0); j++) {
+                let n;
+                if (!(opts === null || opts === void 0 ? void 0 : opts.case) && !(opts === null || opts === void 0 ? void 0 : opts.c))
+                    n = fuzzyMatch(`${pattern[j]}`.toLowerCase(), `${target[i]}`.toLowerCase());
+                else
+                    n = fuzzyMatch(pattern[j], target[i]);
+                if (res === null || res < n)
+                    res = n;
+            }
+        }
+        return res;
     }), simple(['in', 'not-in'], (name, values, _opts, ctx) => {
         const [l, r] = values;
         let range;
@@ -6449,7 +6723,7 @@
             return [str];
         else
             return str.split(split || '');
-    }), simple(['filter'], (_name, values, _opts, ctx) => {
+    }), simple(['filter'], (_name, values, opts, ctx) => {
         let [arr, flt, sorts, groups] = values;
         if (!Array.isArray(arr)) {
             if (arr && Array.isArray(arr.value))
@@ -6457,13 +6731,13 @@
             else if (typeof arr === 'object' && arr) {
                 let step = Object.entries(arr).filter((e, i) => evalApply(ctx, flt, [e[1], i, e[0]], { index: i, key: e[0] }));
                 if (sorts)
-                    step = sort(ctx, step, sorts, (c, b, v) => evalApply(c, b, [v[1], v[0]], { key: v[0] }));
+                    step = sort(ctx, step, sorts, (c, b, v) => evalApply(c, b, [v[1], v[0]], { key: v[0] }), opts);
                 return step.reduce((a, c) => (a[c[0]] = c[1], a), {});
             }
             else
                 return [];
         }
-        return filter({ value: arr }, flt, sorts, groups, ctx).value;
+        return filter({ value: arr }, flt, sorts, groups, ctx, opts).value;
     }), simple(['source'], (_name, values, _opts, ctx) => {
         const [val, app] = values;
         let source = toDataSet(val);
@@ -6479,7 +6753,7 @@
                 return {};
         }
         return filter({ value: arr }, null, null, groups, ctx).value;
-    }), simple(['sort'], (_name, values, _opts, ctx) => {
+    }), simple(['sort'], (_name, values, opts, ctx) => {
         let [arr, sorts] = values;
         if (!Array.isArray(arr)) {
             if (arr && Array.isArray(arr.value))
@@ -6487,14 +6761,14 @@
             else if (arr && typeof arr === 'object') {
                 if (!sorts)
                     sorts = [{ a: { r: { p: '@', k: ['key'] } } }];
-                return sort(ctx, Object.entries(arr), sorts, (c, b, v) => evalApply(c, b, [v[1], v[0]], { key: v[0] })).reduce((a, c) => (a[c[0]] = c[1], a), {});
+                return sort(ctx, Object.entries(arr), sorts, (c, b, v) => evalApply(c, b, [v[1], v[0]], { key: v[0] }), opts).reduce((a, c) => (a[c[0]] = c[1], a), {});
             }
             else
                 return {};
         }
         if (!sorts)
             sorts = [{ a: { r: { k: ['_'] } } }];
-        return sort(ctx, arr.slice(), sorts);
+        return sort(ctx, arr.slice(), sorts, undefined, opts);
     }), simple(['time-span', 'time-span-ms'], (_name, args, opts) => {
         const namedArgs = opts || {};
         const span = isDateRel(args[0]) && isDateRel(args[1]) ? datesDiff(dateRelToDate(args[0]), dateRelToDate(args[1])) : isTimespan(args[0]) ? args[0] : 0;
@@ -6653,11 +6927,13 @@
             else
                 return span;
         }
-    }), simple(['string', 'unparse'], (name, args, opts) => {
+    }), simple(['string', 'unparse'], (name, args, opts, ctx) => {
         const [value] = args;
         opts = opts || args[1] || {};
         if (!opts || typeof opts !== 'object')
             opts = {};
+        if (opts.interp && ctx.stringifier)
+            return ctx.stringifier(args[0]);
         if (name === 'unparse')
             opts = Object.assign({}, opts, { raport: 1 });
         if (opts.raport && opts.tpl)
@@ -6682,6 +6958,14 @@
             }
             else if (typeof value === 'string' && opts.styled)
                 return style(value);
+            else if ((opts.int || opts.integer) && !isNaN(value)) {
+                const r = Math.min(36, Math.max(2, opts.radix || opts.base || 10));
+                let v = Math.floor(+value);
+                const n = v < 0;
+                if (n)
+                    v = v * -1;
+                return `${n ? '-' : ''}${r === 16 ? '0x' : r === 2 ? '0b' : r === 8 ? '0o' : ''}${v.toString(r)}`;
+            }
             else if (value == null)
                 return '';
         }
@@ -6844,17 +7128,17 @@
             return values.reduce((a, c) => +round(a - (!isNum(c) ? 0 : +c), ctx.special.round), !isNum(first) ? 0 : +first);
         else
             return values.reduce((a, c) => a - (!isNum(c) ? 0 : +c), !isNum(first) ? 0 : +first);
-    }), simple(['*', 'multiply'], (_name, values, _opts, ctx) => {
+    }), simple(['*', 'multiply'], (name, values, _opts, ctx) => {
         const first = values.shift();
         if (!isNum(first)) {
-            if (values.length === 1 && isNum(values[0]) && +values[0] > 0) {
+            if ((values.length === 1 || name !== '*') && isNum(values[0]) && +values[0] > 0) {
                 if (typeof first === 'string') {
                     return stringTimes(first, +values[0]);
                 }
                 else if (isApplication(first) && +values[0] < 10000) {
                     const res = [];
                     for (let i = 0; i < +values[0]; i++)
-                        res.push(evalApply(ctx, first, [i]));
+                        res.push(evalApply(ctx, first, values.slice(1), { index: i }));
                     return res;
                 }
                 else if (Array.isArray(first) && +values[0] < 10000 && first.length < 1000) {
@@ -6990,8 +7274,11 @@
                 return `${op.apply('string', [src], undefined, ctx)}`.slice(start, end);
         }
     }), simple(['len', 'length'], (_name, [src]) => {
+        var _a;
         if (typeof src === 'string' || Array.isArray(src))
             return src.length;
+        else if (isApplication(src))
+            return ((_a = src.n) === null || _a === void 0 ? void 0 : _a.length) || 0;
         else if (typeof src === 'object' && Object.keys(src).length === 1 && Array.isArray(src.value))
             return src.value.length;
         else if (typeof src === 'object')
@@ -7015,6 +7302,12 @@
         }
         else if (Array.isArray(src)) {
             return src.slice().reverse();
+        }
+        else if (typeof src === 'object') {
+            const r = {};
+            for (const k in src)
+                r[src[k]] = k;
+            return r;
         }
     }), simple(['wrap-count'], (_name, [str, width, font], opts, ctx) => {
         var _a;
@@ -7212,6 +7505,12 @@
         else if (type === 'generate') {
             Object.assign(generateDefaults, opts);
         }
+        else if (type === 'stringifier') {
+            if (opts === null || opts === void 0 ? void 0 : opts.unset)
+                ctx.stringifier = undefined;
+            else if (isApplication(name))
+                ctx.stringifier = (v) => evalApply(ctx, name, [v]);
+        }
     }), simple(['parse'], (_name, args, opts) => {
         opts = opts || args[1] || {};
         if (!opts || typeof opts !== 'object')
@@ -7232,7 +7531,19 @@
         else if (opts.range)
             return range(v, opts);
         else if (opts.xml)
-            return parse(v, opts.strict);
+            return parse(v, opts);
+        else if (opts.int || opts.integer) {
+            let r = opts.radix || opts.base;
+            const p = v.slice(0, 2);
+            if (p === '0x' || p === '0X')
+                r = 16;
+            else if (p === '0b' || p === '0B')
+                r = 2;
+            else if (p === '0o')
+                r = 8;
+            r = Math.min(36, Math.max(2, r));
+            return parseInt(`${v}`.replace(/0[xob]/i, ''), r);
+        }
         else if (opts.csv || opts.delimited) {
             if (opts.detect || !opts.field || !opts.record)
                 opts = Object.assign(detect(v, opts.context), opts);
@@ -7342,14 +7653,16 @@
         },
         apply(_name, [value, body], opts, ctx) {
             if (Array.isArray(value)) {
-                const last = value.length - 1;
-                return value.map((v, i) => evalApply(ctx, body, [v, i], { last, index: i, key: i, 'last-key': last })).join((opts === null || opts === void 0 ? void 0 : opts.join) || '');
+                const count = value.length;
+                const last = count - 1;
+                return value.map((v, i) => evalApply(ctx, body, [v, i], { last, index: i, key: i, 'last-key': last, count })).join((opts === null || opts === void 0 ? void 0 : opts.join) || '');
             }
             else if (typeof value === 'object' && value) {
                 const entries = Object.entries(value);
                 const lastKey = entries[entries.length - 1][0];
-                const last = entries.length - 1;
-                return Object.entries(value).map(([k, v], i) => evalApply(ctx, body, [v, k], { last, 'last-key': lastKey, index: i, key: k })).join('');
+                const count = entries.length;
+                const last = count - 1;
+                return Object.entries(value).map(([k, v], i) => evalApply(ctx, body, [v, k], { last, 'last-key': lastKey, index: i, key: k, count })).join('');
             }
             else {
                 return '';
@@ -7499,6 +7812,14 @@
                 const res = Array.prototype.map.call(v, (e, i) => evalApply(ctx, app, [e, i], { index: i, key: i }));
                 if (opts && opts.flat)
                     return flatten(res, opts.flat);
+                if (opts && opts.object)
+                    return res.reduce((a, c) => {
+                        if (Array.isArray(c))
+                            a[c[0]] = c[1];
+                        else if (typeof c === 'object' && 'key' in c)
+                            a[c.key] = c.value;
+                        return a;
+                    }, {});
                 return res;
             }
             else if (v && typeof v === 'object' && isApplication(app)) {
@@ -7895,6 +8216,7 @@
     exports.evaluate = evaluate;
     exports.extend = extend$1;
     exports.filter = filter;
+    exports.fuzzyMatch = fuzzyMatch;
     exports.getOperator = getOperator;
     exports.getOperatorMap = getOperatorMap;
     exports.initParameters = initParameters;
