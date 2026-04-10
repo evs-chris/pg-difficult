@@ -2016,7 +2016,7 @@ res
       return this.host.toast(`All entries are empty, and you have undoing empty changesets disabled.`, { type: 'info', timeout: 3000 });
     }
 
-    if (!this.event?.event?.ctrlKey || this.event?.event?.shiftKey) await request({ action: 'segment', segment: `Undo ${entry.segment}` });
+    if (!this.event?.event?.ctrlKey && !this.event?.event?.shiftKey) await request({ action: 'segment', segment: `Undo ${entry.segment}` });
 
     const blocked = this.blocked;
     this.blocked = true;
