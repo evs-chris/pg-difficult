@@ -904,7 +904,7 @@ doover:
 	}
 
 	if len(results) == 1 {
-		res.Respond(req.Id, map[string]any{"action": "query", "result": results[0].Rows, "time": time.Since(start).Milliseconds(), "affected": results[0].Affected})
+		res.Respond(req.Id, map[string]any{"action": "query", "result": results[0].Rows, "time": time.Since(start).Milliseconds(), "affected": results[0].Affected, "fields": results[0].Fields})
 	} else {
 		rows := make([][]OrderedResult, len(results))
 		counts := make([]int64, len(results))

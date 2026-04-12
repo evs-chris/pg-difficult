@@ -22,12 +22,14 @@ type Schema struct {
 	Functions []*Function `json:"functions"`
 }
 type Table struct {
+	Id          uint32    `json:"id" db:"id"`
 	Schema      string    `json:"schema" db:"schema"`
 	Name        string    `json:"name" db:"name"`
 	Columns     []*Column `json:"columns" db:"-"`
 	Description *string   `json:"description" db:"description"`
 }
 type View struct {
+	Id           uint32    `json:"id" db:"id"`
 	Schema       string    `json:"schema" db:"schema"`
 	Name         string    `json:"name" db:"name"`
 	Columns      []*Column `json:"columns" db:"-"`
@@ -51,6 +53,7 @@ type Column struct {
 	Description *string   `json:"description" db:"description"`
 }
 type Function struct {
+	Id          uint32  `json:"id" db:"id"`
 	Schema      string  `json:"schema" db:"schema"`
 	Name        string  `json:"name" db:"name"`
 	Arguments   string  `json:"arguments" db:"arguments"`
@@ -63,7 +66,7 @@ type Function struct {
 	Type        string  `json:"type" db:"type"`
 }
 
-const tableQuery = `SELECT n.nspname "schema", c.relname "name", d.description "description" FROM pg_catalog.pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace left join pg_catalog.pg_description d on d.objoid = c.oid and d.objsubid = 0 WHERE c.relkind in ('r') and n.nspname not in ('pg_catalog', 'information_schema') order by c.relname asc`
+const tableQuery = `SELECT n.nspname "schema", c.relname "name", d.description "description", c.oid "id" FROM pg_catalog.pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace left join pg_catalog.pg_description d on d.objoid = c.oid and d.objsubid = 0 WHERE c.relkind in ('r') and n.nspname not in ('pg_catalog', 'information_schema') order by c.relname asc`
 const tableColumnQuery = `select ts.table_schema as schema, ts.table_name as table, cs.column_name as name, cs.ordinal_position as position, cs.is_nullable = 'YES' as nullable, (select keys.constraint_name from information_schema.key_column_usage keys join information_schema.table_constraints tc on keys.constraint_name = tc.constraint_name and keys.constraint_schema = tc.constraint_schema and tc.table_name = keys.table_name where keys.table_schema = cs.table_schema and keys.table_name = cs.table_name and keys.column_name = cs.column_name and tc.constraint_type = 'PRIMARY KEY') is not null as pkey, cs.udt_name as pgtype, cs.column_default as default, cs.character_maximum_length as length, case when cs.udt_name = 'numeric' and cs.numeric_precision > 0 and cs.numeric_scale > 0 then array[cs.numeric_precision::integer, cs.numeric_scale::integer] else null end as precision, d.description "description" from information_schema.columns cs join information_schema.tables ts on ts.table_name = cs.table_name and ts.table_schema = cs.table_schema left join pg_description d on d.objoid = (ts.table_schema || '.' || ts.table_name)::regclass::oid and d.objsubid = cs.ordinal_position where ts.table_schema not in ('pg_catalog', 'information_schema') order by cs.column_name asc;`
 
 func enumQuery(typ string) string {
@@ -77,7 +80,7 @@ const functionQuery = `SELECT n.nspname as "schema", p.proname as "name", pg_cat
  pg_catalog.pg_get_userbyid(p.proowner) as "owner",
  CASE WHEN prosecdef THEN 'definer' ELSE 'invoker' END AS "security",
  -- pg_catalog.array_to_string(p.proacl, E'\n') AS "access",
- l.lanname as "language", p.prosrc as "source", pg_catalog.obj_description(p.oid, 'pg_proc') as "description"
+ l.lanname as "language", p.prosrc as "source", pg_catalog.obj_description(p.oid, 'pg_proc') as "description", p.oid "id"
 FROM pg_catalog.pg_proc p LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace LEFT JOIN pg_catalog.pg_language l ON l.oid = p.prolang where n.nspname not in ('pg_catalog', 'information_schema') order by p.proname asc, p.prosrc asc`
 const oldFunctionQuery = `SELECT n.nspname as "schema", p.proname as "name", pg_catalog.pg_get_function_result(p.oid) as "result", pg_catalog.pg_get_function_arguments(p.oid) as "arguments",
  CASE p.proisagg WHEN true THEN 'aggregate' ELSE 'function' END as "type",
@@ -86,9 +89,9 @@ const oldFunctionQuery = `SELECT n.nspname as "schema", p.proname as "name", pg_
  pg_catalog.pg_get_userbyid(p.proowner) as "owner",
  CASE WHEN prosecdef THEN 'definer' ELSE 'invoker' END AS "security",
  -- pg_catalog.array_to_string(p.proacl, E'\n') AS "access",
- l.lanname as "language", p.prosrc as "source", pg_catalog.obj_description(p.oid, 'pg_proc') as "description"
+ l.lanname as "language", p.prosrc as "source", pg_catalog.obj_description(p.oid, 'pg_proc') as "description", p.oid "id"
 FROM pg_catalog.pg_proc p LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace LEFT JOIN pg_catalog.pg_language l ON l.oid = p.prolang where n.nspname not in ('pg_catalog', 'information_schema') order by p.proname asc, p.prosrc asc`
-const viewQuery = `SELECT n.nspname "schema", c.relname "name", d.description "description", c.relkind = 'm' "materialized", pg_catalog.pg_get_viewdef(c.oid) "definition" FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace left join pg_catalog.pg_description d on d.objoid = c.oid and d.objsubid = 0 WHERE c.relkind in ('v', 'm') and n.nspname not in ('pg_catalog', 'information_schema') order by c.relname asc`
+const viewQuery = `SELECT n.nspname "schema", c.relname "name", d.description "description", c.relkind = 'm' "materialized", pg_catalog.pg_get_viewdef(c.oid) "definition", c.oid "id" FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace left join pg_catalog.pg_description d on d.objoid = c.oid and d.objsubid = 0 WHERE c.relkind in ('v', 'm') and n.nspname not in ('pg_catalog', 'information_schema') order by c.relname asc`
 const viewColumnQuery = `SELECT n.nspname "schema", c.relname "table", a.attname "name", t.typname "pgtype", not a.attnotnull "nullable", false pkey, case when a.atttypmod = -1 then null when t.oid in (1042, 1043) then a.atttypmod - 4 when t.oid in (1560, 1562) then a.atttypmod else null end length, case when t.oid = 1700 and a.atttypmod <> -1 then array[((a.atttypmod - 4) >> 16) & 65535, (a.atttypmod - 4) & 65535] else null end "precision", a.attnum "position" FROM pg_catalog.pg_class c INNER JOIN pg_catalog.pg_attribute a ON a.attrelid = c.oid INNER JOIN pg_catalog.pg_type t ON t.oid = a.atttypid inner join pg_catalog.pg_namespace n on n.oid = c.relnamespace WHERE c.relkind in ('v', 'm') and n.nspname not in ('pg_catalog', 'information_schema') and a.attnum > -1 order by a.attname asc;`
 
 var tstypes = map[string]string{
@@ -152,11 +155,11 @@ func schema(client *pgx.Conn) (*Schema, error) {
 	if err != nil {
 		return nil, err
 	}
-	colmap := make(map[string]map[string][]*Column)
+	colmap := make(map[string]map[string][]*Column, 10)
 	for _, c := range columns {
 		schema, ok := colmap[c.Schema]
 		if !ok {
-			colmap[c.Schema] = make(map[string][]*Column)
+			colmap[c.Schema] = make(map[string][]*Column, 10)
 			schema = colmap[c.Schema]
 		}
 		table, ok := schema[c.Table]
@@ -193,10 +196,15 @@ func schema(client *pgx.Conn) (*Schema, error) {
 	return res, nil
 }
 
+type FieldDescription struct {
+	Table  uint32 `json:"table"`
+	Column uint16 `json:"column"`
+}
 type OrderedResult = *xmap.OrderedMap[string, any]
 type QueryOrderedResult struct {
-	Rows     []OrderedResult `json:"rows"`
-	Affected int64           `json:"affected"`
+	Rows     []OrderedResult    `json:"rows"`
+	Affected int64              `json:"affected"`
+	Fields   map[string]FieldDescription `json:"fields"`
 }
 
 func queryOrdered(client *pgx.Conn, sql string, params ...any) (*QueryOrderedResult, error) {
@@ -208,8 +216,12 @@ func queryOrdered(client *pgx.Conn, sql string, params ...any) (*QueryOrderedRes
 	descs := rows.FieldDescriptions()
 	col_len := len(descs)
 	cols := make([]string, col_len)
+	fields := make(map[string]FieldDescription, col_len)
 	for i, col := range descs {
 		cols[i] = col.Name
+		if col.TableOID != 0 {
+			fields[col.Name] = FieldDescription{Table: col.TableOID, Column: col.TableAttributeNumber}
+		}
 	}
 	things, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (*xmap.OrderedMap[string, any], error) {
 		vals, err := row.Values()
@@ -225,7 +237,7 @@ func queryOrdered(client *pgx.Conn, sql string, params ...any) (*QueryOrderedRes
 	if err != nil {
 		return nil, err
 	}
-	return &QueryOrderedResult{Rows: things, Affected: rows.CommandTag().RowsAffected()}, nil
+	return &QueryOrderedResult{Rows: things, Affected: rows.CommandTag().RowsAffected(), Fields: fields}, nil
 }
 
 type QueryResult struct {
