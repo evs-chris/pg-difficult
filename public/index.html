@@ -548,7 +548,7 @@
             <div class="constr">
               <div style="flex-grow: 1;">{{#if .label}}<strong>{{.label}}</strong> ({{constr(.)}}){{else}}{{constr(.)}}{{/if}}<tip>{{`Maximium value length: ${.diffopts.maxlen || 'none'}\nChanged record capture: ${.diffopts.change === 'whole' ? 'both whole records' : .diffopts.change === 'whole-old' ? 'whole old record, new changes' : 'changes only'}\nIgnored tables: ${.diffopts.ignore.length ? .diffopts.ignore.join(', ') : 'none'}`}}</tip></div>
               <div style="width: 13em; flex-shrink: 0;">
-                <button class=flat on-click="@.editConnection(.)" {{#if @.hasDiff(.) || @.hasLeak(.)}}disabled title="Stop active watchers to modify this connection"{{else}}title="Edit this saved connection."{{/if}}>Edit</button>
+                <button class=flat on-click="@.editConnection(.)" {{#if @.hasDiff(.) || @.hasLeak(.)}}disabled title="Stop active watchers to modify this connection"{{else}}title="Edit this saved connection. shift+click to edit a new copy of this saved connection."{{/if}}>Edit</button>
                 <button class=flat on-click="@.remove(.)" {{#if @.hasDiff(.) || @.hasLeak(.)}}disabled title="Stop active watchers to modify this connection"{{else}}title="Remove this saved connection."{{/if}}>Remove</button><br/>
               </div>
             </div>

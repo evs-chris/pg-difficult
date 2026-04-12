@@ -1187,7 +1187,13 @@ class ControlPanel extends Window {
   constructor(opts) { super(opts); }
   diffStateMap = new Map();
   async editConnection(which) {
-    const config = which;
+    let config = which;
+    if (this.event.event.shiftKey) {
+      config = cloneDeep(config);
+      delete config._id;
+      delete config._rev;
+      config.label = `${config.label} - Copy`;
+    }
     const wnd = new Connect({ data: { config: Object.assign({ type: 'connection' }, config) } });
     this.host.addWindow(wnd, { block: this });
     const res = await wnd.result;
@@ -2673,6 +2679,7 @@ class ScratchPad extends Window {
       const doc = Object.assign({}, await store.get(id));
       delete doc._id;
       delete doc._rev;
+      doc.name = `${doc.name} - Copy`;
       this.set('pad', doc);
     } else {
       await store.acquire('scratch', id);
@@ -2922,7 +2929,7 @@ class ScratchPad extends Window {
     });
   }
   loadPostmanResult(res) {
-    this.set('postmanResult', JSON.parse(JSON.stringify(res)));
+    this.set('postmanResult', cloneDeep(res));
     let tree;
     if (res.headers['content-type'].includes('json')) tree = treeify(tryJSONParse(res.body));
     else if (res.headers['content-type'].includes('xml')) tree = treeify(evaluate({ txt: res.body }, 'parse(txt xml:1)'));
@@ -4084,6 +4091,7 @@ class Report extends Window {
       const rep = Object.assign({}, await store.get(id));
       delete rep._id;
       delete rep._rev;
+      if (rep.definition) rep.definition.name = `${rep.definition.name} - Copy`;
       this.set('report', rep);
     } else {
       await store.acquire('report', id);
