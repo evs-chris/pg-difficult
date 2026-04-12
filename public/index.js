@@ -2690,7 +2690,7 @@ class ScratchPad extends Window {
     this.lock = false;
     if (this.get('pad.syntax') === 'postman') {
       this.lockPostman = true;
-      this.set('postman', JSON.parse(this.get('pad.text')));
+      this.set('postman', tryJSONParse(this.get('pad.text')));
       this.lockPostman = false;
     }
   }
@@ -3481,7 +3481,7 @@ code.hljs { border-radius: 0.5em; }
       if (!this._buildlock) this.set('_html', undefined);
       if (!this.lockPostman && this.get('pad.syntax') === 'postman') {
         this.lockPostman = true;
-        this.set('postman', JSON.parse(v));
+        this.set('postman', tryJSONParse(v));
         this.lockPostman = false;
       }
     },
@@ -3489,12 +3489,15 @@ code.hljs { border-radius: 0.5em; }
       if (!this._buildlock) this.set('_html', undefined);
       if (v) this.saveDebounced && this.saveDebounced();
     },
-    postman(v) {
-      if (v && !this.lockPostman) {
-        this.lockPostman = true;
-        this.set('pad.text', JSON.stringify(v, null, '  '));
-        this.lockPostman = false;
-      }
+    postman: {
+      handler: debounce(function(v) {
+        if (v && !this.lockPostman) {
+          this.lockPostman = true;
+          this.set('pad.text', JSON.stringify(v, null, '  '));
+          this.lockPostman = false;
+        }
+      }, 500),
+      init: false,
     },
     'editor.autosave'(v) {
       if (this.saveDebounced) this.saveDebounced.timeout = v ?? 15000;

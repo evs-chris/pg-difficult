@@ -1486,10 +1486,13 @@
           </div>
         </title>
         <label as-field>Name<input value="{{.name}}" /></label>
-        {{#if .request}}
+        {{#if !!.request}}
           <label as-field>Method<select value="{{.request.method}}">{{#each 'GET POST PUT DELETE OPTIONS HEAD'.split(' ')}}<option>{{.}}</option>{{/each}}</select></label>
+          <label as-field><button class=reject on-click="@context.set('.request', undefined)">Remove Request</button></label>
           <br/>
           {{>request}}
+        {{else}}
+          <label as-field><button on-click="@context.set('.request', {})">Configure Request</button></label>
         {{/if}}
         {{#if .item}}
           {{>endpoints}}
