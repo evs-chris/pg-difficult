@@ -3948,11 +3948,17 @@ class HostExplore extends Window {
     }
     if (cur) store.release('report', cur._id);
   }
+
+  async deleteHost(con) {
+    if (await app.confirm(`Are you sure you want to remove the connection for ${con.constr}?`, 'Remove Connection?')) {
+      store.remove(con.config._id);
+    }
+  }
 }
 Window.extendWith(HostExplore, {
   template: '#host-explore',
   css(data) {
-    return `div.host { background-color: ${data('raui.primary.bg') || '#fff'}; }
+    return `div.host { background-color: ${data('raui.primary.bg') || '#fff'}; min-height: 2em; }
 .filter-pane { background-color: ${data('raui.window.host.bg') || '#eee'}; height: 3.5em; }
 .query { flex-grow: 1; display: flex; flex-direction: column; overflow: hidden; }
 .query .query-text { height: 100%; }
@@ -3960,6 +3966,10 @@ Window.extendWith(HostExplore, {
 .query .result { display: flex; border-top: 1px solid; overflow: hidden; flex-grow: 1; height: 100%; box-sizing: border-box; }
 .selected { background-color: rgba(128, 128, 128, 0.3); }
 dd { white-space: pre-wrap; }
+div.host .actions { display: flex; position: absolute; top: 0; right: -0.5em; fill: #fff; background-color: #222d; padding: 0.3em; width: 6em; justify-content: space-around; border-radius: 0.5em 0 0 0.5em; opacity: 0; transition: opacity 0.2s ease; }
+div.host .actions div { fill: #fff; pointer-events: none; width: 1.2em; height: 1.2em; text-align: center; background: rgba(128, 128, 128, 0.5); padding: 0.1em; }
+div.host:hover .actions { opacity: 1; }
+div.host:hover .actions div { pointer-events: auto; }
 `;
   },
   partials: {
