@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 
 	_ "embed"
 	"io/fs"
@@ -852,12 +853,15 @@ func processQueryMessage(config *DBConfig, req *QueryMessage, res *Responders) e
 	}
 	defer conn.Close(context.Background())
 
+	transacting := true
 	_, err = conn.Exec(context.Background(), "begin;")
 	if err != nil {
 		return err
 	}
 
-	results := make([]*QueryOrderedResult, 0, len(req.Query))
+	var results []*QueryOrderedResult
+doover:
+	results = make([]*QueryOrderedResult, 0, len(req.Query))
 	for i, q := range req.Query {
 		var p []any
 		if len(req.Params) > i {
@@ -868,14 +872,21 @@ func processQueryMessage(config *DBConfig, req *QueryMessage, res *Responders) e
 		res, err := queryOrdered(conn, q, p...)
 		if err != nil {
 			_, _ = conn.Exec(context.Background(), "rollback;")
-			return err
+			if strings.Contains(err.Error(), "cannot run inside a transaction block") {
+				transacting = false
+				goto doover
+			} else {
+				return err
+			}
 		}
 		results = append(results, res)
 	}
 
-	_, err = conn.Exec(context.Background(), "commit;")
-	if err != nil {
-		return err
+	if transacting {
+		_, err = conn.Exec(context.Background(), "commit;")
+		if err != nil {
+			return err
+		}
 	}
 
 	if len(results) == 1 {
