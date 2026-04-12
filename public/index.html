@@ -578,20 +578,26 @@
       <div as-serverblock />
     </tab>
     <tab title="Active Diffs" hidden="@global.clientOnly">
+      {{#if store.settings.multiDiff === undefined || hasGlobalClients}}
       <div style="display: flex; justify-content: space-between; align-items: center;">
         <div style="flex-grow: 1; display: flex;">
-          <label as-field style="flex-grow: 1;" title="The segment name groups sets of changes together. The segment will automatically be updated when you stop typing, and any new changes will get the new segment name.">Segment<input value="{{~/newSegment}}" lazy=1500 /></label>
+          <label as-field style="flex-grow: 1;" title="The global segment name groups sets of changes together for diffs that don't have separate segments. The segment will automatically be updated when you stop typing, and any new changes will get the new segment name.">Global Segment<input value="{{~/newSegment}}" lazy=1500 /></label>
         </div>
         <div>
-          <button on-click="@.clear()" title="Remove all recorded changes.">Clear Entries</button>
-          <button on-click="@.entries()" title="View all recorded entries in a single combined set.">Combined Entries</button>
+          <button on-click="@.clear()" title="Remove all global recorded changes.">Clear Entries</button>
+          <button on-click="@.entries()" title="View all global recorded entries in a single combined set.">Global Entries</button>
           <button on-click="@.addDiff()" title="Start recording changes to an ephemeral connection.">Add Connection</button>
         </div>
       </div>
+      {{else}}
+      <div style="display: flex; justify-content: end;">
+        <button on-click="@.addDiff()" title="Start recording changes to an ephemeral connection.">Add Connection</button>
+      </div>
+      {{/if}}
       <div style="overflow: auto;">
         {{#each Object.values(~/status.clients || {})}}
           <div class="record striped">
-            <div class="constr">{{.source}}</div>
+            <div class="constr">{{.source}} {{#if .global}}(global){{/if}}</div>
             <div class="actions">
               <button on-click="@.query(.config)" title="Open a query widnow to run queries against this database.">Query</button>
               <button on-click="@.schema(.config)" title="View this database's schema.">Schema</button>
@@ -720,6 +726,12 @@
           <label as-field class=inline><input type=checkbox bind-checked="~/store.settings.hideBlankFields" /> Hide empty string fields in diff records by default?</label>
           <label as-field class=inline><input type=checkbox bind-checked="~/store.settings.hideDefaultFields" /> Hide defaulted fields in diff records by default?</label>
           <label as-field class=inline><input type=checkbox bind-checked="~/store.settings.hideEmptyEntries" /> Hide diff entries with no changes (empty changesets)?</label>
+          <hr style="opacity: 0.2;" />
+          <label as-field>Multiple Diffs<select value="{{~/store.settings.multiDiff}}">
+            <option value="{{undefined}}">All diffs segment together</option>
+            <option value="separate">All diffs segment independently</option>
+            <option value="ask">Ask how diffs should segment</option>
+          </select></label>
         </fieldset>
         {{#if !@global.clientOnly}}
           <fieldset style="margin-top: 1em;">
@@ -961,7 +973,7 @@
     </div>
     <div class="controls">
       {{#if @.source && !~/loaded}}
-        <label as-field title="The segment name groups sets of changes together. The segment will automatically be updated when you stop typing, and any new changes will get the new segment name.">Segment<input value="{{~/newSegment}}" lazy=1500 /></label>
+        <label as-field title="The segment name groups sets of changes together. The segment will automatically be updated when you stop typing, and any new changes will get the new segment name.">{{#if client.global}}Global{{/if}} Segment<input value="{{~/newSegment}}" lazy=1500 /></label>
       {{/if}}
       <label class=filter class-error="~/exprError" as-field title="Raport expression used to filter out entries. Available fields are id, new, old, schema, segment, source, stamp, and table. new and old are objects containing the fields that changed in the record. table, schema, source, and segment are strings.{{#if ~/exprError}}{{'\n\nError: ' + ~/exprError.message + '\n' + ~/exprError.marked}}{{/if}}">Filter Expression<input value="{{expr}}" lazy=1000 /></label>
       <button class="settings flat" title="Settings" as-pop=`~/showSettings`>{{>cog}}</button>
@@ -2334,8 +2346,8 @@
     <div class="message" style="max-width: 36em;"><pre style="font-family: sans-serif;">{{{.message}}}</pre></div>
   </div>
   <buttons>
-    <button center on-click="@.close(false, true)">Yes</button>
-    <button center class=reject on-click="@.close(false, false)">No</button>
+    <button center on-click="@.close(false, true)">{{~/yesLabel || 'Yes'}}</button>
+    <button center class=reject on-click="@.close(false, false)">{{~/noLabel || 'No'}}</button>
   </buttons>
 </script>
 

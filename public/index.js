@@ -735,14 +735,25 @@ class App extends Ractive {
     const v = this.host;
     if (!v) return;
     const wins = v.get('windows');
+    const old = app.get('stopped') || {};
     const list = [];
+    let adjust;
     for (const k in wins) {
       if (!wins[k]) continue;
-      if (/entries-/.test(k)) {
-        const source = v.getWindow(k)?.source;
-        if (Object.values(app.get('status.clients') || {}).find(c => c.source === source)) continue;
-        list.push({ title: wins[k].title, marquee: true, action() { v.raise(k, true); } });
-      } else if (!/query-|leaks-|entries-|control-|host-/.test(k)) list.push({ title: wins[k].title, marquee: true, action() { v.raise(k, true); } });
+      if (old[k]) {
+        const win = v.getWindow(k);
+        if (win) {
+          if (!adjust) adjust = [];
+          adjust.push([k, win]);
+        }
+      } else if (!/^(entries-|leaks-|query-|control-|host-)/.test(k)) list.push({ title: wins[k].title, marquee: true, action() { v.raise(k, true); } });
+    }
+    if (adjust) {
+      for (const [id, win] of adjust) {
+        const nid = `old-${id}`;
+        v.changeWindowId(id, nid);
+        list.push({ title: win.title, marquee: true, action() { v.raise(nid, true); } });
+      }
     }
     this.set('others', list);
   }
@@ -796,11 +807,13 @@ const app = globalThis.app = new App({
   observe: {
     'status.clients': {
       handler(v) {
+        let global = 0;
         const active = Object.values(v || {}).map(v => {
+          if (v.global) global++;
           return { title: v.source, action() { app.openEntries(v.id) }, right: !(v.connected ?? true) ? '<span class=disconnected title="Connection to server has been lost.">!</span>' : '' };
         });
-        if (active.length > 1) active.unshift({ title: 'All Entries', action() { app.openEntries() } });
-        const oldactive = this.get('diffs') || [];
+        if (global > 1) active.unshift({ title: 'Global Entries', action() { app.openEntries() } });
+        const oldactive = (this.get('diffs') || []).filter(e => e.title !== 'Global Entries');
         this.set('diffs', active);
 
         const found = [];
@@ -1021,9 +1034,8 @@ const app = globalThis.app = new App({
     } else {
       win = new Entries();
       win.combined = true;
-      this.host.addWindow(win, { id: wid, title: `All Entries` });
+      this.host.addWindow(win, { id: wid, title: `Global Entries` });
     }
-    win.link('newSegment', 'newSegment', { instance: this });
   },
   openLeak(id, database) {
     const wid = `leaks-${id ?? 'all'}-${database || 'all'}`;
@@ -1114,8 +1126,8 @@ const app = globalThis.app = new App({
     const win = new Diff();
     this.host.addWindow(win, { id: `local-diff-${id}`, title: `Local Diff ${id}` });
   },
-  confirm(question, title) {
-    const w = new Confirm({ data: { message: question } });
+  confirm(question, title, opts) {
+    const w = new Confirm({ data: Object.assign({ message: question }, opts) });
     this.host.addWindow(w, { title, block: true, top: 'center', left: 'center' });
     return w.result;
   },
@@ -1204,9 +1216,11 @@ class ControlPanel extends Window {
   }
   async startDiff(config) {
     this.waitForDiff(config, true);
+    const multi = this.get('store.settings.multiDiff');
+    const global = multi === 'separate' ? false : multi === undefined ? true : await app.confirm(`Should this diff use the shared global segment or have its own separate segment?`, 'Global Segmentation?', { yesLabel: 'Global', noLabel: 'Separate' });
     let res;
     try {
-      res = await request({ action: 'start', config });
+      res = await request({ action: 'start', config, globalsegment: global, segment: global ? app.get('status.segment') : undefined });
     } finally {
       this.waitForDiff(config, false);
     }
@@ -1219,7 +1233,7 @@ class ControlPanel extends Window {
       if (what) {
         this.waitForDiff(config, true);
         try {
-          await request({ action: what, config });
+          await request({ action: what, config, globalsegment: global, segment: global ? app.get('status.segment') : undefined });
         } finally {
           this.waitForDiff(config, false);
         }
@@ -1233,6 +1247,7 @@ class ControlPanel extends Window {
     if (client) {
       this.waitForDiff(config, true);
       await request({ action: 'stop', diff: client.id });
+      app.set(`stopped.${Ractive.escapeKey(`entries-${client.id}`)}`, true);
       this.waitForDiff(config, false);
     }
   }
@@ -1256,6 +1271,11 @@ class ControlPanel extends Window {
   stopLeak(config) {
     const cfg = Object.assign({}, config);
     notify({ action: 'unleak', config: cfg });
+    let str = constr(config);
+    str = str.slice(0, str.indexOf('/'));
+    const leak = Object.values(app.get('status.leaks') || {}).find(l => l.source.startsWith(str));
+    const win = app.host.getWindow(`leaks-${leak?.id}-${cfg.database}`);
+    if (win) win.close();
   }
   async addLeak() {
     const wnd = new Connect();
@@ -1369,8 +1389,12 @@ class ControlPanel extends Window {
     this.set(`${path}.valid`, await store.validate(config));
   }
   async debugServer() {
-    const { data } = await request({ action: 'debug' });
-    app.openEphemeralPad(data, `Server Data ${evaluate('#now##timestamp')}`);
+    if (this.event.event.altKey && this.event.event.shiftKey) {
+      notify({ action: 'crash' });
+    } else {
+      const { data } = await request({ action: 'debug' });
+      app.openEphemeralPad(data, `Server Data ${evaluate('#now##timestamp')}`);
+    }
   }
 
   goClientOnly() {
@@ -1480,6 +1504,10 @@ Window.extendWith(ControlPanel, {
       const tree = dirify(this.get('store.report.list'), old);
       this.set('_reportTree', tree);
       return tree;
+    },
+    hasGlobalClients() {
+      const clients = this.get('status.clients') || {};
+      for (const c of Object.values(clients)) if (c.global) return true;
     }
   },
 });
@@ -1924,8 +1952,16 @@ res
       text = `<html><head><title>${name}</title><style>${css}</style></head><body>${html}</body></html>`
     } else {
       const out = { entries: this.get('allEntries') };
-      if (this.source) out.schemas = { [this.source]: (this.get('schemas') || {})[this.source] };
-      else out.schemas = this.get('schemas');
+      if (this.source) {
+        out.schemas = { [this.source]: (this.get('schemas') || {})[this.source] };
+      } else {
+        const sources = Object.values(app.get('status.clients') || {});
+        out.schemas = Object.entries(this.get('schemas')).reduce((a, [k, v]) => {
+          const src = sources.find(s => s.source === k);
+          if (src && src.global) a[k] = v;
+          return a
+        }, {});
+      }
       if (this.get('expr')) out.expr = this.get('expr');
       text = JSON.stringify(out);
     }
@@ -2059,7 +2095,7 @@ res
   }
 
   async renameSegment(entry, by) {
-    const all = (this.source || this.combined) ? app.get('entries') : this.get('entries') || [];
+    const all = this.get('entries') || [];
     const name = await app.ask('What would you like the new segment name to be?', `${by ? 'Split' : 'Rename'} ${entry.segment}`, entry.segment);
     if (!name) return;
 
@@ -2088,13 +2124,13 @@ res
 
     for (const t of targets) t.segment = name;
 
-    (this.source ? app : this).update('entries');
+    ((this.source || this.combined) ? app : this).update('entries');
   }
 
   async toggleHidden(entry, noconfirm) {
     if (!noconfirm && !await app.confirm(`${entry.hide ? 'Show' : 'Hide'} segment ${entry.segment}?`)) return;
     const hide = !entry.hide;
-    const all = (this.source || this.combined) ? app.get('entries') : this.get('entries') || [];
+    const all = this.get('entries') || [];
     const targets = adjacentEntries(entry, all, 'segment');
 
     if (this.source || this.combined) {
@@ -2115,7 +2151,7 @@ res
 
     for (const t of targets) t.hide = hide;
 
-    (this.source ? app : this).update('entries');
+    ((this.source || this.combined) ? app : this).update('entries');
   }
 
   clearEntries() {
@@ -2154,10 +2190,23 @@ Window.extendWith(Entries, {
         else res = [];
       } else {
         const entries = app.get('entries');
-        if (source != null) res = entries.filter(e => e.source === this.source);
-        else res = entries;
+        if (source != null) {
+          res = entries.filter(e => e.source === this.source);
+        } else {
+          const globals = {};
+          for (const c of Object.values(app.get('status.clients') || {})) globals[c.source] = c.global;
+          res = entries.filter(e => globals[e.source]);
+        }
       }
       return res;
+    },
+    client() {
+      if (!this.get('@.source')) return;
+      const clients = app.get('status.clients');
+      for ([k, c] of Object.entries(clients)) if (c.source === this.source) {
+        this.clientId = k;
+        return c;
+      }
     },
     entries() {
       let res = this.get('allEntries');
@@ -2227,6 +2276,26 @@ Window.extendWith(Entries, {
       this._cache = {};
       this.update('@.details', { force: true });
     },
+    'client.segment'(v) {
+      if (this.lock) return;
+      this.lock = true;
+      this.set('newSegment', v);
+      this.lock = false;
+    },
+    async newSegment(v) {
+      if (this.lock || !this.source) return;
+      this.lock = true;
+      await request({ action: 'segment', segment: v, client: this.clientId });
+      this.lock = false;
+    },
+    client(v, o) {
+      if (!v && o && o.source) {
+        const entries = (this.get('allEntries') || []).filter(e => e.source === o.source);
+        const schemas = { [o.source]: app.get('schemas')[o.source] }
+        this.title = `Stopped - ${this.title}`;
+        this.set('loaded', { entries, schemas });
+      }
+    }
   },
 });
 
@@ -4330,10 +4399,14 @@ function message(msg) {
 
     case 'check': {
       if (msg.reset) app.set('entries', []);
-      const entries = app.get('entries');
+      let entries = app.get('entries');
       const clients = app.get('status.clients');
+      if (msg.source && msg.init) {
+        entries = entries.filter(e => e.source !== msg.source);
+        app.set('entries', entries);
+      }
       for (const k in clients) {
-        if (msg.client && k !== msg.client) continue;
+        if (msg.client && k != msg.client) continue;
         const client = clients[k];
         const since = evaluate({ entries, source: client.source }, 'max(filter(~entries =>source == ~source) =>id)') || undefined;
         request({ action: 'check', client: client.id, since });

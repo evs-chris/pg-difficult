@@ -134,6 +134,7 @@ func unleak(id int, db string) error {
 	}
 
 	leak.PollConn.Close(context.Background())
+	slog.Info("Leak poll connection disconnected after stop", "leak", id)
 	lock.Lock()
 	delete(leaks, id)
 	lock.Unlock()

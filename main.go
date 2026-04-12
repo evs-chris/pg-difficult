@@ -480,6 +480,7 @@ type StartMessageOptions struct {
 	Config struct {
 		Diffopts StartOptions `json:"diffopts"`
 	} `json:"config"`
+	GlobalSegment *bool `json:"globalsegment"`
 }
 
 type LeakIntervalMessage struct {
@@ -610,6 +611,11 @@ messages:
 				errespond(base.Id, err)
 				continue
 			}
+			global := false
+			if sm.GlobalSegment == nil || *sm.GlobalSegment == true {
+				global = true
+			}
+			sm.Config.Diffopts.GlobalSegment = &global
 			go processStartMessage(client, &sm.Config.Diffopts, &responders, base.Id, restart)
 		case "check":
 			client, err := configForMessage(msg)
@@ -808,6 +814,10 @@ messages:
 			go (func() {
 				respond(base.Id, map[string]any{"data": map[string]any{"state": map[string]any{"segment": globalSegment, "idseq": idseq, "diffs": diffs, "leaks": leaks}, "VERSION": VERSION, "config": Config}})
 			})()
+		case "crash":
+			go (func() {
+				panic("client requested server crash, so crashing")
+			})()
 		default:
 			slog.Warn("Unknown action "+base.Action, "id", base.Id)
 			errespond(base.Id, errors.New("Unknown action "+base.Action))
@@ -821,7 +831,11 @@ func status(respond *Responders, id *int64) {
 	lock.RLock()
 	_clients := map[int]any{}
 	for i, v := range diffs {
-		_clients[i] = map[string]any{"id": i, "config": v.Config, "source": ConfigString(&v.Config), "connected": v.ListenConn != nil}
+		global := false
+		if v.Opts == nil || v.Opts.GlobalSegment == nil || *v.Opts.GlobalSegment {
+			global = true
+		}
+		_clients[i] = map[string]any{"id": i, "config": v.Config, "source": ConfigString(&v.Config), "connected": v.ListenConn != nil, "global": global, "segment": v.Segment}
 	}
 
 	_leaks := map[int]map[string]any{}
@@ -831,7 +845,7 @@ func status(respond *Responders, id *int64) {
 		}
 	}
 
-	msg["status"] = map[string]any{"segment": "Initial", "clients": _clients, "leaks": _leaks, "pollingInterval": leakInterval.Milliseconds(), "VERSION": VERSION}
+	msg["status"] = map[string]any{"segment": globalSegment, "clients": _clients, "leaks": _leaks, "pollingInterval": leakInterval.Milliseconds(), "VERSION": VERSION}
 	lock.RUnlock()
 
 	if respond != nil {
@@ -1034,7 +1048,6 @@ func processStartMessage(config *DBConfig, opts *StartOptions, res *Responders, 
 			conn.Close(context.Background())
 			return
 		}
-		res.Respond(id, map[string]any{"action": "started"})
 	}
 	_, err = conn.Exec(context.Background(), "listen __pg_difficult")
 	if err != nil {
@@ -1050,13 +1063,25 @@ func processStartMessage(config *DBConfig, opts *StartOptions, res *Responders, 
 		return
 	}
 
-	var segment string
+	segment := "Initial"
+	if opts != nil && opts.Segment != nil {
+		segment = *opts.Segment
+	}
 	hide := false
 
 	if !start { // we resumed
-		segment, err = GetState(conn, "segment")
-		if err != nil || segment == "" {
-			segment = globalSegment
+		if opts == nil || opts.GlobalSegment == nil || *opts.GlobalSegment {
+			err := SetState(conn, "segment", globalSegment)
+			if err != nil {
+				slog.Warn("Failed to set segment on resumed global diff", "error", err, "diff", idseq)
+			} else {
+				segment = globalSegment
+			}
+		} else {
+			segment, err = GetState(conn, "segment")
+			if err != nil || segment == "" {
+				segment = globalSegment
+			}
 		}
 		hidestr, err := GetState(conn, "hide")
 		if err == nil && hidestr == "true" {
@@ -1067,7 +1092,7 @@ func processStartMessage(config *DBConfig, opts *StartOptions, res *Responders, 
 	lock.Lock()
 	did := idseq
 	idseq += 1
-	diff := &DiffClient{Id: did, Config: *config, ListenConn: conn, Segment: segment, Hide: hide}
+	diff := &DiffClient{Id: did, Config: *config, Opts: opts, ListenConn: conn, Segment: segment, Hide: hide}
 	diffs[did] = diff
 	lock.Unlock()
 
@@ -1091,6 +1116,8 @@ func processStartMessage(config *DBConfig, opts *StartOptions, res *Responders, 
 					if err != nil {
 						slog.Error("Failed to unlisten", "error", err)
 					}
+					conn.Close(context.Background())
+					slog.Info("Diff listener diconnected after stop", "diff", did)
 					lock.RUnlock()
 					break
 				} else {
@@ -1185,7 +1212,13 @@ func processStartMessage(config *DBConfig, opts *StartOptions, res *Responders, 
 				notifyAll(&map[string]any{"action": "clear", "source": ConfigString(&diff.Config)})
 			case "stopped":
 				cancel()
-				continue
+				_, err := conn.Exec(context.Background(), "unlisten __pg_difficult")
+				if err != nil {
+					slog.Error("Failed to unlisten", "error", err)
+				}
+				conn.Close(context.Background())
+				slog.Info("Diff listener disconnected after stop", "diff", did)
+				break
 			default:
 				slog.Info("Got a diff listener notification", "message", n.Payload)
 			}
@@ -1201,9 +1234,7 @@ func processStartMessage(config *DBConfig, opts *StartOptions, res *Responders, 
 	// status everyone
 	status(nil, nil)
 
-	if !start {
-		notifyAll(&map[string]any{"action": "check", "client": did, "source": ConfigString(&diff.Config)})
-	}
+	notifyAll(&map[string]any{"action": "check", "client": did, "source": ConfigString(&diff.Config), "init": true})
 }
 
 func processStopMessage(config *DBConfig, res *Responders, id *int64) {
@@ -1239,11 +1270,10 @@ func processStopMessage(config *DBConfig, res *Responders, id *int64) {
 	}
 	lock.Lock()
 	delete(diffs, did)
-	lock.Unlock()
 	if diff.StopListen != nil {
 		(*diff.StopListen)()
 	}
-	diff.ListenConn.Close(context.Background())
+	lock.Unlock()
 
 	res.Respond(id, map[string]any{"action": "stopped"})
 
@@ -1290,17 +1320,27 @@ func processSegmentMessage(config *DBConfig, segment string, res *Responders, id
 				update = append(update, v)
 			}
 		}
+		lock.RUnlock()
+		lock.Lock()
+		globalSegment = segment
+		lock.Unlock()
 	} else {
 		diff := diffs[did]
 		if diff.Opts == nil || diff.Opts.GlobalSegment == nil || *diff.Opts.GlobalSegment {
 			for _, v := range diffs {
-				if v != diff && (v.Opts == nil || v.Opts.GlobalSegment == nil || *v.Opts.GlobalSegment) {
+				if v.Opts == nil || v.Opts.GlobalSegment == nil || *v.Opts.GlobalSegment {
 					update = append(update, v)
 				}
 			}
+			lock.RUnlock()
+			lock.Lock()
+			globalSegment = segment
+			lock.Unlock()
+		} else {
+			update = append(update, diff)
+			lock.RUnlock()
 		}
 	}
-	lock.RUnlock()
 
 	ok := true
 	for i, d := range update {
