@@ -733,12 +733,14 @@
           <label as-field class=inline><input type=checkbox bind-checked="~/store.settings.hideBlankFields" /> Hide empty string fields in diff records by default?</label>
           <label as-field class=inline><input type=checkbox bind-checked="~/store.settings.hideDefaultFields" /> Hide defaulted fields in diff records by default?</label>
           <label as-field class=inline><input type=checkbox bind-checked="~/store.settings.hideEmptyEntries" /> Hide diff entries with no changes (empty changesets)?</label>
-          <hr style="opacity: 0.2;" />
-          <label as-field>Multiple Diffs<select value="{{~/store.settings.multiDiff}}">
-            <option value="{{undefined}}">All diffs segment together</option>
-            <option value="separate">All diffs segment independently</option>
-            <option value="ask">Ask how diffs should segment</option>
-          </select></label>
+          {{#if !@global.clientOnly}}
+            <hr style="opacity: 0.2;" />
+            <label as-field>Multiple Diffs<select value="{{~/store.settings.multiDiff}}">
+              <option value="{{undefined}}">All diffs segment together</option>
+              <option value="separate">All diffs segment independently</option>
+              <option value="ask">Ask how diffs should segment</option>
+            </select></label>
+          {{/if}}
         </fieldset>
         {{#if !@global.clientOnly}}
           <fieldset style="margin-top: 1em;">
