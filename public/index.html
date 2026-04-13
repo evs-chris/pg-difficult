@@ -460,6 +460,13 @@
   .query-parameters > * {
     flex-shrink: 0;
   }
+
+  .hover-actions { position: absolute; top: 0.5em; right: 0.5em; opacity: 0; transition: opacity 0.2s ease; display: flex; justify-content: space-around; }
+  .hover-actions button { pointer-events: none; }
+  *:hover > .hover-actions { opacity: 1; }
+  *:hover > .hover-actions button { pointer-events: auto; }
+
+  .copy-button { padding: 0.2em 0.5em; min-height: unset; font-size: 0.7em; }
 </style>
 <!-- HEAD -->
 <script type=text/ractive id=template>
@@ -1147,7 +1154,7 @@
         <div class=pid>{{.pid}}</div>
         <div class=queried title="{{.queried}}">{{age(.queried)}}</div>
         <div class=query title="{{.query}}">{{.query}}</div>
-        <div class=actions><button class=reject on-click="@.kill(.), false">Terminate</button></div>
+        <div class=hover-actions><button class=reject on-click="@.kill(.), false">Terminate</button></div>
       </div>
     {{else}}
       <div style="padding: 0.2em;">No connections.</div>
@@ -1527,7 +1534,10 @@
         <tabs pad flex bind-selected="~/activeTab" size=0 style="height: 100%;">
           <tab>
             <title>{{~/evalerror ? 'Error' : 'Result'}}</title>
-            <pre><code on-click="copyToClipboard(~/evalresult)" title="click to copy result to the clipboard">{{~/evalerror || ~/evaltext}}</code></pre>
+            <pre><code>{{~/evalerror || ~/evaltext}}</code></pre>
+            <div class=hover-actions>
+              <button class=copy-button on-click="copyToClipboard(~/evalerror || ~/evaltext)" title="Copy result to the clipboard">Copy</button>
+            </div>
           </tab>
           <tab hidden="{{~/evalerror}}" no-pad on-enter="@.add('visited.tree')">
             <title>{{#if ~/resultCanTree}}Tree{{else}}Text{{/if}}</title>
@@ -1541,6 +1551,9 @@
             {{else}}
               <pre style="margin: 1em;"><code>{{{~/evalerror || ~/evalresult}}}</code></pre>
             {{/if}}
+            <div class=hover-actions style="top: unset; bottom: 0.5em;">
+              <button class=copy-button on-click="copyToClipboard(~/evalerror || ~/evalresult)" title="Copy result to the clipboard">Copy</button>
+            </div>
           </tab>
           <tab no-pad title="Table" hidden="{{!~/resultCanTable}}" on-enter="@.add('visited.table')">
             {{#if ~/visited.table}}
@@ -1759,15 +1772,14 @@
         <tab title="Response" hidden="{{!postmanResult}}">
           {{#with postmanResult}}
             <h3 style="margin: 0.5em 0 1em; 0">{{.status}} - {{.statusText}}</h3>
-            <fieldset>
-              <legend>Headers</legend>
+            <card section expandable expanded=true title="Headers">
               <dl>
                 {{#each .headers}}
                 <dt>{{@key}}</dt>
                 <dd>{{.}}</dd>
                 {{/each}}
               </dl>
-            </fieldset>
+            </card>
             {{#if .body}}
               <div style="position: relative; margin-top: 1em;">
                 <pre><code class=hljs>{{.body}}</code></pre>
@@ -1893,7 +1905,7 @@
             {{#if ~/expanded[.constr]}}-{{else}}+{{/if}}
           </div>
           <div style="padding: 0.2em;">{{#if .label}}<strong>{{.label}}</strong> <em>({{.constr}})</em>{{else}}<em>{{.constr}}</em>{{/if}}{{#if ~/hosts && ~/expanded[.constr] && Array.isArray(~/hosts[.constr])}} ({{~/_entries[.constr].length}} / {{~/hosts[.constr].length}}){{/if}}</div>
-          <div class=actions>
+          <div class=hover-actions>
             <div class="fade" on-click="@.deleteHost(con), false" title="Remove connection.">{{>times}}</div>
             <div class="fade" on-click="@.editHost(con), false" title="Edit connection settings.">{{>pencil}}</div>
             <div class="fade" on-click="@.refreshHost(con), false" title="Refresh host database list.">{{>refresh}}</div>

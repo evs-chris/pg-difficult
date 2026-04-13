@@ -2343,10 +2343,7 @@ Window.extendWith(Leaks, {
 .leak .constr { width: 18em; }
 .leak .query { width: 99%; }
 .leak .pid { width: 6em; text-align: right; }
-.leak .actions { position: absolute; bottom: 0.5em; right: 0.5em; opacity: 0; transition: opacity 0.5s ease; }
-.leak:hover .actions { opacity: 1; }
-.leak .actions button { pointer-events: none; }
-.leak:hover .actions button { pointer-events: auto; }
+.leak .hover-actions { bottom: 0.5em; top: unset; }
 label.one-line { min-height: 1em; padding: 0; }
 label.one-line input { top: -0.3em; left: -0.3em; height: 1.8em; width: 1.8em; }
 label.field.check.one-line:after { top: 0.1em; left: 0.1em; }
@@ -2603,7 +2600,7 @@ const renderMD = (function() {
           try {
             if (opts.pretty) code = JSON.stringify(JSON.parse(code), null, '  ');
           } catch (e) { console.log(e)}
-          return `<pre><code class="hljs json">${hljs.highlight(code, { language: 'json', ignoreIllegals: true }).value}</code></pre>`;
+          return `<div style="position: relative;"><pre><code class="hljs json" data-copy-target>${hljs.highlight(code, { language: 'json', ignoreIllegals: true }).value}</code></pre><div class=hover-actions><button onclick="copyAdjacentText(this)" title="Copy text to clipboard" class=copy-button>Copy</button></div></div>`;
         } else if (lang.startsWith('widget+')) {
           let end = lang.indexOf(' ');
           if (!~end) end = lang.length;
@@ -2638,7 +2635,7 @@ const renderMD = (function() {
           }
         } else {
           const highlighted = l && hljs.getLanguage(l) ? hljs.highlight(code, { language: l, ignoreIllegals: true }).value : code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-          return `<pre><code class="hljs ${l}">${highlighted}</code></pre>`;
+          return `<div style="position: relative;"><pre><code class="hljs ${l}" data-copy-target>${highlighted}</code></pre><div class=hover-actions><button onclick="copyAdjacentText(this)" title="Copy text to clipboard" class=copy-button>Copy</button></div></div>`;
         }
       };
       marked.setOptions({ renderer });
@@ -3969,10 +3966,9 @@ Window.extendWith(HostExplore, {
 .query .result { display: flex; border-top: 1px solid; overflow: hidden; flex-grow: 1; height: 100%; box-sizing: border-box; }
 .selected { background-color: rgba(128, 128, 128, 0.3); }
 dd { white-space: pre-wrap; }
-div.host .actions { display: flex; position: absolute; top: 0; right: -0.5em; fill: #fff; background-color: #222d; padding: 0.3em; width: 6em; justify-content: space-around; border-radius: 0.5em 0 0 0.5em; opacity: 0; transition: opacity 0.2s ease; }
-div.host .actions div { fill: #fff; pointer-events: none; width: 1.2em; height: 1.2em; text-align: center; background: rgba(128, 128, 128, 0.5); padding: 0.1em; }
-div.host:hover .actions { opacity: 1; }
-div.host:hover .actions div { pointer-events: auto; }
+div.host .hover-actions { top: 0; right: -0.5em; fill: #fff; background-color: #222d; padding: 0.3em; width: 6em; border-radius: 0.5em 0 0 0.5em; }
+div.host .hover-actions div { fill: #fff; pointer-events: none; width: 1.2em; height: 1.2em; text-align: center; background: rgba(128, 128, 128, 0.5); padding: 0.1em; }
+div.host:hover .hover-actions div { pointer-events: auto; }
 `;
   },
   partials: {
@@ -4578,6 +4574,11 @@ Ractive.helpers.copyToClipboard = (function() {
     }
   }
 })();
+
+globalThis.copyAdjacentText = function(node) {
+  const text = node.parentElement?.parentElement?.querySelector('[data-copy-target]')?.innerText;
+  if (text) Ractive.helpers.copyToClipboard(text);
+}
 
 let unloadTm;
 function unload(ev) {
