@@ -788,7 +788,7 @@ Ractive.extendWith(App, {
           ev.stopPropagation();
           if (typeof this.run === 'function') this.run();
         }
-      });
+      }, { capture: true });
     },
   },
 });
