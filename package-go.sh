@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -e
 if [ ! -d build ]; then
   mkdir build
 fi
@@ -8,9 +9,14 @@ export CGO_ENABLED=0
 VERSION=`cat VERSION`
 echo Building pg-difficult v${VERSION}
 
-echo Zipping assets...
+echo Preparing assets...
+cp -r public build/public
+cat public/index.js | sed -re "s/CLIENT_VERSION = 'DEV'/CLIENT_VERSION = '${VERSION}'/" > build/public/index.js
 rm public.zip
-zip -qr public.zip public
+cd build
+zip -qr ../public.zip public
+cd ..
+rm -r build/public
 
 echo Building linux amd64...
 GOOS=linux GOARCH=amd64 go build -o build/pg-difficult_linux-amd64 .

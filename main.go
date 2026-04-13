@@ -62,7 +62,7 @@ Stopping a diff will remove the triggers, function, and schema from the database
 
 WARNING: Starting a diff in a database will modify the database and introduce significant overhead for CRUD operations. Change tracking tables have no additional security constraints, so any user with access to the database will be able to view any changes that are recorded.
 
-pg-difficult version `+VERSION+`
+pg-difficult version `+strings.TrimSpace(VERSION)+`
 `), kong.Configuration(kong.JSON, "~/.pg-difficult.json"))
 	if Config.Address == "*" {
 		Config.Address = ""
@@ -812,7 +812,7 @@ messages:
 		case "debug":
 			runtime.GC()
 			go (func() {
-				respond(base.Id, map[string]any{"data": map[string]any{"state": map[string]any{"segment": globalSegment, "idseq": idseq, "diffs": diffs, "leaks": leaks}, "VERSION": VERSION, "config": Config}})
+				respond(base.Id, map[string]any{"data": map[string]any{"state": map[string]any{"segment": globalSegment, "idseq": idseq, "diffs": diffs, "leaks": leaks}, "VERSION": strings.TrimSpace(VERSION), "config": Config}})
 			})()
 		case "crash":
 			go (func() {
@@ -845,7 +845,7 @@ func status(respond *Responders, id *int64) {
 		}
 	}
 
-	msg["status"] = map[string]any{"segment": globalSegment, "clients": _clients, "leaks": _leaks, "pollingInterval": leakInterval.Milliseconds(), "VERSION": VERSION}
+	msg["status"] = map[string]any{"segment": globalSegment, "clients": _clients, "leaks": _leaks, "pollingInterval": leakInterval.Milliseconds(), "VERSION": strings.TrimSpace(VERSION)}
 	lock.RUnlock()
 
 	if respond != nil {
