@@ -711,8 +711,7 @@ class App extends Ractive {
       name: 'Scratch',
       run(str) {
         const pads = app.get('store.scratch.list');
-        const s = str.toLowerCase();
-        return pads.filter(p => p.name.toLowerCase().includes(s)).map(p => [p.name, p.id]);
+        return evaluate({ pads, str }, 'filter(pads =>name flike ~str) | map(=>[name id])')
       },
       action(v) {
         app.openScratch({ id: v });
@@ -722,8 +721,7 @@ class App extends Ractive {
       name: 'Report',
       run(str) {
         const reps = app.get('store.report.list');
-        const s = str.toLowerCase();
-        return reps.filter(p => p.name.toLowerCase().includes(s)).map(p => [p.name, p.id]);
+        return evaluate({ reps, str }, 'filter(reps =>name flike ~str) | map(=>[name id])')
       },
       action(v) {
         app.openReport({ id: v });
