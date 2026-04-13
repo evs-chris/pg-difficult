@@ -2,7 +2,7 @@
 
 2026-04-13
 
-Version 2.0.0 replace the Deno server with a go implementation. This is a mostly compatible port with a little bit of rearchitecture to hopefully remove some of the buggy textures encountered when running multiple concurrent diffs.
+Version 2.0.0 replaces the Deno server with a go implementation. This is a mostly compatible port with a little bit of rearchitecture to hopefully remove some of the buggy textures encountered when running multiple concurrent diffs.
 
 ### Bugs
 
